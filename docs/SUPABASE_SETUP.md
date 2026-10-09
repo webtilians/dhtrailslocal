@@ -7,7 +7,7 @@ La aplicación se publica en GitHub Pages, que es un servidor de archivos estát
 1. Abre https://supabase.com/dashboard e inicia sesión.
 2. Crea un proyecto nuevo (por ejemplo DH Trails Local), selecciona una región europea y utiliza una contraseña fuerte para la base.
 3. En **SQL Editor**, ejecuta todo el contenido del archivo **supabase/schema.sql** del repositorio.
-4. Comprueba en **Table Editor** las tablas: pilot_profiles, circuits, circuit_sectors, circuit_weak_zones, training_attempts.
+4. Comprueba en **Table Editor** las tablas: pilot_profiles, circuits, circuit_sectors, circuit_weak_zones, training_attempts, gps_activities. En **Storage**, comprueba además que existe el bucket **dhtrails-activities** y que es **privado**.
 5. En **Authentication → Providers → Email**, deja habilitado el proveedor Email. Para producción, conserva la confirmación de correo.
 6. En **Authentication → URL Configuration**, establece https://webtilians.github.io/dhtrailslocal/ como Site URL. Incluye https://webtilians.github.io/dhtrailslocal/editor.html en las URL permitidas si el flujo de confirmación o recuperación usa redirección.
 
@@ -31,6 +31,7 @@ Para que todos los visitantes utilicen el mismo proyecto, edita **cloud-config.m
 4. Si el circuito ya estaba guardado, selecciónalo en **Mis circuitos** y usa **Guardar circuito seleccionado en nube**.
 5. En otro dispositivo, inicia sesión y pulsa **Recuperar mis circuitos de nube**.
 6. Tras detectar intentos, pulsa **Guardar intento privado en nube** para almacenar el tiempo estimado y sus parciales.
+7. Si quieres guardar además el archivo original, pulsa **Guardar actividad completa en nube**. El GPX/TCX se conserva en un bucket **privado**. Puedes actualizar, recuperar o eliminar ese archivo desde **Mis actividades GPS**.
 
 Los circuitos son privados inicialmente. Aunque hay un campo de visibilidad para futuro uso, todavía no existe una política de lectura pública.
 
@@ -39,7 +40,7 @@ Los circuitos son privados inicialmente. Aunque hay un campo de visibilidad para
 - RLS está habilitada en todas las tablas. Cada piloto puede consultar y modificar únicamente sus circuitos y resultados personales.
 - La función SQL save_circuit guarda circuito, sectores y zonas débiles en **una sola transacción**: no pueden quedar sectores incompletos tras fallos.
 - Los tiempos se guardan como **estimaciones GPS**, no como cronometrajes oficialmente validados.
-- Los archivos GPX originales permanecen en el navegador: solo se suben la geometría oficial del circuito y los resúmenes de entrenamientos. No se suben otras rutas privadas del piloto.
+- Los archivos GPX/TCX originales solo se suben cuando el piloto pulsa **Guardar actividad completa en nube**. El bucket es privado y restringido por propietario con RLS. Las rutas completas pueden incluir datos de ubicación privados: revisa qué subes.
 - No existe todavía una clasificación compartida, autenticación de moderadores ni validación antitrampas para competición.
 - La mera existencia del SQL en GitHub **no** significa que la base de datos ya esté creada.
 - Conserva los JSON de respaldo mientras no confirmemos la recuperación desde otro dispositivo.
@@ -50,4 +51,4 @@ Con un servidor local: **python -m http.server 8000** y abre http://localhost:80
 
 Con Node.js 22 o superior: **node --test tests/*.test.mjs**.
 
-La CI comprueba el mapeo y la validación de configuración, pero no prueba un servidor Supabase remoto. Para verificar seguridad real, crea dos cuentas de prueba y comprueba que la cuenta B no pueda descargar los circuitos privados de A.
+La CI comprueba el mapeo y la validación de configuración, pero no prueba un servidor Supabase remoto. Para verificar seguridad real, crea dos cuentas de prueba y comprueba que la cuenta B no pueda descargar los circuitos privados ni los archivos GPX/TCX de A.
