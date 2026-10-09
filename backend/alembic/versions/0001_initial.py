@@ -19,8 +19,8 @@ def upgrade():
         sa.Column("email",sa.String(254),nullable=False),
         sa.Column("password_hash",sa.Text(),nullable=False),
         sa.Column("created_at",sa.DateTime(timezone=True),nullable=False),
-        sa.UniqueConstraint("email"),
     )
+    # SQLAlchemy models email as a unique index (not an additional constraint).
     op.create_index("ix_pilots_email","pilots",["email"],unique=True)
     op.create_table(
         "circuits",
