@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#071423">
-<title>Editor de circuitos | DH Trails Local v0.4</title>
+<title>Editor de circuitos | DH Trails Local v0.5</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -14,11 +14,11 @@
 <div class="checkered"></div>
 <nav class="nav">
   <div class="logo"><div class="flag" aria-hidden="true">▦</div><div><strong>DH<span>TRAILS</span> LOCAL</strong><small>DOWNHILL PERFORMANCE LAB</small></div></div>
-  <div class="navlinks"><a href="./index.html">Visor GPS</a><a class="selected" href="./editor.html">Editor de circuitos <em>v0.4</em></a></div>
+  <div class="navlinks"><a href="./index.html">Visor GPS</a><a class="selected" href="./editor.html">Editor de circuitos <em>v0.5</em></a></div>
 </nav>
 <main>
 <header class="heading">
-  <div><div class="kicker">DH / CIRCUIT BUILDER / v0.4</div><h1>Diseña el circuito. <span>Domina cada sector.</span></h1>
+  <div><div class="kicker">DH / CIRCUIT BUILDER / v0.5</div><h1>Diseña el circuito. <span>Domina cada sector.</span></h1>
   <p>Selecciona manualmente la salida, la meta, los sectores y las zonas donde sabes que falla el GPS. Después cronometra cualquier actividad que pase por ese recorrido.</p></div>
 </header>
 <div class="layout">
@@ -116,12 +116,23 @@
         <input id="attemptFile" type="file" accept=".gpx,.tcx" hidden>
         <button id="match" type="button" class="btn primary full">Detectar intentos y calcular tiempos</button>
         <div id="results" class="results"><p class="placeholder">Los intentos detectados, el tiempo total y los parciales aparecerán aquí.</p></div>
+        <div class="comparison-panel">
+          <div class="box-heading">Comparar entrenamientos <span>v0.5</span></div>
+          <p class="help">Compara dos intentos guardados en PostgreSQL del mismo circuito. Verde = el intento B gana tiempo; rojo = pierde. Sin GPS suficiente, no inventamos el parcial.</p>
+          <button id="loadAttemptHistory" class="btn outline full" type="button">Cargar mis intentos guardados</button>
+          <div class="comparison-pickers">
+            <div><label class="field-title" for="comparisonFirst">Intento A · referencia</label><select id="comparisonFirst"><option value="">Sin intentos cargados</option></select></div>
+            <div><label class="field-title" for="comparisonSecond">Intento B · comparación</label><select id="comparisonSecond"><option value="">Sin intentos cargados</option></select></div>
+          </div>
+          <button id="compareAttempts" class="btn primary full" type="button">Comparar sectores en el mapa</button>
+          <div id="comparisonResults" class="results" aria-live="polite"><p class="placeholder">Guarda al menos dos intentos del mismo circuito para ver las diferencias.</p></div>
+        </div>
       </div>
     </section>
   </div>
 </div>
 <p id="status" class="status" role="status" aria-live="polite">Los GPX/TCX se analizan en el navegador. Los circuitos, tiempos y archivos se guardan en este PC cuando eliges guardarlos.</p>
-<footer>DH TRAILS LOCAL <span>v0.4 · FastAPI + PostgreSQL local · Cronometraje GPS estimado · Las coincidencias requieren validación antes de usarse en competiciones.</span></footer>
+<footer>DH TRAILS LOCAL <span>v0.5 · Comparación por sectores · FastAPI + PostgreSQL · Cronometraje GPS estimado · Las coincidencias requieren validación antes de usarse en competiciones.</span></footer>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module" src="./editor.mjs"></script>
