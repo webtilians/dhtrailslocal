@@ -1,6 +1,10 @@
-# DH Trails Local — GPS Lab v0.2
+# DH Trails Local — GPS Lab v0.3
 
 Laboratorio web de descenso MTB: visor GPS y **editor manual de circuitos, sectores y zonas de GPS débil**. Estética oscura, azul eléctrico y bandera de cuadros.
+
+**Novedad v0.3:** persistencia opcional en **PostgreSQL/Supabase**, cuentas de usuario, sincronización de circuitos y resúmenes de intentos, y almacenamiento privado voluntario de archivos GPX/TCX completos. La web sigue funcionando sin nube para uso local. La base de datos se activa creando un proyecto Supabase y ejecutando el esquema SQL.
+
+**[Instrucciones para activar la base de datos](docs/SUPABASE_SETUP.md)** · [Esquema SQL](supabase/schema.sql)
 
 **Web:** https://webtilians.github.io/dhtrailslocal/  
 **Editor:** https://webtilians.github.io/dhtrailslocal/editor.html
@@ -65,12 +69,12 @@ Las pruebas cubren sectores, orden de límites, detección de varios intentos, t
 
 En **Settings → Pages → Source** selecciona **GitHub Actions**. El workflow .github/workflows/pages.yml publica automáticamente los cambios fusionados en master.
 
-A partir de v0.2 el workflow copia index.html, editor.html, editor.css, editor.mjs y gps-engine.mjs a _site; si se añaden nuevos assets estáticos habrá que incluirlos en el despliegue.
+A partir de v0.3 el workflow también publica cloud-client.mjs y cloud-config.mjs. La contraseña de base de datos y claves secretas nunca deben estar en estos archivos.
 
 ## Limitaciones / próximas versiones
 - No se admiten archivos FIT todavía.
-- No hay servidor, cuentas, competición mensual, base de datos compartida ni un motor antitrampas certificado.
-- Los circuitos quedan solo en localStorage del navegador; exporta un JSON para guardar copia o compartir.
+- No hay servidor propio ni sistema de competiciones mensuales. La base de datos Supabase y las cuentas son opcionales y requieren un proyecto configurado; tampoco existe aún un motor antitrampas certificado.
+- Sin una cuenta Supabase configurada, los circuitos quedan solo en localStorage. Con Supabase, puedes sincronizar y recuperarlos desde otros dispositivos. Conserva los JSON como respaldo.
 - El descenso acumulado no tiene filtrado avanzado. Las curvas próximas o senderos cruzados pueden generar ambigüedad GPS.
 - Los límites de sectores deben ser realmente medibles por GPS; en zonas sin señal es preferible colocar la puerta antes o después.
 - Los cambios posteriores a un circuito guardado requieren crear una versión nueva a partir del GPX de referencia. Edición persistente, roles y sincronización son tareas futuras.
