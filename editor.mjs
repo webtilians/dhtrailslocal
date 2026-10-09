@@ -1,4 +1,5 @@
 import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
+import {getCloudConfig, setLocalCloudConfig, createCloudApi} from './cloud-client.mjs';
 
 const $ = id => document.getElementById(id);
 const map = L.map('map', {zoomControl:true}).setView([36.76,-4.46],12);
@@ -13,6 +14,7 @@ let source = null, attemptRoute = null, activeTool = '';
 let draft = blankDraft(), history = [], pendingZone = null;
 let artwork = [];
 let attempts = [];
+let cloudApi=null,cloudUser=null;
 const resetArt = () => {artwork.forEach(layer => map.removeLayer(layer)); artwork = [];};
 const add = layer => {layer.addTo(map); artwork.push(layer);return layer;};
 const status = (message, type='') => {const el=$('status');el.textContent=message;el.className='status ' + type;};
@@ -187,7 +189,7 @@ $('routeFile').addEventListener('change',async e=>{
     status('Ruta cargada ('+source.length+' puntos). Ahora marca la salida sobre el mapa.','success');
   }catch(err){status(err.message,'error')}
 });
-$('saveCircuit').addEventListener('click',()=>{
+$('saveCircuit').addEventListener('click',async()=>{
   let circuit;
   try {
     if(!source)throw Error('Importa primero una ruta GPX/TCX para crear un circuito.');
@@ -211,8 +213,19 @@ $('saveCircuit').addEventListener('click',()=>{
     reportSave('Circuito guardado y verificado en este navegador, pero hubo un error al mostrarlo: '+err.message,'error');
     return;
   }
-  reportSave('Circuito «'+circuit.name+'» guardado y verificado en este navegador ('+circuits.length+
-    ' en Mis circuitos). '+(backup?'Se ha solicitado una descarga JSON de seguridad; comprueba Descargas.':'Pulsa Exportar JSON para crear una copia de seguridad.'),'success');
+  reportSave('Circuito «'+circuit.name+'» guardado en este navegador ('+circuits.length+
+    ' en Mis circuitos). '+(backup?'Se ha solicitado una descarga JSON de seguridad.':'Exporta un JSON de seguridad.'),'success');
+  // Remote persistence is optional: never lose the local copy due to a network error.
+  if(cloudApi && cloudUser) {
+    try {
+      const id=await cloudApi.saveCircuit(circuit);
+      circuit.cloud_id=id;
+      try{saveLibrary(circuits)}catch(e){/* already safely in remote DB */}
+      cloudMessage('Circuito «'+circuit.name+'» guardado también en PostgreSQL.','success');
+    } catch(err) {
+      cloudMessage('Guardado local correcto, pero falló la sincronización: '+(err.message||err),'error');
+    }
+  }
 });
 function viewCircuit(circuit) {
   resetArt();
@@ -309,6 +322,19 @@ $('match').addEventListener('click',()=>{
         const time=document.createElement('b');time.textContent=timeString(duration);row.append(label,time);splits.append(row);
       });
       box.append(splits);
+      if(cloudApi && cloudUser) {
+        const save=document.createElement('button');save.className='btn outline full';save.type='button';
+        save.textContent='Guardar intento privado en nube';
+        save.addEventListener('click',async()=>{
+          save.disabled=true;save.textContent='Guardando…';
+          try {
+            const id=await cloudApi.saveAttempt(c,a,$('attemptFile').files?.[0]?.name,attemptRoute);
+            save.textContent='Intento guardado · '+id.slice(0,8);
+            status('Intento guardado para entrenamiento personal. No es un resultado oficial.','success');
+          }catch(err){save.disabled=false;save.textContent='Guardar intento privado en nube';status('No se pudo guardar intento: '+err.message,'error')}
+        });
+        box.append(save);
+      }
       const see=document.createElement('button');see.type='button';see.className='btn outline full';see.textContent='Ver solo este intento en el mapa';see.addEventListener('click',()=>focusAttempt(i));box.append(see);
       results.append(box);
     });
@@ -316,6 +342,101 @@ $('match').addEventListener('click',()=>{
     status(attempts.length+' intento(s) localizado(s). Los tiempos son estimados por GPS y no equivalen a un cronometraje de competición.','success');
   }catch(err){status('Fallo del detector: '+err.message,'error')}
 });
+
+function cloudMessage(message,type=''){
+  const el=$('cloudStatus');
+  el.textContent=message;
+  el.className='save-feedback '+type;
+}
+function reflectCloudUser(){
+  $('cloudAuthPanel').hidden=!cloudApi||!!cloudUser;
+  $('cloudSyncPanel').hidden=!cloudUser;
+  $('cloudAccount').textContent=cloudUser?.email||'Piloto';
+}
+async function connectCloud(config){
+  cloudMessage('Conectando con PostgreSQL…');
+  cloudApi=await createCloudApi(config);
+  cloudUser=await cloudApi.user();
+  reflectCloudUser();
+  cloudMessage(cloudUser?'Conectado como '+cloudUser.email+'. Puedes guardar o recuperar circuitos.':'Proyecto conectado. Inicia sesión o crea una cuenta.','success');
+}
+$('cloudConnect').addEventListener('click',async()=>{
+  try{
+    const cfg=setLocalCloudConfig($('cloudUrl').value,$('cloudKey').value);
+    await connectCloud(cfg);
+  }catch(err){cloudApi=null;cloudUser=null;reflectCloudUser();cloudMessage('No se ha podido conectar: '+err.message,'error')}
+});
+$('cloudLogin').addEventListener('click',async()=>{
+  if(!cloudApi)return;
+  try{
+    const email=$('cloudEmail').value.trim(),password=$('cloudPassword').value;
+    const data=await cloudApi.signIn(email,password);
+    cloudUser=data.user;
+    $('cloudPassword').value='';
+    reflectCloudUser();
+    cloudMessage('Sesión iniciada. Puedes subir tus circuitos existentes o recuperarlos.','success');
+  }catch(err){cloudMessage('No se pudo iniciar sesión: '+err.message,'error')}
+});
+$('cloudSignup').addEventListener('click',async()=>{
+  if(!cloudApi)return;
+  try{
+    const email=$('cloudEmail').value.trim(),password=$('cloudPassword').value;
+    if(password.length<8)throw Error('Utiliza al menos 8 caracteres de contraseña.');
+    const data=await cloudApi.signUp(email,password);
+    $('cloudPassword').value='';
+    cloudUser=data.session?.user||null;
+    reflectCloudUser();
+    cloudMessage(cloudUser?'Cuenta creada y sesión iniciada.':'Comprueba el correo de verificación de Supabase y después inicia sesión.','success');
+  }catch(err){cloudMessage('No se pudo crear cuenta: '+err.message,'error')}
+});
+$('cloudLogout').addEventListener('click',async()=>{
+  if(!cloudApi)return;
+  try {await cloudApi.signOut();cloudUser=null;reflectCloudUser();cloudMessage('Sesión cerrada. Los circuitos locales siguen disponibles.');}
+  catch(err){cloudMessage('Error al cerrar sesión: '+err.message,'error')}
+});
+$('cloudPush').addEventListener('click',async()=>{
+  const c=selectedCircuit();
+  if(!c)return cloudMessage('Selecciona un circuito guardado en Mis circuitos.','error');
+  if(!cloudApi||!cloudUser)return cloudMessage('Inicia sesión primero.','error');
+  const btn=$('cloudPush');btn.disabled=true;
+  try {
+    const id=await cloudApi.saveCircuit(c);
+    c.cloud_id=id;
+    try {saveLibrary(circuits);}catch(e){/* remote saved; local ID may not persist */}
+    cloudMessage('«'+c.name+'» guardado correctamente en PostgreSQL.','success');
+  }catch(err){cloudMessage('No se pudo guardar: '+err.message,'error')}
+  finally{btn.disabled=false;}
+});
+$('cloudPull').addEventListener('click',async()=>{
+  if(!cloudApi||!cloudUser)return cloudMessage('Inicia sesión primero.','error');
+  const btn=$('cloudPull');btn.disabled=true;
+  try {
+    const remote=await cloudApi.listCircuits();
+    const imported=[...circuits];
+    for(const item of remote){
+      const i=imported.findIndex(x=>x.cloud_id===item.cloud_id || x.id===item.id);
+      if(i>=0)imported[i]=item;else imported.push(item);
+    }
+    try {saveLibrary(imported);}
+    catch(err) {cloudMessage('Circuitos recuperados, pero el navegador no permitió guardarlos localmente: '+err.message,'error');}
+    circuits=imported;
+    if(remote.length)selectedId=remote[0].id;
+    fillLibrary();
+    if(selectedCircuit())viewCircuit(selectedCircuit());
+    cloudMessage(remote.length+' circuito(s) cargado(s) desde PostgreSQL. Privados para esta cuenta.','success');
+  }catch(err){cloudMessage('No se pudieron recuperar circuitos: '+err.message,'error')}
+  finally{btn.disabled=false;}
+});
+const initialCloudConfig=getCloudConfig();
+if(initialCloudConfig) {
+  $('cloudUrl').value=initialCloudConfig.url;
+  $('cloudKey').value=initialCloudConfig.key;
+  connectCloud(initialCloudConfig).catch(err=>cloudMessage('Error de conexión: '+err.message,'error'));
+}else{
+  $('cloudConfigDetails').open=true;
+  reflectCloudUser();
+  cloudMessage('Nube desactivada. Configura un proyecto Supabase para sincronizar.');
+}
 fillLibrary();
 if(selectedCircuit()){viewCircuit(selectedCircuit());status('Biblioteca local de '+circuits.length+' circuito(s) cargada. Los JSON exportados son tu copia de seguridad.');}
 else{refreshDraft();if(storageProblem)status('El almacenamiento del navegador no está disponible o contiene datos inválidos: '+storageProblem+'. Usa siempre una copia JSON.','error');}
