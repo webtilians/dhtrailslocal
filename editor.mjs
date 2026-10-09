@@ -1,5 +1,5 @@
 import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
-import {getCloudConfig, setLocalCloudConfig, createCloudApi} from './cloud-client.mjs';
+import {getCloudConfig, setLocalCloudConfig, createCloudApi} from './api-client.mjs';
 
 const $ = id => document.getElementById(id);
 const map = L.map('map', {zoomControl:true}).setView([36.76,-4.46],12);
@@ -207,8 +207,8 @@ $('saveCircuit').addEventListener('click',async()=>{
       try{
         circuit.cloud_id=await cloudApi.saveCircuit(circuit);
         circuits=next;selectedId=circuit.id;fillLibrary();viewCircuit(circuit);
-        reportSave('Circuito «'+circuit.name+'» guardado en PostgreSQL, pero no en almacenamiento local ('+err.message+'). '+(backup?'Conserva la copia JSON de Descargas.':'Exporta una copia JSON.'),'success');
-        cloudMessage('Guardado remoto confirmado. Usa Recuperar mis circuitos para volver a cargarlo en otro navegador.','success');
+        reportSave('Circuito «'+circuit.name+'» guardado en el servidor PostgreSQL, pero no en almacenamiento local ('+err.message+'). '+(backup?'Conserva la copia JSON de Descargas.':'Exporta una copia JSON.'),'success');
+        cloudMessage('Guardado en FastAPI confirmado. Usa Recuperar mis circuitos para volver a cargarlo en otro navegador.','success');
         return;
       }catch(cloudErr){
         cloudMessage('Tampoco se pudo guardar en la nube: '+cloudErr.message,'error');
@@ -233,7 +233,7 @@ $('saveCircuit').addEventListener('click',async()=>{
       const id=await cloudApi.saveCircuit(circuit);
       circuit.cloud_id=id;
       try{saveLibrary(circuits)}catch(e){/* already safely in remote DB */}
-      cloudMessage('Circuito «'+circuit.name+'» guardado también en PostgreSQL.','success');
+      cloudMessage('Circuito «'+circuit.name+'» guardado también en el servidor FastAPI / PostgreSQL.','success');
     } catch(err) {
       cloudMessage('Guardado local correcto, pero falló la sincronización: '+(err.message||err),'error');
     }
@@ -425,16 +425,17 @@ $('cloudDeleteActivity').addEventListener('click',async()=>{
   }catch(err){cloudMessage('No se pudo eliminar la actividad: '+err.message,'error')}
 });
 async function connectCloud(config){
-  cloudMessage('Conectando con PostgreSQL…');
-  cloudApi=await createCloudApi(config);
+  cloudMessage('Conectando con FastAPI y PostgreSQL…');
+  cloudApi=createCloudApi(config);
+  await cloudApi.health();
   cloudUser=await cloudApi.user();
   reflectCloudUser();
   if(cloudUser)refreshCloudActivities().catch(()=>{});
-  cloudMessage(cloudUser?'Conectado como '+cloudUser.email+'. Puedes guardar o recuperar circuitos.':'Proyecto conectado. Inicia sesión o crea una cuenta.','success');
+  cloudMessage(cloudUser?'Sesión iniciada como '+cloudUser.email+'. Puedes guardar o recuperar circuitos.':'FastAPI conectado. Crea una cuenta o inicia sesión.','success');
 }
 $('cloudConnect').addEventListener('click',async()=>{
   try{
-    const cfg=setLocalCloudConfig($('cloudUrl').value,$('cloudKey').value);
+    const cfg=setLocalCloudConfig($('cloudUrl').value);
     await connectCloud(cfg);
   }catch(err){cloudApi=null;cloudUser=null;reflectCloudUser();cloudMessage('No se ha podido conectar: '+err.message,'error')}
 });
@@ -459,7 +460,7 @@ $('cloudSignup').addEventListener('click',async()=>{
     $('cloudPassword').value='';
     cloudUser=data.session?.user||null;
     reflectCloudUser();
-    cloudMessage(cloudUser?'Cuenta creada y sesión iniciada.':'Comprueba el correo de verificación de Supabase y después inicia sesión.','success');
+    cloudMessage(cloudUser?'Cuenta creada e iniciada en tu servidor local.':'Cuenta creada. Inicia sesión.','success');
   }catch(err){cloudMessage('No se pudo crear cuenta: '+err.message,'error')}
 });
 $('cloudLogout').addEventListener('click',async()=>{
@@ -503,12 +504,11 @@ $('cloudPull').addEventListener('click',async()=>{
 const initialCloudConfig=getCloudConfig();
 if(initialCloudConfig) {
   $('cloudUrl').value=initialCloudConfig.url;
-  $('cloudKey').value=initialCloudConfig.key;
   connectCloud(initialCloudConfig).catch(err=>cloudMessage('Error de conexión: '+err.message,'error'));
 }else{
   $('cloudConfigDetails').open=true;
   reflectCloudUser();
-  cloudMessage('Nube desactivada. Configura un proyecto Supabase para sincronizar.');
+  cloudMessage('Servidor sin configurar. Arranca python run.py en backend y conecta http://127.0.0.1:8000.');
 }
 fillLibrary();
 if(selectedCircuit()){viewCircuit(selectedCircuit());status('Biblioteca local de '+circuits.length+' circuito(s) cargada. Los JSON exportados son tu copia de seguridad.');}
