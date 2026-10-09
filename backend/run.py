@@ -8,7 +8,9 @@ from alembic import command
 from alembic.config import Config
 import uvicorn
 
+from app.config import API_HOST, API_PORT
+
 if __name__=="__main__":
     cfg=Config(str(Path(__file__).resolve().parent/"alembic.ini"))
     command.upgrade(cfg,"head")
-    uvicorn.run("app.main:app",host="127.0.0.1",port=8000,reload=False)
+    uvicorn.run("app.main:app",host=API_HOST,port=API_PORT,reload=False)

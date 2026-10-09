@@ -67,3 +67,22 @@ class AttemptIn(BaseModel):
         if any(x is not None and x<0 for x in v):
             raise ValueError("Tiempo de sector negativo")
         return v
+
+class RegisterIn(Credentials):
+    invite_code: str | None = Field(default=None,max_length=100)
+
+class ProfileIn(BaseModel):
+    display_name: str = Field(min_length=3,max_length=30)
+
+    @field_validator("display_name")
+    @classmethod
+    def readable(cls,v):
+        import re
+        v=" ".join(v.split())
+        if not re.fullmatch(r"[\w][\w .'-]{2,29}",v):
+            raise ValueError("Usa de 3 a 30 letras, números, espacios, puntos o guiones")
+        return v
+
+class ReviewIn(BaseModel):
+    decision: Literal["approved","rejected"]
+    note: str | None = Field(default=None,max_length=300)
