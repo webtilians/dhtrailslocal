@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#071423">
-<title>Editor de circuitos | DH Trails Local v0.2</title>
+<title>Editor de circuitos | DH Trails Local v0.3</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -57,6 +57,38 @@
         <label for="importCircuit" class="mini-upload">+ Importar circuito JSON</label><input id="importCircuit" type="file" accept=".json,application/json" hidden>
       </div>
     </section>
+    <section class="panel">
+      <div class="panel-title"><h2>05 <span>Base de datos</span></h2><span class="caps">SUPABASE</span></div>
+      <div class="panel-content">
+        <p class="help">Sincroniza circuitos y tiempos de entrenamiento en PostgreSQL con tu cuenta. Los datos son privados por defecto. El modo local seguirá funcionando.</p>
+        <div id="cloudStatus" class="save-feedback" role="status" aria-live="polite">Nube pendiente de configurar.</div>
+        <details id="cloudConfigDetails">
+          <summary class="cloud-summary">Configurar proyecto Supabase</summary>
+          <label for="cloudUrl" class="field-title">URL pública del proyecto</label>
+          <input id="cloudUrl" type="url" placeholder="https://xxxxxxxx.supabase.co" autocomplete="off">
+          <label for="cloudKey" class="field-title">Clave publishable / anon</label>
+          <input id="cloudKey" type="text" placeholder="sb_publishable_... o anon JWT" autocomplete="off">
+          <p class="help">Solo clave pública con RLS. Nunca introduzcas service_role, sb_secret ni contraseña de la base de datos.</p>
+          <button id="cloudConnect" class="btn outline full" type="button">Conectar proyecto</button>
+        </details>
+        <div id="cloudAuthPanel" hidden>
+          <label for="cloudEmail" class="field-title">Correo electrónico</label>
+          <input id="cloudEmail" type="email" autocomplete="email" placeholder="correo@ejemplo.com">
+          <label for="cloudPassword" class="field-title">Contraseña (mínimo 8 caracteres)</label>
+          <input id="cloudPassword" type="password" autocomplete="current-password" minlength="8">
+          <div class="action-row" style="margin-top:12px">
+            <button id="cloudLogin" class="btn primary" type="button">Entrar</button>
+            <button id="cloudSignup" class="btn outline" type="button">Crear cuenta</button>
+          </div>
+        </div>
+        <div id="cloudSyncPanel" hidden>
+          <p class="help"><strong id="cloudAccount"></strong> · Cuenta conectada.</p>
+          <button id="cloudPush" class="btn primary full" type="button">Guardar circuito seleccionado en nube</button>
+          <button id="cloudPull" class="btn outline full cloud-spaced" type="button">Recuperar mis circuitos de nube</button>
+          <button id="cloudLogout" class="text-btn cloud-spaced" type="button">Cerrar sesión</button>
+        </div>
+      </div>
+    </section>
   </aside>
   <div class="stack wide">
     <section class="panel map-panel">
@@ -77,8 +109,8 @@
     </section>
   </div>
 </div>
-<p id="status" class="status" role="status" aria-live="polite">Los archivos se procesan en tu navegador. Ninguna ruta se envía a un servidor.</p>
-<footer>DH TRAILS LOCAL <span>v0.2 · Cronometraje GPS estimado · Las coincidencias requieren validación antes de usarse en competiciones.</span></footer>
+<p id="status" class="status" role="status" aria-live="polite">Los archivos GPX/TCX se procesan en tu navegador. Los circuitos y resúmenes se envían a Supabase únicamente si configuras y utilizas la sincronización.</p>
+<footer>DH TRAILS LOCAL <span>v0.3 · Cronometraje GPS estimado · Las coincidencias requieren validación antes de usarse en competiciones.</span></footer>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module" src="./editor.mjs"></script>
