@@ -61,6 +61,37 @@ create table if not exists public.training_attempts (
 create index if not exists attempts_pilot_idx on public.training_attempts(pilot_id,created_at desc);
 create index if not exists attempts_circuit_idx on public.training_attempts(circuit_id,created_at desc);
 
+-- Full personal GPX/TCX activities are stored privately in Supabase Storage,
+-- not as large blobs inside relational rows. Upload is explicit and optional.
+create table if not exists public.gps_activities (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references auth.users(id) on delete cascade,
+  storage_path text not null unique,
+  filename text not null check (char_length(filename) between 1 and 200),
+  format text not null check (format in ('gpx','tcx')),
+  gps_points integer check (gps_points is null or gps_points between 2 and 80000),
+  distance_m numeric check (distance_m is null or distance_m >= 0),
+  recorded_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists gps_activities_owner_idx on public.gps_activities(owner_id,created_at desc);
+
+insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
+values ('dhtrails-activities','dhtrails-activities',false,20971520,ARRAY['application/gpx+xml','application/xml']::text[])
+on conflict (id) do update set public=false,file_size_limit=20971520,allowed_mime_types=EXCLUDED.allowed_mime_types;
+
+-- Only the owning logged-in user may read, upload or delete their own files.
+drop policy if exists dhtrails_activity_read on storage.objects;
+create policy dhtrails_activity_read on storage.objects for select to authenticated
+using (bucket_id='dhtrails-activities' and split_part(name,'/',1)=(select auth.uid())::text);
+drop policy if exists dhtrails_activity_upload on storage.objects;
+create policy dhtrails_activity_upload on storage.objects for insert to authenticated
+with check (bucket_id='dhtrails-activities' and split_part(name,'/',1)=(select auth.uid())::text);
+drop policy if exists dhtrails_activity_delete on storage.objects;
+create policy dhtrails_activity_delete on storage.objects for delete to authenticated
+using (bucket_id='dhtrails-activities' and split_part(name,'/',1)=(select auth.uid())::text);
+
+
 create or replace function public.touch_circuit_updated_at()
 returns trigger language plpgsql set search_path = public as $$
 begin new.updated_at=now();return new;end $$;
@@ -74,6 +105,7 @@ alter table public.circuits enable row level security;
 alter table public.circuit_sectors enable row level security;
 alter table public.circuit_weak_zones enable row level security;
 alter table public.training_attempts enable row level security;
+alter table public.gps_activities enable row level security;
 
 drop policy if exists pilot_profile_self on public.pilot_profiles;
 create policy pilot_profile_self on public.pilot_profiles for all to authenticated
@@ -95,6 +127,10 @@ drop policy if exists zones_owner_all on public.circuit_weak_zones;
 create policy zones_owner_all on public.circuit_weak_zones for all to authenticated
 using (exists (select 1 from public.circuits c where c.id = circuit_id and c.owner_id = (select auth.uid())))
 with check (exists (select 1 from public.circuits c where c.id = circuit_id and c.owner_id = (select auth.uid())));
+
+drop policy if exists gps_activities_owner_all on public.gps_activities;
+create policy gps_activities_owner_all on public.gps_activities for all to authenticated
+using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
 
 drop policy if exists attempts_owner_select on public.training_attempts;
 create policy attempts_owner_select on public.training_attempts for select to authenticated
@@ -201,4 +237,5 @@ revoke all on function public.save_circuit(text,jsonb,jsonb,jsonb,integer,uuid) 
 grant execute on function public.save_circuit(text,jsonb,jsonb,jsonb,integer,uuid) to authenticated;
 grant select, insert, update, delete on public.pilot_profiles, public.circuits, public.circuit_sectors, public.circuit_weak_zones to authenticated;
 grant select, insert, delete on public.training_attempts to authenticated;
+grant select, insert, delete on public.gps_activities to authenticated;
 revoke update on public.training_attempts from authenticated;
