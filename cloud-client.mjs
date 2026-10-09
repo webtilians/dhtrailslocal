@@ -94,6 +94,57 @@ export async function createCloudApi(config) {
       if(error)throw error;
       return (data||[]).map(cloudCircuitFromRow);
     },
+    async uploadActivity(file,points,meters){
+      const user=await requiredUser();
+      const ext=String(file?.name||'').split('.').at(-1).toLowerCase();
+      if(!['gpx','tcx'].includes(ext))throw new Error('Solo GPX o TCX.');
+      if(!file || file.size<1 || file.size>20*1024*1024)throw new Error('El archivo debe medir entre 1 byte y 20 MB.');
+      const filename=String(file.name).slice(0,200);
+      const path=user.id+'/'+crypto.randomUUID()+'.'+ext;
+      const contentType=ext==='gpx'?'application/gpx+xml':'application/xml';
+      const {error:uploadError}=await client.storage.from('dhtrails-activities').upload(path,file,{contentType,upsert:false});
+      if(uploadError)throw uploadError;
+      const began=points?.find(p=>Number.isFinite(p.time))?.time;
+      const payload={
+        owner_id:user.id,storage_path:path,filename,format:ext,
+        gps_points:points?.length||null,
+        distance_m:Number.isFinite(meters)?Math.max(0,meters):null,
+        recorded_at:Number.isFinite(began)?new Date(began).toISOString():null
+      };
+      const {data,error}=await client.from('gps_activities').insert(payload).select('id,filename,format,gps_points,distance_m,created_at').single();
+      if(error){
+        await client.storage.from('dhtrails-activities').remove([path]);
+        throw error;
+      }
+      return data;
+    },
+    async listActivities(){
+      await requiredUser();
+      const {data,error}=await client.from('gps_activities')
+        .select('id,filename,format,gps_points,distance_m,created_at')
+        .order('created_at',{ascending:false}).limit(100);
+      if(error)throw error;
+      return data||[];
+    },
+    async downloadActivity(id){
+      await requiredUser();
+      const {data:item,error}=await client.from('gps_activities')
+        .select('id,filename,format,storage_path').eq('id',id).single();
+      if(error)throw error;
+      const {data:blob,error:downloadError}=await client.storage.from('dhtrails-activities').download(item.storage_path);
+      if(downloadError)throw downloadError;
+      return {blob,item};
+    },
+    async deleteActivity(id){
+      await requiredUser();
+      const {data:item,error}=await client.from('gps_activities')
+        .select('id,storage_path').eq('id',id).single();
+      if(error)throw error;
+      const {error:storageError}=await client.storage.from('dhtrails-activities').remove([item.storage_path]);
+      if(storageError)throw storageError;
+      const {error:dbError}=await client.from('gps_activities').delete().eq('id',id);
+      if(dbError)throw dbError;
+    },
     async saveAttempt(circuit,attempt,routeFilename,activity){
       const user=await requiredUser();
       if(!circuit?.cloud_id)throw new Error('Guarda primero el circuito en la nube.');
