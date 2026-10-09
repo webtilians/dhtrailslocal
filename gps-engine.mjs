@@ -3,7 +3,7 @@
 export function haversine(a, b) {
   const rad = Math.PI / 180;
   const p = (a.lat ?? a[0]) * rad, q = (b.lat ?? b[0]) * rad;
-  const dl = ((b.lon ?? b[1]) - (a.lon ?? a[1])) * rad;
+  const dl = ((b.lon ?? b.lng ?? b[1]) - (a.lon ?? a.lng ?? a[1])) * rad;
   const dp = q - p;
   const h = Math.sin(dp / 2) ** 2 + Math.cos(p) * Math.cos(q) * Math.sin(dl / 2) ** 2;
   return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
