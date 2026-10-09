@@ -10,7 +10,7 @@ const STORAGE = 'dhtrailslocal:v0.2:circuits';
 let storageProblem = null;
 let circuits = readLibrary();
 let selectedId = '';
-let source = null, attemptRoute = null, activeTool = '';
+let source = null, attemptRoute = null, attemptFileBlob = null, attemptSourceName = null, activeTool = '';
 let draft = blankDraft(), history = [], pendingZone = null;
 let artwork = [];
 let attempts = [];
@@ -282,7 +282,7 @@ $('importCircuit').addEventListener('change',async e=>{
 });
 $('attemptFile').addEventListener('change',async e=>{
   const file=e.target.files[0];if(!file)return;
-  try{attemptRoute=await readFile(file);$('attemptFileName').textContent=file.name+' · '+attemptRoute.length+' puntos';
+  try{attemptRoute=await readFile(file);attemptFileBlob=file;attemptSourceName=file.name;$('attemptFileName').textContent=file.name+' · '+attemptRoute.length+' puntos';
     status('Actividad cargada. Pulsa Detectar intentos.','success');
   }catch(err){status('Error al cargar actividad: '+err.message,'error')}
 });
@@ -328,7 +328,7 @@ $('match').addEventListener('click',()=>{
         save.addEventListener('click',async()=>{
           save.disabled=true;save.textContent='Guardando…';
           try {
-            const id=await cloudApi.saveAttempt(c,a,$('attemptFile').files?.[0]?.name,attemptRoute);
+            const id=await cloudApi.saveAttempt(c,a,attemptSourceName,attemptRoute);
             save.textContent='Intento guardado · '+id.slice(0,8);
             status('Intento guardado para entrenamiento personal. No es un resultado oficial.','success');
           }catch(err){save.disabled=false;save.textContent='Guardar intento privado en nube';status('No se pudo guardar intento: '+err.message,'error')}
@@ -353,11 +353,71 @@ function reflectCloudUser(){
   $('cloudSyncPanel').hidden=!cloudUser;
   $('cloudAccount').textContent=cloudUser?.email||'Piloto';
 }
+async function refreshCloudActivities(){
+  if(!cloudApi||!cloudUser)return;
+  const activities=await cloudApi.listActivities();
+  const select=$('cloudActivitySelect');
+  select.replaceChildren();
+  if(!activities.length){
+    const option=document.createElement('option');option.value='';option.textContent='Ninguna actividad en nube';select.append(option);
+  }
+  for(const a of activities){
+    const option=document.createElement('option');
+    option.value=a.id;
+    option.textContent=a.filename+' · '+(a.distance_m!=null?(Number(a.distance_m)/1000).toFixed(2)+' km':'distancia desconocida')+' · '+new Date(a.created_at).toLocaleDateString('es-ES');
+    select.append(option);
+  }
+  return activities.length;
+}
+$('cloudRefreshActivities').addEventListener('click',async()=>{
+  try {const count=await refreshCloudActivities();cloudMessage(count+' actividad(es) privadas en tu cuenta.','success')}
+  catch(err){cloudMessage('No se pudo actualizar la biblioteca GPS: '+err.message,'error')}
+});
+$('cloudUploadActivity').addEventListener('click',async()=>{
+  if(!cloudApi||!cloudUser)return cloudMessage('Inicia sesión primero.','error');
+  if(!attemptFileBlob||!attemptRoute)return cloudMessage('Carga antes un GPX/TCX completo en la sección 04.','error');
+  const btn=$('cloudUploadActivity');btn.disabled=true;
+  cloudMessage('Subiendo GPS privado a Supabase…');
+  try {
+    await cloudApi.uploadActivity(attemptFileBlob,attemptRoute,summarize(attemptRoute).meters);
+    const count=await refreshCloudActivities();
+    cloudMessage('Actividad «'+attemptSourceName+'» guardada en almacenamiento privado. '+count+' en tu biblioteca.','success');
+  }catch(err){cloudMessage('No se pudo subir actividad: '+err.message,'error')}
+  finally{btn.disabled=false;}
+});
+$('cloudLoadActivity').addEventListener('click',async()=>{
+  if(!cloudApi||!cloudUser)return cloudMessage('Inicia sesión primero.','error');
+  const id=$('cloudActivitySelect').value;
+  if(!id)return cloudMessage('Selecciona una actividad en tu biblioteca.','error');
+  const btn=$('cloudLoadActivity');btn.disabled=true;
+  try {
+    const {blob,item}=await cloudApi.downloadActivity(id);
+    const file=new File([blob],item.filename,{type:blob.type||'application/xml'});
+    attemptRoute=await readFile(file);
+    attemptFileBlob=file;attemptSourceName=file.name;
+    $('attemptFileName').textContent=file.name+' · '+attemptRoute.length+' puntos (desde nube)';
+    cloudMessage('GPS «'+file.name+'» recuperado. Puedes analizarlo en la sección 04.','success');
+  }catch(err){cloudMessage('No se pudo descargar el GPX: '+err.message,'error')}
+  finally{btn.disabled=false;}
+});
+$('cloudDeleteActivity').addEventListener('click',async()=>{
+  if(!cloudApi||!cloudUser)return;
+  const select=$('cloudActivitySelect'),id=select.value;
+  if(!id)return cloudMessage('Selecciona primero una actividad.','error');
+  const label=select.selectedOptions[0]?.textContent||'actividad';
+  if(!window.confirm('¿Eliminar definitivamente este archivo GPS de la nube?\n'+label+'\nEsta acción no se puede deshacer.'))return;
+  try {
+    await cloudApi.deleteActivity(id);
+    await refreshCloudActivities();
+    cloudMessage('Actividad eliminada de la nube. El GPX que tengas en tu dispositivo no se ha tocado.','success');
+  }catch(err){cloudMessage('No se pudo eliminar la actividad: '+err.message,'error')}
+});
 async function connectCloud(config){
   cloudMessage('Conectando con PostgreSQL…');
   cloudApi=await createCloudApi(config);
   cloudUser=await cloudApi.user();
   reflectCloudUser();
+  if(cloudUser)refreshCloudActivities().catch(()=>{});
   cloudMessage(cloudUser?'Conectado como '+cloudUser.email+'. Puedes guardar o recuperar circuitos.':'Proyecto conectado. Inicia sesión o crea una cuenta.','success');
 }
 $('cloudConnect').addEventListener('click',async()=>{
@@ -375,6 +435,7 @@ $('cloudLogin').addEventListener('click',async()=>{
     $('cloudPassword').value='';
     reflectCloudUser();
     cloudMessage('Sesión iniciada. Puedes subir tus circuitos existentes o recuperarlos.','success');
+    refreshCloudActivities().catch(err=>cloudMessage('Sesión iniciada, pero no se pudieron leer las actividades: '+err.message,'error'));
   }catch(err){cloudMessage('No se pudo iniciar sesión: '+err.message,'error')}
 });
 $('cloudSignup').addEventListener('click',async()=>{
