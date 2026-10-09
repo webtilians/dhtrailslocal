@@ -58,5 +58,5 @@ export function formatMs(ms) {
 export function formatDelta(ms) {
   if (ms === null || !Number.isFinite(ms)) return 'Sin datos';
   if (Math.abs(ms) < 0.5) return '±0.0 s';
-  return (ms < 0 ? '−' : '+') + (Math.abs(ms) / 1000).toFixed(1) + ' s';
+  return (ms < 0 ? '−' : '+') + (Math.round(Math.abs(ms) / 100) / 10).toFixed(1) + ' s';
 }
