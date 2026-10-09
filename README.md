@@ -1,44 +1,78 @@
-# DH Trails Local — GPS Lab v0.1
+# DH Trails Local — GPS Lab v0.2
 
-Visor GPS de descenso MTB, con estética negra y azul eléctrico y motivo de bandera de cuadros.
+Laboratorio web de descenso MTB: visor GPS y **editor manual de circuitos, sectores y zonas de GPS débil**. Estética oscura, azul eléctrico y bandera de cuadros.
 
-## Características
-- Importación local de **GPX** (tracks `trkpt` y rutas `rtept`) y **TCX**.
-- Mapa interactivo OpenStreetMap/Leaflet con inicio y final.
-- Distancia, tiempo transcurrido, velocidad media y desnivel negativo aproximado.
-- Perfil altimétrico con SVG.
-- Ruta **demo simulada** para ver la interfaz sin un archivo.
-- Diseño adaptable a escritorio y móvil.
-- Sin backend ni cuenta: los archivos se leen en el navegador.
+**Web:** https://webtilians.github.io/dhtrailslocal/  
+**Editor:** https://webtilians.github.io/dhtrailslocal/editor.html
 
-## Ejecutar
+## Funcionalidades
+- Visor GPS de v0.1 en index.html con mapa, perfil, distancia, tiempos y altitud.
+- Editor v0.2 en editor.html: importar una actividad GPX/TCX, marcar sobre el mapa la **salida**, la **meta** y tantos **límites de sector** como quieras.
+- Marcar manualmente el inicio y final de **zonas conocidas de mala cobertura GPS**. Se muestran en naranja discontinuo.
+- Arrastrar los marcadores de salida, meta y sectores para afinarlos; deshacer/eliminar límites.
+- Dar nombres a sectores y zonas de cobertura débil.
+- Guardar el trazado *recortado entre salida y meta* como circuito local en el navegador. Exportar o importar su definición JSON.
+- Cargar otra actividad completa GPX/TCX, detectar uno o varios pasos por el circuito y estimar tiempo total y por sector a partir de las marcas temporales.
+- Botón para mostrar **solo el intento detectado** sobre el trazado oficial.
 
-La aplicación es estática: abre `index.html` directamente en un navegador con conexión para obtener los mapas y librerías externas. Alternativamente, desde la carpeta del repositorio:
+## Crear Santa Cruz (ejemplo)
+1. Entra al editor y carga tu GPX completo de Strava en **Ruta GPS de referencia**.
+2. Escribe "Santa Cruz".
+3. Activa **Marcar salida** y haz clic cerca del punto de partida del segmento. El marcador se ajustará al punto GPS más cercano.
+4. Activa **Añadir límite sector** y coloca cada separación **manualmente** (por ejemplo, inicio del rock garden, salida de las curvas, etc.). Puedes ponerlos antes o después de la meta, siempre dentro del circuito.
+5. Activa **Marcar meta** y coloca el final del recorrido.
+6. Para zonas donde sabes que el GPS se pierde, activa **Zona GPS débil** y señala su **inicio y final** con dos clics. Asígnale un nombre.
+7. Ajusta los marcadores arrastrándolos, revisa todo y pulsa **Guardar circuito en este navegador**.
+8. Exporta el JSON para compartirlo o conservarlo. Todavía no se sincroniza con otros usuarios.
+9. En **Detectar y cronometrar** importa otro GPX completo y pulsa **Detectar intentos y calcular tiempos**.
+10. Cada intento muestra sus parciales y se puede ver **recortado**, sin pintar toda la actividad.
+
+El botón **Crear circuito / sectores** de la portada abre el editor.
+
+## Cómo se calculan los tiempos
+
+El circuito de referencia guarda los puntos GPS entre salida y meta, los límites ordenados de sectores y los intervalos de baja cobertura. Las posiciones son puntos geográficos del recorrido, no índices reutilizados de actividades ajenas.
+
+Para cada actividad, el motor busca acercamientos a la salida y a la meta en orden, comprueba el recorrido aproximado y trata de localizar las puertas de los sectores sobre su propia traza. Interpola la hora de paso a partir de los dos puntos GPS adyacentes. Los resultados son **estimaciones** condicionadas a la frecuencia y precisión de registro.
+
+La tolerancia para reconocer una puerta es inicialmente de **18 m**, no 2–3 m: con árboles o barrancos un GPS puede tener errores mayores. La coincidencia geométrica se compara con un corredor de aproximadamente 30 m y se indica si el recorrido se aparta de él. Estos valores son provisionales para probar con rutas reales.
+
+Las zonas de GPS débil **no hacen que una traza con huecos sea automáticamente válida**: se señalan como incidencias de revisión. Si falta la marca GPS de una puerta de sector, no inventamos ese tiempo parcial; aparecerá "Sin tiempo". Si faltan marcas temporales no calculamos un tiempo total. No se puede garantizar la ausencia de trampas con archivos GPS aportados por usuarios.
+
+**No usar todavía estas marcas para premios, récords oficiales ni competiciones con consecuencias.** Este sistema no certifica que el piloto haya pasado por el sendero real.
+
+## Ejecutar localmente
+
+Necesita conexión para cargar Leaflet/OpenStreetMap. Usa un servidor estático para que los módulos ES funcionen:
 
 ```bash
 python -m http.server 8000
 ```
 
-Luego visita http://localhost:8000
+Abre http://localhost:8000/editor.html
 
-## Publicar en GitHub Pages
-La web se publica en **https://webtilians.github.io/dhtrailslocal/**.
+## Probar el motor GPS
 
-En **Settings → Pages → Build and deployment → Source**, selecciona **GitHub Actions**. El flujo `.github/workflows/pages.yml` despliega automáticamente cada cambio en `master` y también permite un despliegue manual desde **Actions → Deploy GitHub Pages → Run workflow**.
+Requiere Node.js 22 o posterior:
 
-El flujo comprueba que `index.html` existe, lo copia a `_site` y publica únicamente esa carpeta mediante las acciones oficiales de Pages. CSS y JavaScript están incluidos en el HTML; si se añaden archivos locales adicionales, deberán copiarse también a `_site`.
+```bash
+node --test tests/gps-engine.test.mjs
+```
 
-La raíz `https://webtilians.github.io/` es un sitio de usuario independiente: requiere el repositorio `webtilians/webtilians.github.io`. El repositorio `dhtrailslocal` se sirve bajo `/dhtrailslocal/`.
+Las pruebas cubren sectores, orden de límites, detección de varios intentos, trazas distantes, ausencia de tiempos y fallos de señal. GitHub Actions ejecuta las pruebas en las PR.
 
-## Limitaciones v0.1
-- **FIT no está soportado aún**. Exporta como GPX o TCX desde tu plataforma o dispositivo.
-- El perfil usa altitud GPS sin filtrado avanzado. El descenso acumulado puede estar inflado por ruido.
-- El tiempo mostrado es el transcurrido entre la primera y última marca temporal de la ruta; no representa aún un segmento DH ni una prueba validada.
-- No hay almacenamiento de rutas, usuarios, clasificaciones ni sistema antitrampas.
-- Rutas muy grandes o con muchísimos puntos pueden afectar al rendimiento del dispositivo.
-- Un GPX con coordenadas sensibles se mantiene local en esta versión; revisa los datos antes de compartir el archivo.
+## Publicar (GitHub Pages)
 
-## Próxima iteración
-Motor de detección de tramos y comparación espacial, FIT, análisis de calidad del GPS, test automatizados y clasificación de descensos.
+En **Settings → Pages → Source** selecciona **GitHub Actions**. El workflow .github/workflows/pages.yml publica automáticamente los cambios fusionados en master.
+
+A partir de v0.2 el workflow copia index.html, editor.html, editor.css, editor.mjs y gps-engine.mjs a _site; si se añaden nuevos assets estáticos habrá que incluirlos en el despliegue.
+
+## Limitaciones / próximas versiones
+- No se admiten archivos FIT todavía.
+- No hay servidor, cuentas, competición mensual, base de datos compartida ni un motor antitrampas certificado.
+- Los circuitos quedan solo en localStorage del navegador; exporta un JSON para guardar copia o compartir.
+- El descenso acumulado no tiene filtrado avanzado. Las curvas próximas o senderos cruzados pueden generar ambigüedad GPS.
+- Los límites de sectores deben ser realmente medibles por GPS; en zonas sin señal es preferible colocar la puerta antes o después.
+- Los cambios posteriores a un circuito guardado requieren crear una versión nueva a partir del GPX de referencia. Edición persistente, roles y sincronización son tareas futuras.
 
 © DH Trails Local
