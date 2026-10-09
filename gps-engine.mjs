@@ -188,3 +188,22 @@ export function detectAttempts(route, circuit, options = {}) {
   }
   return results;
 }
+
+
+// Verify a local-storage write rather than assuming the browser persisted it.
+// The caller may export a JSON backup if storage is unavailable or full.
+export function readCircuitCollection(storage, key) {
+  const raw = storage.getItem(key);
+  if (raw === null) return [];
+  const value = JSON.parse(raw);
+  if (!Array.isArray(value)) throw new Error('La biblioteca local tiene un formato inesperado.');
+  return value;
+}
+export function writeCircuitCollection(storage, key, circuits) {
+  const payload = JSON.stringify(circuits);
+  storage.setItem(key, payload);
+  if (storage.getItem(key) !== payload) {
+    throw new Error('El navegador no confirmó el guardado.');
+  }
+  return true;
+}
