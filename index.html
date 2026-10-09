@@ -61,7 +61,7 @@ $('distance').innerHTML=(meters/1000).toFixed(2)+' <span>km</span>';$('duration'
 $('details').innerHTML='<strong></strong><br><span></span>';$('details').querySelector('strong').textContent=name;$('details').querySelector('span').textContent=pts.length.toLocaleString('es-ES')+' puntos GPS · '+(times.length?'con marcas de tiempo':'sin tiempos');
 renderProfile(pts,dist);active=pts;setStatus('Ruta cargada correctamente. El cálculo de desnivel es aproximado y no está filtrado para competición.')}
 function renderProfile(pts,dist){const data=pts.map((p,i)=>({x:dist[i],y:p.ele})).filter(p=>p.y!=null);const svg=$('profile');svg.replaceChildren();if(data.length<2){$('profile-meta').textContent='Este archivo no contiene suficientes datos de elevación.';return}
-const min=Math.min(...data.map(p=>p.y)),max=Math.max(...data.map(p=>p.y)),range=Math.max(1,max-min),end=Math.max(1,dist.at(-1)),ns='http://www.w3.org/2000/svg';
+const min=data.reduce((v,p)=>Math.min(v,p.y),Infinity),max=data.reduce((v,p)=>Math.max(v,p.y),-Infinity),range=Math.max(1,max-min),end=Math.max(1,dist.at(-1)),ns='http://www.w3.org/2000/svg';
 const point=p=>[Math.round(10+680*p.x/end),Math.round(132-116*(p.y-min)/range)];
 const sampled=data.filter((_,i)=>i%Math.max(1,Math.floor(data.length/700))===0);if(sampled.at(-1)!==data.at(-1))sampled.push(data.at(-1));
 const d=sampled.map((p,i)=>(i?'L':'M')+point(p).join(',')).join(' ');const fill=document.createElementNS(ns,'path');fill.setAttribute('d',d+' L690,132 L10,132 Z');fill.setAttribute('fill','#1266b3');fill.setAttribute('fill-opacity','.24');svg.appendChild(fill);
