@@ -2,7 +2,7 @@
 
 Laboratorio web de descenso MTB: visor GPS y **editor manual de circuitos, sectores y zonas de GPS débil**. Estética oscura, azul eléctrico y bandera de cuadros.
 
-**Novedad v0.3:** persistencia opcional en **PostgreSQL/Supabase**, cuentas de usuario y sincronización de circuitos y resúmenes de intentos. La web sigue funcionando sin nube para uso local. La base de datos se activa creando un proyecto Supabase y ejecutando el esquema SQL.
+**Novedad v0.3:** persistencia opcional en **PostgreSQL/Supabase**, cuentas de usuario, sincronización de circuitos y resúmenes de intentos, y almacenamiento privado voluntario de archivos GPX/TCX completos. La web sigue funcionando sin nube para uso local. La base de datos se activa creando un proyecto Supabase y ejecutando el esquema SQL.
 
 **[Instrucciones para activar la base de datos](docs/SUPABASE_SETUP.md)** · [Esquema SQL](supabase/schema.sql)
 
