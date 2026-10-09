@@ -86,6 +86,19 @@
           <button id="cloudPush" class="btn primary full" type="button">Guardar circuito seleccionado en nube</button>
           <button id="cloudPull" class="btn outline full cloud-spaced" type="button">Recuperar mis circuitos de nube</button>
           <button id="cloudLogout" class="text-btn cloud-spaced" type="button">Cerrar sesión</button>
+          <div class="cloud-activities">
+            <div class="box-heading">Actividades GPS privadas</div>
+            <p class="help">La subida del GPX/TCX completo es voluntaria. Solo tu cuenta podrá recuperarlo.</p>
+            <button id="cloudUploadActivity" class="btn primary full" type="button">Guardar actividad completa en nube</button>
+            <label class="field-title" for="cloudActivitySelect">Mis actividades GPS</label>
+            <select id="cloudActivitySelect"><option value="">Sin actividades cargadas</option></select>
+            <div class="action-row cloud-spaced">
+              <button id="cloudRefreshActivities" class="btn outline" type="button">Actualizar</button>
+              <button id="cloudLoadActivity" class="btn outline" type="button">Cargar GPS</button>
+            </div>
+            <button id="cloudDeleteActivity" class="text-btn cloud-spaced" type="button">Eliminar actividad seleccionada de nube</button>
+          </div>
+
         </div>
       </div>
     </section>
