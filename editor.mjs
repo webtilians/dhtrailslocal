@@ -184,8 +184,18 @@ function viewCircuit(circuit) {
   paintZones(ref,circuit.weakZones||[]);
   map.fitBounds(L.latLngBounds(pts),{padding:[30,30]});
   $('mapTag').textContent='CIRCUITO: '+circuit.name.toUpperCase();
-  showStats(ref,circuit.sectors.length+1);
   refreshDraft();
+  showStats(ref,circuit.sectors.length+1);
+  $('sectorCount').textContent=String(circuit.sectors.length+1);
+  $('zoneCount').textContent=String((circuit.weakZones||[]).length);
+  const gateList=$('gatesList');gateList.replaceChildren();
+  insertRow(gateList,'Salida · km 0.00');
+  const d=distanceSeries(ref);
+  circuit.sectors.forEach((g,i)=>insertRow(gateList,(g.name||'Sector '+(i+1))+' · km '+(d[g.index]/1000).toFixed(2)));
+  insertRow(gateList,'Meta · km '+(d.at(-1)/1000).toFixed(2));
+  const zones=$('zonesList');zones.replaceChildren();
+  (circuit.weakZones||[]).forEach(z=>insertRow(zones,(z.name||'GPS débil')+' · '+Math.round(d[z.from])+'–'+Math.round(d[z.to])+' m'));
+  if(!(circuit.weakZones||[]).length){const p=document.createElement('p');p.className='placeholder';p.textContent='Este circuito no tiene zonas de cobertura débil registradas.';zones.append(p)}
 }
 $('circuitSelect').addEventListener('change',e=>{selectedId=e.target.value;});
 $('loadCircuit').addEventListener('click',()=>{const c=selectedCircuit();if(!c)return status('No hay circuito seleccionado.','error');viewCircuit(c);status('Circuito '+c.name+' cargado. Puedes importar una actividad para detectar intentos.','success')});
