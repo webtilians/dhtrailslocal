@@ -200,11 +200,23 @@ $('saveCircuit').addEventListener('click',async()=>{
   try {
     saveLibrary(next);
   }catch(err){
+    // Local quota/full storage MUST NOT prevent remote saving.
     let backup=false;
-    try {backup=downloadCircuit(circuit)}catch(e){/* no backup possible */}
+    try{backup=downloadCircuit(circuit)}catch(e){}
+    if(cloudApi && cloudUser){
+      try{
+        circuit.cloud_id=await cloudApi.saveCircuit(circuit);
+        circuits=next;selectedId=circuit.id;fillLibrary();viewCircuit(circuit);
+        reportSave('Circuito «'+circuit.name+'» guardado en PostgreSQL, pero no en almacenamiento local ('+err.message+'). '+(backup?'Conserva la copia JSON de Descargas.':'Exporta una copia JSON.'),'success');
+        cloudMessage('Guardado remoto confirmado. Usa Recuperar mis circuitos para volver a cargarlo en otro navegador.','success');
+        return;
+      }catch(cloudErr){
+        cloudMessage('Tampoco se pudo guardar en la nube: '+cloudErr.message,'error');
+      }
+    }
     reportSave('No se ha podido guardar en este navegador. '+err.message+
-      (backup?' Se ha solicitado la descarga de un archivo JSON de respaldo; comprueba la carpeta Descargas.':' Descarga o exporta una copia antes de cerrar esta pestaña.'),'error');
-    return; // Keep markers and route intact so the user can try again.
+      (backup?' Se ha solicitado la descarga JSON; comprueba Descargas.':' Conserva esta pestaña mientras exportas una copia JSON.'),'error');
+    return;
   }
   circuits=next;selectedId=circuit.id;fillLibrary();
   let backup=false;
