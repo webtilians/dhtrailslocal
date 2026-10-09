@@ -50,10 +50,10 @@ export function compareSectorTimes(circuit, first, second) {
 
 export function formatMs(ms) {
   if (ms === null || !Number.isFinite(ms)) return '—';
-  const v = Math.abs(ms);
-  return (ms < 0 ? '−' : '') + String(Math.floor(v / 60000)).padStart(2,'0')
-    + ':' + String(Math.floor(v / 1000) % 60).padStart(2,'0')
-    + '.' + String(Math.round((v % 1000) / 100)).padStart(1,'0');
+  const tenths = Math.round(Math.abs(ms) / 100);
+  return (ms < 0 ? '−' : '') + String(Math.floor(tenths / 600)).padStart(2,'0')
+    + ':' + String(Math.floor(tenths / 10) % 60).padStart(2,'0')
+    + '.' + String(tenths % 10);
 }
 export function formatDelta(ms) {
   if (ms === null || !Number.isFinite(ms)) return 'Sin datos';
