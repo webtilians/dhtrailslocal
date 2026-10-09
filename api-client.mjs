@@ -108,6 +108,11 @@ export function createCloudApi(config) {
       }});
       return saved.id;
     },
+    async listAttempts(circuit) {
+      if(!circuit?.cloud_id)throw new Error('Guarda el circuito en PostgreSQL primero.');
+      const id=encodeURIComponent(circuit.cloud_id);
+      return request('/attempts?circuit_id='+id);
+    },
     async uploadActivity(file,points,distance){
       const ext=String(file.name||'').split('.').at(-1).toLowerCase();
       if(!['gpx','tcx'].includes(ext))throw new Error('Solo GPX/TCX.');
