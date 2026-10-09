@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildCircuit, detectAttempts, distanceSeries, nearestTrackIndex, summarize} from '../gps-engine.mjs';
+import {buildCircuit, detectAttempts, distanceSeries, nearestTrackIndex, summarize, readCircuitCollection, writeCircuitCollection} from '../gps-engine.mjs';
 
 const origin = Date.UTC(2026,9,9,12,0,0);
 function route(t0=origin, step=2000, withoutTime=false) {
@@ -75,4 +75,28 @@ test('reports distance, elevation and time',()=>{
   assert.equal(stats.points,100);
   assert.ok(stats.descent>100);
   assert.ok(stats.seconds>0);
+});
+
+
+test('saved circuits remain readable across simulated reloads',()=>{
+  const data=new Map();
+  const store={getItem:key=>data.get(key)??null,setItem:(key,val)=>data.set(key,val)};
+  const c=create();
+  writeCircuitCollection(store,'circuits',[c]);
+  assert.deepEqual(readCircuitCollection(store,'circuits').map(x=>x.name),['Santa Cruz']);
+});
+
+test('storage writes must be verified before reporting success',()=>{
+  const fake={setItem:()=>{},getItem:()=>null};
+  assert.throws(()=>writeCircuitCollection(fake,'circuits',[create()]),/no confirmó/);
+});
+
+test('storage quota or privacy errors are reported rather than ignored',()=>{
+  const blocked={setItem:()=>{throw new Error('QuotaExceededError')},getItem:()=>null};
+  assert.throws(()=>writeCircuitCollection(blocked,'circuits',[create()]),/QuotaExceededError/);
+});
+
+test('corrupt library is not silently accepted as an empty valid collection',()=>{
+  const invalid={getItem:()=>'{invalid',setItem:()=>{}};
+  assert.throws(()=>readCircuitCollection(invalid,'circuits'),/JSON/);
 });

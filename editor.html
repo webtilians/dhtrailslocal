@@ -43,8 +43,9 @@
         <div id="gatesList" class="items"><p class="placeholder">Marca salida y meta. Los puntos intermedios crearán tus sectores.</p></div>
         <div class="box-heading">Zonas de cobertura débil <span id="zoneCount">0</span></div>
         <div id="zonesList" class="items"><p class="placeholder">Puedes marcar los dos extremos de cada zona problemática. Es una anotación, no una prueba de recorrido.</p></div>
-        <button id="saveCircuit" type="button" class="btn primary full">Guardar circuito en este navegador</button>
-        <p class="help">Esta versión guarda los circuitos en el navegador, no en un servidor. Exporta una copia JSON para no perderlos.</p>
+        <button id="saveCircuit" type="button" class="btn primary full">Guardar circuito + descargar copia JSON</button>
+        <p id="saveFeedback" class="save-feedback" role="status" aria-live="polite">Todavía no se ha guardado este circuito. El botón guardará una copia local y descargará un archivo de respaldo.</p>
+        <p class="help">El guardado local depende de este navegador y dispositivo. Se descargará un JSON de respaldo para recuperar el circuito si cambia de navegador o se borra el almacenamiento.</p>
       </div>
     </section>
     <section class="panel">
