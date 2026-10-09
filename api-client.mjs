@@ -62,6 +62,7 @@ export function createCloudApi(config) {
   }
   return {
     user,
+    async health(){return request('/health')},
     async signIn(email,password){
       const result=await request('/auth/login',{method:'POST',body:{email,password}});
       persistToken(result.access_token);
