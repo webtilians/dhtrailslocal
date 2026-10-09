@@ -239,7 +239,7 @@ def delete_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Dep
 
 # Serve ONLY the public frontend files. Never mount the repository root:
 # that would expose backend/.env, database passwords, uploads and Git metadata.
-_PUBLIC_FILES={"index.html","editor.html","editor.css","editor.mjs","gps-engine.mjs","api-client.mjs"}
+_PUBLIC_FILES={"index.html","editor.html","editor.css","editor.mjs","gps-engine.mjs","api-client.mjs","sector-comparison.mjs"}
 @app.get("/",include_in_schema=False)
 def home():
     return FileResponse(REPO_ROOT/"index.html")
