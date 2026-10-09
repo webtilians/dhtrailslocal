@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<title>Editor de circuitos | DH Trails Local v0.2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="./editor.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav class="nav">
+  <div class="logo"><div class="flag" aria-hidden="true">▦</div><div><strong>DH<span>TRAILS</span> LOCAL</strong><small>DOWNHILL PERFORMANCE LAB</small></div></div>
+  <div class="navlinks"><a href="./index.html">Visor GPS</a><a class="selected" href="./editor.html">Editor de circuitos <em>v0.2</em></a></div>
+</nav>
+<main>
+<header class="heading">
+  <div><div class="kicker">DH / CIRCUIT BUILDER / v0.2</div><h1>Diseña el circuito. <span>Domina cada sector.</span></h1>
+  <p>Selecciona manualmente la salida, la meta, los sectores y las zonas donde sabes que falla el GPS. Después cronometra cualquier actividad que pase por ese recorrido.</p></div>
+</header>
+<div class="layout">
+  <aside class="stack">
+    <section class="panel">
+      <div class="panel-title"><h2>01 <span>Crear circuito</span></h2><span class="caps">EDITOR MANUAL</span></div>
+      <div class="panel-content">
+        <label for="routeFile" class="field-title">Ruta GPS de referencia</label>
+        <label for="routeFile" class="file-input"><span class="upload">↥</span><span><b>Importar GPX / TCX</b><small id="sourceFileName">Selecciona tu actividad completa (máx. 20 MB)</small></span></label>
+        <input id="routeFile" type="file" accept=".gpx,.tcx" hidden>
+        <label class="field-title" for="circuitName">Nombre del circuito</label>
+        <input id="circuitName" maxlength="100" placeholder="Ej. Santa Cruz" autocomplete="off">
+        <p class="help">Selecciona una herramienta y haz clic en la línea azul del mapa. Se ajustará al punto GPS más cercano. Puedes arrastrar los marcadores para corregirlos.</p>
+        <div class="tool-grid">
+          <button class="tool start" data-tool="start" type="button"><span>●</span> Marcar salida</button>
+          <button class="tool finish" data-tool="finish" type="button"><span>■</span> Marcar meta</button>
+          <button class="tool" data-tool="sector" type="button"><span>◆</span> Añadir límite sector</button>
+          <button class="tool" data-tool="zone" type="button"><span>◌</span> Zona GPS débil</button>
+        </div>
+        <div class="tool-footer"><button id="undo" class="text-btn" type="button">↶ Deshacer último cambio</button><span id="toolLabel">Importa una ruta para comenzar.</span></div>
+        <div class="box-heading">Puertas y sectores <span id="sectorCount">0</span></div>
+        <div id="gatesList" class="items"><p class="placeholder">Marca salida y meta. Los puntos intermedios crearán tus sectores.</p></div>
+        <div class="box-heading">Zonas de cobertura débil <span id="zoneCount">0</span></div>
+        <div id="zonesList" class="items"><p class="placeholder">Puedes marcar los dos extremos de cada zona problemática. Es una anotación, no una prueba de recorrido.</p></div>
+        <button id="saveCircuit" type="button" class="btn primary full">Guardar circuito en este navegador</button>
+        <p class="help">Esta versión guarda los circuitos en el navegador, no en un servidor. Exporta una copia JSON para no perderlos.</p>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2>02 <span>Mis circuitos</span></h2></div>
+      <div class="panel-content">
+        <label class="field-title" for="circuitSelect">Circuito guardado</label>
+        <select id="circuitSelect"><option value="">Aún no hay circuitos</option></select>
+        <div class="action-row"><button id="loadCircuit" class="btn outline" type="button">Ver circuito</button><button id="exportCircuit" class="btn outline" type="button">Exportar JSON</button></div>
+        <label for="importCircuit" class="mini-upload">+ Importar circuito JSON</label><input id="importCircuit" type="file" accept=".json,application/json" hidden>
+      </div>
+    </section>
+  </aside>
+  <div class="stack wide">
+    <section class="panel map-panel">
+      <div class="panel-title"><h2>03 <span>Mapa y límites</span></h2><span class="caps" id="mapTag">SIN ACTIVIDAD</span></div>
+      <div id="map" aria-label="Mapa interactivo para edición de circuitos"></div>
+      <div class="map-footer"><span><i class="dot blue"></i> Ruta GPS</span><span><i class="dot green"></i> Salida</span><span><i class="dot red"></i> Meta</span><span><i class="dot gold"></i> Sector</span><span><i class="dot orange"></i> Zona débil</span></div>
+      <div class="stats"><div><small>Distancia circuito</small><strong id="statDistance">—</strong></div><div><small>Sectores</small><strong id="statSectors">—</strong></div><div><small>Desnivel estimado</small><strong id="statDown">—</strong></div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2>04 <span>Detectar y cronometrar</span></h2><span class="caps">GPS MATCHING</span></div>
+      <div class="panel-content">
+        <p class="secondary">Guarda o importa un circuito, selecciónalo arriba y carga cualquier actividad GPX/TCX que lo contenga. Buscaremos intentos y calcularemos tiempos por sector.</p>
+        <label class="file-input" for="attemptFile"><span class="upload">↥</span><span><b>Importar actividad del piloto</b><small id="attemptFileName">GPX / TCX con marcas de tiempo</small></span></label>
+        <input id="attemptFile" type="file" accept=".gpx,.tcx" hidden>
+        <button id="match" type="button" class="btn primary full">Detectar intentos y calcular tiempos</button>
+        <div id="results" class="results"><p class="placeholder">Los intentos detectados, el tiempo total y los parciales aparecerán aquí.</p></div>
+      </div>
+    </section>
+  </div>
+</div>
+<p id="status" class="status" role="status" aria-live="polite">Los archivos se procesan en tu navegador. Ninguna ruta se envía a un servidor.</p>
+<footer>DH TRAILS LOCAL <span>v0.2 · Cronometraje GPS estimado · Las coincidencias requieren validación antes de usarse en competiciones.</span></footer>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="./editor.mjs"></script>
+</body></html>
