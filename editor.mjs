@@ -211,7 +211,7 @@ $('saveCircuit').addEventListener('click',async()=>{
         cloudMessage('Guardado en FastAPI confirmado. Usa Recuperar mis circuitos para volver a cargarlo en otro navegador.','success');
         return;
       }catch(cloudErr){
-        cloudMessage('Tampoco se pudo guardar en la nube: '+cloudErr.message,'error');
+        cloudMessage('Tampoco se pudo guardar en la base de datos: '+cloudErr.message,'error');
       }
     }
     reportSave('No se ha podido guardar en este navegador. '+err.message+
@@ -233,7 +233,7 @@ $('saveCircuit').addEventListener('click',async()=>{
       const id=await cloudApi.saveCircuit(circuit);
       circuit.cloud_id=id;
       try{saveLibrary(circuits)}catch(e){/* already safely in remote DB */}
-      cloudMessage('Circuito «'+circuit.name+'» guardado también en el servidor FastAPI / PostgreSQL.','success');
+      cloudMessage('Circuito «'+circuit.name+'» guardado también en la base de datos.','success');
     } catch(err) {
       cloudMessage('Guardado local correcto, pero falló la sincronización: '+(err.message||err),'error');
     }
@@ -363,7 +363,11 @@ function cloudMessage(message,type=''){
 function reflectCloudUser(){
   $('cloudAuthPanel').hidden=!cloudApi||!!cloudUser;
   $('cloudSyncPanel').hidden=!cloudUser;
-  $('cloudAccount').textContent=cloudUser?.email||'Piloto';
+  $('cloudAccount').textContent=cloudUser?.local?'Mis datos en este PC':cloudUser?.email||'Piloto';
+  $('storageMode').textContent=cloudUser?.local?'EN ESTE PC':'ALMACENAMIENTO';
+  if(cloudUser?.local)$('storageHelp').textContent='Guarda tus circuitos, actividades y tiempos en este ordenador. No necesitas registrarte.';
+  $('cloudLogout').hidden=!!cloudUser?.local;
+  $('cloudConfigDetails').hidden=!!cloudUser?.local;
 }
 async function refreshCloudActivities(){
   if(!cloudApi||!cloudUser)return;
@@ -371,7 +375,7 @@ async function refreshCloudActivities(){
   const select=$('cloudActivitySelect');
   select.replaceChildren();
   if(!activities.length){
-    const option=document.createElement('option');option.value='';option.textContent='Ninguna actividad en nube';select.append(option);
+    const option=document.createElement('option');option.value='';option.textContent='Todavía no hay actividades guardadas';select.append(option);
   }
   for(const a of activities){
     const option=document.createElement('option');
@@ -382,14 +386,14 @@ async function refreshCloudActivities(){
   return activities.length;
 }
 $('cloudRefreshActivities').addEventListener('click',async()=>{
-  try {const count=await refreshCloudActivities();cloudMessage(count+' actividad(es) privadas en tu cuenta.','success')}
+  try {const count=await refreshCloudActivities();cloudMessage(count+' actividad(es) guardadas.','success')}
   catch(err){cloudMessage('No se pudo actualizar la biblioteca GPS: '+err.message,'error')}
 });
 $('cloudUploadActivity').addEventListener('click',async()=>{
-  if(!cloudApi||!cloudUser)return cloudMessage('Inicia sesión primero.','error');
+  if(!cloudApi||!cloudUser)return cloudMessage('Espera a que se conecte la base de datos.','error');
   if(!attemptFileBlob||!attemptRoute)return cloudMessage('Carga antes un GPX/TCX completo en la sección 04.','error');
   const btn=$('cloudUploadActivity');btn.disabled=true;
-  cloudMessage('Subiendo GPS privado a Supabase…');
+  cloudMessage('Guardando GPS en la base de datos…');
   try {
     await cloudApi.uploadActivity(attemptFileBlob,attemptRoute,summarize(attemptRoute).meters);
     const count=await refreshCloudActivities();
@@ -398,7 +402,7 @@ $('cloudUploadActivity').addEventListener('click',async()=>{
   finally{btn.disabled=false;}
 });
 $('cloudLoadActivity').addEventListener('click',async()=>{
-  if(!cloudApi||!cloudUser)return cloudMessage('Inicia sesión primero.','error');
+  if(!cloudApi||!cloudUser)return cloudMessage('Espera a que se conecte la base de datos.','error');
   const id=$('cloudActivitySelect').value;
   if(!id)return cloudMessage('Selecciona una actividad en tu biblioteca.','error');
   const btn=$('cloudLoadActivity');btn.disabled=true;
@@ -421,17 +425,28 @@ $('cloudDeleteActivity').addEventListener('click',async()=>{
   try {
     await cloudApi.deleteActivity(id);
     await refreshCloudActivities();
-    cloudMessage('Actividad eliminada de la nube. El GPX que tengas en tu dispositivo no se ha tocado.','success');
+    cloudMessage('Actividad eliminada de la base de datos. El GPX que tengas en tu dispositivo no se ha tocado.','success');
   }catch(err){cloudMessage('No se pudo eliminar la actividad: '+err.message,'error')}
 });
 async function connectCloud(config){
   cloudMessage('Conectando con FastAPI y PostgreSQL…');
   cloudApi=createCloudApi(config);
-  await cloudApi.health();
-  cloudUser=await cloudApi.user();
+  const health=await cloudApi.health();
+  cloudUser=health.local_mode?await cloudApi.localSession():await cloudApi.user();
   reflectCloudUser();
+  if(cloudUser?.local){
+    const stored=await cloudApi.listCircuits();
+    for(const item of stored){
+      const index=circuits.findIndex(c=>c.cloud_id===item.id||c.id===item.id);
+      if(index<0)circuits.push(item);
+    }
+    try{saveLibrary(circuits)}catch{}
+    if(!selectedCircuit()&&circuits.length)selectedId=circuits[0].id;
+    fillLibrary();
+    if(selectedCircuit())viewCircuit(selectedCircuit());
+  }
   if(cloudUser)refreshCloudActivities().catch(()=>{});
-  cloudMessage(cloudUser?'Sesión iniciada como '+cloudUser.email+'. Puedes guardar o recuperar circuitos.':'FastAPI conectado. Crea una cuenta o inicia sesión.','success');
+  cloudMessage(cloudUser?.local?'Base de datos local conectada. Todo listo para guardar tus datos.':cloudUser?'Sesión iniciada como '+cloudUser.email+'. Puedes guardar o recuperar circuitos.':'FastAPI conectado. Crea una cuenta o inicia sesión.','success');
 }
 $('cloudConnect').addEventListener('click',async()=>{
   try{
@@ -471,7 +486,7 @@ $('cloudLogout').addEventListener('click',async()=>{
 $('cloudPush').addEventListener('click',async()=>{
   const c=selectedCircuit();
   if(!c)return cloudMessage('Selecciona un circuito guardado en Mis circuitos.','error');
-  if(!cloudApi||!cloudUser)return cloudMessage('Inicia sesión primero.','error');
+  if(!cloudApi||!cloudUser)return cloudMessage('Espera a que se conecte la base de datos.','error');
   const btn=$('cloudPush');btn.disabled=true;
   try {
     const id=await cloudApi.saveCircuit(c);
@@ -482,7 +497,7 @@ $('cloudPush').addEventListener('click',async()=>{
   finally{btn.disabled=false;}
 });
 $('cloudPull').addEventListener('click',async()=>{
-  if(!cloudApi||!cloudUser)return cloudMessage('Inicia sesión primero.','error');
+  if(!cloudApi||!cloudUser)return cloudMessage('Espera a que se conecte la base de datos.','error');
   const btn=$('cloudPull');btn.disabled=true;
   try {
     const remote=await cloudApi.listCircuits();
@@ -497,7 +512,7 @@ $('cloudPull').addEventListener('click',async()=>{
     if(remote.length)selectedId=remote[0].id;
     fillLibrary();
     if(selectedCircuit())viewCircuit(selectedCircuit());
-    cloudMessage(remote.length+' circuito(s) cargado(s) desde PostgreSQL. Privados para esta cuenta.','success');
+    cloudMessage(remote.length+' circuito(s) cargado(s) desde PostgreSQL. ','success');
   }catch(err){cloudMessage('No se pudieron recuperar circuitos: '+err.message,'error')}
   finally{btn.disabled=false;}
 });
@@ -506,9 +521,9 @@ if(initialCloudConfig) {
   $('cloudUrl').value=initialCloudConfig.url;
   connectCloud(initialCloudConfig).catch(err=>cloudMessage('Error de conexión: '+err.message,'error'));
 }else{
-  $('cloudConfigDetails').open=true;
+  $('cloudConfigDetails').open=false;
   reflectCloudUser();
-  cloudMessage('Servidor sin configurar. Arranca python run.py en backend y conecta http://127.0.0.1:8000.');
+  cloudMessage('Versión web: guardado en este navegador. La base de datos está disponible al abrir la aplicación en tu PC.');
 }
 fillLibrary();
 if(selectedCircuit()){viewCircuit(selectedCircuit());status('Biblioteca local de '+circuits.length+' circuito(s) cargada. Los JSON exportados son tu copia de seguridad.');}

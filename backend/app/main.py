@@ -4,18 +4,19 @@ Run from backend/: python run.py
 API docs: http://127.0.0.1:8000/docs
 """
 import uuid
+import secrets
 from datetime import datetime
 from pathlib import Path
 
 from defusedxml.ElementTree import fromstring as safe_xml
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from .config import CORS_ORIGINS, GPS_STORAGE_DIR, MAX_UPLOAD_BYTES, REPO_ROOT, require_secret
+from .config import CORS_ORIGINS, GPS_STORAGE_DIR, MAX_UPLOAD_BYTES, REPO_ROOT, require_secret, LOCAL_SINGLE_USER
 from .database import get_db
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone
 from .schemas import AttemptIn, CircuitIn, Credentials
@@ -31,10 +32,39 @@ def validate_settings():
 @app.get("/api/health")
 def health(db:Session=Depends(get_db)):
     db.execute(text("SELECT 1"))
-    return {"ok":True,"service":"dhtrailslocal-fastapi","database":"postgresql"}
+    return {"ok":True,"service":"dhtrailslocal-fastapi","database":"postgresql","local_mode":LOCAL_SINGLE_USER}
 
 def user_payload(p:Pilot):
     return {"id":str(p.id),"email":p.email}
+
+@app.post("/api/auth/local")
+def local_session(request:Request, db:Session=Depends(get_db)):
+    # A remote page must never obtain a token for the desktop database.
+    if not LOCAL_SINGLE_USER:
+        raise HTTPException(404, "Modo local no habilitado")
+    host=request.url.hostname
+    origin=request.headers.get("origin")
+    if (not request.client or request.client.host not in {"127.0.0.1", "::1"}
+        or host not in {"127.0.0.1", "localhost", "::1"}
+        or request.headers.get("x-dh-local") != "1"
+        or (origin and origin != str(request.base_url).rstrip("/"))
+        or request.headers.get("sec-fetch-site") not in {None, "same-origin", "none"}):
+        raise HTTPException(403, "Acceso exclusivo desde esta aplicación local")
+    local_id=uuid.UUID("d48951f3-59a3-49b1-9635-ea0da0fb5d87")
+    pilot=db.get(Pilot,local_id)
+    if not pilot:
+        pilot=Pilot(id=local_id,email="desktop@dhtrails.invalid",
+                    password_hash=password_hash(secrets.token_urlsafe(48)))
+        db.add(pilot)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            pilot=db.get(Pilot,local_id)
+            if not pilot:
+                raise
+    return {"access_token":issue_token(pilot.id),
+            "user":{"id":str(pilot.id),"local":True,"name":"Mis datos en este PC"}}
 
 @app.post("/api/auth/register",status_code=201)
 def register(credentials:Credentials,db:Session=Depends(get_db)):

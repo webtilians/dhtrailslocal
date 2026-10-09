@@ -1,0 +1,18 @@
+# Local configuration, credentials and private databases / GPS files
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.log
+backend/data/
+*.gpx
+*.tcx
+*.fit
+*.dump
+*.backup
+# Machine-specific launchers
+iniciar_local.py
+Iniciar-local.cmd

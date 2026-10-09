@@ -58,9 +58,9 @@
       </div>
     </section>
     <section class="panel">
-      <div class="panel-title"><h2>05 <span>Servidor FastAPI</span></h2><span class="caps">POSTGRESQL</span></div>
+      <div class="panel-title"><h2>05 <span>Mis datos</span></h2><span class="caps" id="storageMode">ALMACENAMIENTO</span></div>
       <div class="panel-content">
-        <p class="help">Guarda circuitos, sectores, archivos GPX y tiempos en tu servidor FastAPI + PostgreSQL. En local abre http://127.0.0.1:8000/editor.html. Puedes seguir trabajando sin conectar la API.</p>
+        <p class="help" id="storageHelp">En la versión web los circuitos se guardan en este navegador. Para guardar actividades y usar la base de datos de tu PC, abre la aplicación local.</p>
         <div id="cloudStatus" class="save-feedback" role="status" aria-live="polite">Servidor pendiente de conectar.</div>
         <details id="cloudConfigDetails">
           <summary class="cloud-summary">Configurar servidor FastAPI</summary>
@@ -80,21 +80,21 @@
           </div>
         </div>
         <div id="cloudSyncPanel" hidden>
-          <p class="help"><strong id="cloudAccount"></strong> · Cuenta conectada.</p>
-          <button id="cloudPush" class="btn primary full" type="button">Guardar circuito seleccionado en servidor</button>
-          <button id="cloudPull" class="btn outline full cloud-spaced" type="button">Recuperar mis circuitos del servidor</button>
+          <p class="help"><strong id="cloudAccount"></strong></p>
+          <button id="cloudPush" class="btn primary full" type="button">Guardar circuito en la base de datos</button>
+          <button id="cloudPull" class="btn outline full cloud-spaced" type="button">Recuperar mis circuitos</button>
           <button id="cloudLogout" class="text-btn cloud-spaced" type="button">Cerrar sesión</button>
           <div class="cloud-activities">
             <div class="box-heading">Actividades GPS privadas</div>
-            <p class="help">La subida del GPX/TCX completo es voluntaria. Solo tu cuenta podrá recuperarlo.</p>
-            <button id="cloudUploadActivity" class="btn primary full" type="button">Guardar actividad GPS en servidor</button>
+            <p class="help">Puedes conservar el archivo GPX/TCX completo en este ordenador y volver a abrirlo cuando quieras.</p>
+            <button id="cloudUploadActivity" class="btn primary full" type="button">Guardar actividad GPS en este PC</button>
             <label class="field-title" for="cloudActivitySelect">Mis actividades GPS</label>
             <select id="cloudActivitySelect"><option value="">Sin actividades cargadas</option></select>
             <div class="action-row cloud-spaced">
               <button id="cloudRefreshActivities" class="btn outline" type="button">Actualizar</button>
               <button id="cloudLoadActivity" class="btn outline" type="button">Cargar GPS</button>
             </div>
-            <button id="cloudDeleteActivity" class="text-btn cloud-spaced" type="button">Eliminar actividad seleccionada del servidor</button>
+            <button id="cloudDeleteActivity" class="text-btn cloud-spaced" type="button">Eliminar actividad seleccionada</button>
           </div>
 
         </div>
@@ -120,7 +120,7 @@
     </section>
   </div>
 </div>
-<p id="status" class="status" role="status" aria-live="polite">Los GPX/TCX se analizan en el navegador. Los circuitos, tiempos y archivos se guardan en FastAPI cuando inicias sesión y eliges guardarlos.</p>
+<p id="status" class="status" role="status" aria-live="polite">Los GPX/TCX se analizan en el navegador. Los circuitos, tiempos y archivos se guardan en este PC cuando eliges guardarlos.</p>
 <footer>DH TRAILS LOCAL <span>v0.4 · FastAPI + PostgreSQL local · Cronometraje GPS estimado · Las coincidencias requieren validación antes de usarse en competiciones.</span></footer>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

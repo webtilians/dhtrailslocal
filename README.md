@@ -62,3 +62,19 @@ La integración experimental Supabase de la antigua v0.3 ha quedado reemplazada 
 - No se admiten archivos FIT todavía.
 - Las pruebas de API se ejecutan con PostgreSQL real en GitHub Actions, pero antes de producción abierta faltan verificación de correo, recuperación de cuenta, rate limiting, control de cuotas, auditoría y mecanismos antitrampas.
 - PostgreSQL local y el servidor Python son tuyos: ni GitHub Pages ni ChatGPT los ejecutan permanentemente.
+
+## Sincronizar PC, GitHub y Pages
+
+En la instalación de Windows, haz doble clic en **Sincronizar.cmd** cuando quieras publicar tus cambios. El programa guarda los cambios de archivos ya versionados en un commit, incorpora `origin/master` y sube el resultado. No se ejecuta periódicamente ni publica cada pulsación del editor.
+
+- Los nuevos archivos requieren revisión y añadirlos explícitamente a Git antes de sincronizar.
+- Si hay conflictos, cancela la mezcla y conserva los commits locales y remotos para resolverlos sin sobrescribirlos.
+- `.env`, el entorno Python, PostgreSQL, los archivos GPS y los lanzadores específicos del PC se excluyen de Git.
+- GitHub Actions publica automáticamente el frontend de `master` en https://webtilians.github.io/dhtrailslocal/ . Comprueba que el despliegue finaliza en verde en Actions.
+- Recarga el navegador tras actualizar el frontend. Los cambios del backend necesitan reiniciar el servidor local y, si cambian, instalar las dependencias; `run.py` aplica las migraciones pendientes al arrancar.
+
+Pages aloja HTML, CSS y JavaScript: no ejecuta Python ni PostgreSQL, ni comparte automáticamente los datos del PC con Internet.
+
+### Uso local sin registro
+
+En `backend/.env`, `LOCAL_SINGLE_USER=true` activa un perfil local persistente y la conexión automática sin correo ni contraseña. El acceso automático solo admite peticiones locales de la propia aplicación. El valor por defecto es `false` para mantener la autenticación en despliegues compartidos. No se sincroniza el archivo `.env`.

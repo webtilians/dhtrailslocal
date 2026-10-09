@@ -14,12 +14,12 @@ export function validateApiUrl(raw) {
   return {url:url.origin};
 }
 export function getCloudConfig() {
+  if(typeof window!=='undefined' && ['localhost','127.0.0.1'].includes(window.location.hostname) && window.location.port==='8000')
+    return {url:window.location.origin};
   try {
     const saved=localStorage.getItem(ENDPOINT_CONFIG);
     if(saved)return validateApiUrl(saved);
   }catch{}
-  if(typeof window!=='undefined' && ['localhost','127.0.0.1'].includes(window.location.hostname) && window.location.port==='8000')
-    return {url:window.location.origin};
   return null;
 }
 export function setLocalCloudConfig(raw) {
@@ -33,8 +33,9 @@ export function createCloudApi(config) {
   let token;
   try{token=localStorage.getItem(tokenKey)||null}catch{token=null}
 
-  async function request(path,{method='GET',body,form=false}={}) {
+  async function request(path,{method='GET',body,form=false,local=false}={}) {
     const headers={};
+    if(local)headers['X-DH-Local']='1';
     if(token)headers.Authorization='Bearer '+token;
     if(body!==undefined&&!form)headers['Content-Type']='application/json';
     let response;
@@ -62,6 +63,11 @@ export function createCloudApi(config) {
   }
   return {
     user,
+    async localSession(){
+      const result=await request('/auth/local',{method:'POST',local:true});
+      persistToken(result.access_token);
+      return result.user;
+    },
     async health(){return request('/health')},
     async signIn(email,password){
       const result=await request('/auth/login',{method:'POST',body:{email,password}});

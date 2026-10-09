@@ -17,3 +17,6 @@ def require_secret() -> str:
     if len(SECRET_KEY) < 32 or SECRET_KEY.startswith("CHANGE_ME"):
         raise RuntimeError("Configura un SECRET_KEY aleatorio de 32+ caracteres en backend/.env")
     return SECRET_KEY
+
+# Explicit opt-in for this desktop installation only.
+LOCAL_SINGLE_USER = os.getenv("LOCAL_SINGLE_USER", "false").lower() == "true"
