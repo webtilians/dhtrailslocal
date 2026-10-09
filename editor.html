@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#071423">
-<title>Editor de circuitos | DH Trails Local v0.3</title>
+<title>Editor de circuitos | DH Trails Local v0.4</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -14,11 +14,11 @@
 <div class="checkered"></div>
 <nav class="nav">
   <div class="logo"><div class="flag" aria-hidden="true">▦</div><div><strong>DH<span>TRAILS</span> LOCAL</strong><small>DOWNHILL PERFORMANCE LAB</small></div></div>
-  <div class="navlinks"><a href="./index.html">Visor GPS</a><a class="selected" href="./editor.html">Editor de circuitos <em>v0.2</em></a></div>
+  <div class="navlinks"><a href="./index.html">Visor GPS</a><a class="selected" href="./editor.html">Editor de circuitos <em>v0.4</em></a></div>
 </nav>
 <main>
 <header class="heading">
-  <div><div class="kicker">DH / CIRCUIT BUILDER / v0.2</div><h1>Diseña el circuito. <span>Domina cada sector.</span></h1>
+  <div><div class="kicker">DH / CIRCUIT BUILDER / v0.4</div><h1>Diseña el circuito. <span>Domina cada sector.</span></h1>
   <p>Selecciona manualmente la salida, la meta, los sectores y las zonas donde sabes que falla el GPS. Después cronometra cualquier actividad que pase por ese recorrido.</p></div>
 </header>
 <div class="layout">
@@ -58,18 +58,16 @@
       </div>
     </section>
     <section class="panel">
-      <div class="panel-title"><h2>05 <span>Base de datos</span></h2><span class="caps">SUPABASE</span></div>
+      <div class="panel-title"><h2>05 <span>Servidor FastAPI</span></h2><span class="caps">POSTGRESQL</span></div>
       <div class="panel-content">
-        <p class="help">Sincroniza circuitos y tiempos de entrenamiento en PostgreSQL con tu cuenta. Los datos son privados por defecto. El modo local seguirá funcionando.</p>
-        <div id="cloudStatus" class="save-feedback" role="status" aria-live="polite">Nube pendiente de configurar.</div>
+        <p class="help">Guarda circuitos, sectores, archivos GPX y tiempos en tu servidor FastAPI + PostgreSQL. En local abre http://127.0.0.1:8000/editor.html. Puedes seguir trabajando sin conectar la API.</p>
+        <div id="cloudStatus" class="save-feedback" role="status" aria-live="polite">Servidor pendiente de conectar.</div>
         <details id="cloudConfigDetails">
-          <summary class="cloud-summary">Configurar proyecto Supabase</summary>
-          <label for="cloudUrl" class="field-title">URL pública del proyecto</label>
-          <input id="cloudUrl" type="url" placeholder="https://xxxxxxxx.supabase.co" autocomplete="off">
-          <label for="cloudKey" class="field-title">Clave publishable / anon</label>
-          <input id="cloudKey" type="text" placeholder="sb_publishable_... o anon JWT" autocomplete="off">
-          <p class="help">Solo clave pública con RLS. Nunca introduzcas service_role, sb_secret ni contraseña de la base de datos.</p>
-          <button id="cloudConnect" class="btn outline full" type="button">Conectar proyecto</button>
+          <summary class="cloud-summary">Configurar servidor FastAPI</summary>
+          <label for="cloudUrl" class="field-title">URL de FastAPI (local o HTTPS)</label>
+          <input id="cloudUrl" type="url" placeholder="http://127.0.0.1:8000" autocomplete="off">
+          <p class="help">No pegues aquí credenciales de PostgreSQL. FastAPI se conecta a la base mediante backend/.env y requiere una cuenta propia para guardar datos.</p>
+          <button id="cloudConnect" class="btn outline full" type="button">Conectar FastAPI</button>
         </details>
         <div id="cloudAuthPanel" hidden>
           <label for="cloudEmail" class="field-title">Correo electrónico</label>
@@ -83,20 +81,20 @@
         </div>
         <div id="cloudSyncPanel" hidden>
           <p class="help"><strong id="cloudAccount"></strong> · Cuenta conectada.</p>
-          <button id="cloudPush" class="btn primary full" type="button">Guardar circuito seleccionado en nube</button>
-          <button id="cloudPull" class="btn outline full cloud-spaced" type="button">Recuperar mis circuitos de nube</button>
+          <button id="cloudPush" class="btn primary full" type="button">Guardar circuito seleccionado en servidor</button>
+          <button id="cloudPull" class="btn outline full cloud-spaced" type="button">Recuperar mis circuitos del servidor</button>
           <button id="cloudLogout" class="text-btn cloud-spaced" type="button">Cerrar sesión</button>
           <div class="cloud-activities">
             <div class="box-heading">Actividades GPS privadas</div>
             <p class="help">La subida del GPX/TCX completo es voluntaria. Solo tu cuenta podrá recuperarlo.</p>
-            <button id="cloudUploadActivity" class="btn primary full" type="button">Guardar actividad completa en nube</button>
+            <button id="cloudUploadActivity" class="btn primary full" type="button">Guardar actividad GPS en servidor</button>
             <label class="field-title" for="cloudActivitySelect">Mis actividades GPS</label>
             <select id="cloudActivitySelect"><option value="">Sin actividades cargadas</option></select>
             <div class="action-row cloud-spaced">
               <button id="cloudRefreshActivities" class="btn outline" type="button">Actualizar</button>
               <button id="cloudLoadActivity" class="btn outline" type="button">Cargar GPS</button>
             </div>
-            <button id="cloudDeleteActivity" class="text-btn cloud-spaced" type="button">Eliminar actividad seleccionada de nube</button>
+            <button id="cloudDeleteActivity" class="text-btn cloud-spaced" type="button">Eliminar actividad seleccionada del servidor</button>
           </div>
 
         </div>
@@ -122,8 +120,8 @@
     </section>
   </div>
 </div>
-<p id="status" class="status" role="status" aria-live="polite">Los archivos GPX/TCX se procesan en tu navegador. Los circuitos y resúmenes se envían a Supabase únicamente si configuras y utilizas la sincronización.</p>
-<footer>DH TRAILS LOCAL <span>v0.3 · Cronometraje GPS estimado · Las coincidencias requieren validación antes de usarse en competiciones.</span></footer>
+<p id="status" class="status" role="status" aria-live="polite">Los GPX/TCX se analizan en el navegador. Los circuitos, tiempos y archivos se guardan en FastAPI cuando inicias sesión y eliges guardarlos.</p>
+<footer>DH TRAILS LOCAL <span>v0.4 · FastAPI + PostgreSQL local · Cronometraje GPS estimado · Las coincidencias requieren validación antes de usarse en competiciones.</span></footer>
 </main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module" src="./editor.mjs"></script>

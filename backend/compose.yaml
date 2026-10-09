@@ -1,0 +1,19 @@
+# Local PostgreSQL only. The FastAPI server runs as plain Python on your machine.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dhtrails
+      POSTGRES_USER: dhtrails
+      POSTGRES_PASSWORD: dhtrails_local_only
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - dhtrails_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dhtrails -d dhtrails"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  dhtrails_pgdata:

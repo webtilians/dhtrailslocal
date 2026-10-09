@@ -33,10 +33,9 @@ jobs:
           test -s gps-engine.mjs
           test -s editor.mjs
           test -s editor.css
-          test -s cloud-client.mjs
-          test -s cloud-config.mjs
+          test -s api-client.mjs
           mkdir -p _site
-          cp index.html editor.html editor.css editor.mjs gps-engine.mjs cloud-client.mjs cloud-config.mjs _site/
+          cp index.html editor.html editor.css editor.mjs gps-engine.mjs api-client.mjs _site/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

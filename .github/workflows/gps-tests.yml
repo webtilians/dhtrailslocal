@@ -23,7 +23,6 @@ jobs:
         run: |
           node --check gps-engine.mjs
           node --check editor.mjs
-          node --check cloud-client.mjs
-          node --check cloud-config.mjs
+          node --check api-client.mjs
       - name: Test geometry, storage and cloud mapping
         run: node --test tests/*.test.mjs
