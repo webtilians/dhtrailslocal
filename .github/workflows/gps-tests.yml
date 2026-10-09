@@ -19,5 +19,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Test geometry and timing
+      - name: Check browser modules syntax
+        run: |
+          node --check gps-engine.mjs
+          node --check editor.mjs
+          node --check cloud-client.mjs
+          node --check cloud-config.mjs
+      - name: Test geometry, storage and cloud mapping
         run: node --test tests/*.test.mjs
