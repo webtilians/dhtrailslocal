@@ -105,6 +105,11 @@ def get_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(
 @app.put("/api/circuits/{circuit_id}")
 def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     c=circuit_for_user(db,circuit_id,p.id)
+    # Delete old sector gates first: PostgreSQL enforces (circuit_id,sort_order)
+    # uniqueness immediately. Keep deletions + replacements in ONE transaction.
+    c.sectors.clear()
+    c.weak_zones.clear()
+    db.flush()
     assign_circuit(c,payload)
     db.commit()
     return circuit_payload(circuit_for_user(db,circuit_id,p.id))
