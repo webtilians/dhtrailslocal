@@ -22,7 +22,13 @@ python -m http.server 8000
 Luego visita http://localhost:8000
 
 ## Publicar en GitHub Pages
-En **Settings → Pages**, elige **Deploy from a branch**, selecciona la rama que contenga `index.html` y la carpeta **/(root)**. No se crea el despliegue automáticamente con esta PR.
+La web se publica en **https://webtilians.github.io/dhtrailslocal/**.
+
+En **Settings → Pages → Build and deployment → Source**, selecciona **GitHub Actions**. El flujo `.github/workflows/pages.yml` despliega automáticamente cada cambio en `master` y también permite un despliegue manual desde **Actions → Deploy GitHub Pages → Run workflow**.
+
+El flujo comprueba que `index.html` existe, lo copia a `_site` y publica únicamente esa carpeta mediante las acciones oficiales de Pages. CSS y JavaScript están incluidos en el HTML; si se añaden archivos locales adicionales, deberán copiarse también a `_site`.
+
+La raíz `https://webtilians.github.io/` es un sitio de usuario independiente: requiere el repositorio `webtilians/webtilians.github.io`. El repositorio `dhtrailslocal` se sirve bajo `/dhtrailslocal/`.
 
 ## Limitaciones v0.1
 - **FIT no está soportado aún**. Exporta como GPX o TCX desde tu plataforma o dispositivo.
