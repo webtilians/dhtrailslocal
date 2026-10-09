@@ -11,7 +11,6 @@ from defusedxml.ElementTree import fromstring as safe_xml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -203,7 +202,15 @@ def delete_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Dep
     path.unlink(missing_ok=True)
     return Response(status_code=204)
 
-# In local development, serve the existing frontend at the same origin as the API.
-# Mount LAST: it must never intercept /api endpoints.
-if REPO_ROOT.joinpath("editor.html").exists():
-    app.mount("/",StaticFiles(directory=str(REPO_ROOT),html=True),name="frontend")
+# Serve ONLY the public frontend files. Never mount the repository root:
+# that would expose backend/.env, database passwords, uploads and Git metadata.
+_PUBLIC_FILES={"index.html","editor.html","editor.css","editor.mjs","gps-engine.mjs","api-client.mjs"}
+@app.get("/",include_in_schema=False)
+def home():
+    return FileResponse(REPO_ROOT/"index.html")
+
+@app.get("/{asset_name}",include_in_schema=False)
+def frontend_asset(asset_name:str):
+    if asset_name not in _PUBLIC_FILES:
+        raise HTTPException(404,"Recurso no encontrado")
+    return FileResponse(REPO_ROOT/asset_name)
