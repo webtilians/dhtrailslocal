@@ -12,3 +12,11 @@ input:not([type=file]),select{width:100%;border:1px solid #385a76;padding:11px 1
 .save-feedback{margin:10px 0 12px;padding:12px 13px;border:1px solid #3f6280;border-radius:6px;background:#0c2b42;color:#b7d6ec;font-size:12px;line-height:1.55}
 .save-feedback.success{border-color:#277655;background:#102f2c;color:#a2f0c8}
 .save-feedback.error{border-color:#ab5562;background:#3d202d;color:#ffd0d4}
+
+.cloud-summary{font-size:12px;font-weight:800;color:#79ccff;cursor:pointer;padding:11px 0;border-top:1px solid var(--line)}
+.cloud-summary:focus-visible{outline:2px solid #79ccff;outline-offset:3px}
+.cloud-spaced{display:block;margin-top:10px}
+#cloudSyncPanel{padding-top:6px}
+#cloudAuthPanel{padding-top:4px}
+#cloudStatus{margin:0 0 12px}
+[hidden]{display:none!important}
