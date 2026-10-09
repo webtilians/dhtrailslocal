@@ -24,3 +24,22 @@ input:not([type=file]),select{width:100%;border:1px solid #385a76;padding:11px 1
 .cloud-activities{border-top:1px solid var(--line);margin-top:17px;padding-top:6px}
 .cloud-activities .action-row .btn{font-size:10px}
 #cloudActivitySelect{font-size:12px}
+
+/* v0.5 — sector deltas and longitudinal time comparison */
+.comparison-panel{border-top:1px solid var(--line);margin-top:22px;padding-top:10px}
+.comparison-pickers{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}
+.comparison-pickers select{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.comparison-head{background:#102f49;border:1px solid #295778;padding:12px 15px;border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.comparison-delta{font:800 26px 'Barlow Condensed',sans-serif;white-space:nowrap}
+.comparison-delta.faster,.comparison-table .sector-faster .sector-delta{color:#55f0aa}
+.comparison-delta.slower,.comparison-table .sector-slower .sector-delta{color:#ff8997}
+.comparison-delta.unknown,.comparison-table .sector-unknown .sector-delta{color:#c4d0de}
+.comparison-info{font-size:11px;color:#a6bed2;line-height:1.6}
+.comparison-warning{background:#402d22;color:#ffd4ac;padding:10px 12px;border:1px solid #79573a;border-radius:4px;font-size:11px;line-height:1.5}
+.comparison-table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:11px}
+.comparison-table th{text-align:left;color:#9bbbd4;font-weight:700;background:#102b41;padding:10px 7px}
+.comparison-table td{padding:11px 7px;border-bottom:1px solid #28465b}
+.comparison-table tbody tr{cursor:pointer}
+.comparison-table tbody tr:hover,.comparison-table tbody tr:focus-visible{outline:1px solid #52a7d8;background:#1a3d59}
+.comparison-table td:first-child{max-width:145px;overflow-wrap:anywhere}
+@media(max-width:720px){.comparison-pickers{grid-template-columns:1fr}.comparison-table{font-size:10px}.comparison-table th,.comparison-table td{padding:9px 4px}}

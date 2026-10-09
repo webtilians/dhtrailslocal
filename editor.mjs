@@ -1,5 +1,6 @@
 import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
 import {getCloudConfig, setLocalCloudConfig, createCloudApi} from './api-client.mjs';
+import {compareSectorTimes, formatMs, formatDelta} from './sector-comparison.mjs';
 
 const $ = id => document.getElementById(id);
 const map = L.map('map', {zoomControl:true}).setView([36.76,-4.46],12);
@@ -264,7 +265,12 @@ function viewCircuit(circuit) {
   (circuit.weakZones||[]).forEach(z=>insertRow(zones,(z.name||'GPS débil')+' · '+Math.round(d[z.from])+'–'+Math.round(d[z.to])+' m'));
   if(!(circuit.weakZones||[]).length){const p=document.createElement('p');p.className='placeholder';p.textContent='Este circuito no tiene zonas de cobertura débil registradas.';zones.append(p)}
 }
-$('circuitSelect').addEventListener('change',e=>{selectedId=e.target.value;});
+$('circuitSelect').addEventListener('change',e=>{
+  selectedId=e.target.value;
+  attemptHistory=[];
+  fillHistorySelectors();
+  showComparisonMessage('Circuito cambiado. Carga sus intentos guardados para comparar.');
+});
 $('loadCircuit').addEventListener('click',()=>{const c=selectedCircuit();if(!c)return status('No hay circuito seleccionado.','error');viewCircuit(c);status('Circuito '+c.name+' cargado. Puedes importar una actividad para detectar intentos.','success')});
 $('exportCircuit').addEventListener('click',()=>{
   const c=selectedCircuit();
@@ -343,6 +349,7 @@ $('match').addEventListener('click',()=>{
             const id=await cloudApi.saveAttempt(c,a,attemptSourceName,attemptRoute);
             save.textContent='Intento guardado · '+id.slice(0,8);
             status('Intento guardado para entrenamiento personal. No es un resultado oficial.','success');
+            refreshAttemptHistory().catch(()=>{});
           }catch(err){save.disabled=false;save.textContent='Guardar intento privado en nube';status('No se pudo guardar intento: '+err.message,'error')}
         });
         box.append(save);
@@ -355,6 +362,129 @@ $('match').addEventListener('click',()=>{
   }catch(err){status('Fallo del detector: '+err.message,'error')}
 });
 
+// Saved runs comparison — read-only. Personal training estimates, never official race times.
+let attemptHistory = [];
+function fillHistorySelectors() {
+  for(const id of ['comparisonFirst','comparisonSecond']) {
+    const el=$(id);
+    el.replaceChildren();
+    if(!attemptHistory.length) {
+      const empty=document.createElement('option');
+      empty.value='';empty.textContent='No hay intentos guardados';el.append(empty);
+    }
+    for(const a of attemptHistory) {
+      const option=document.createElement('option');
+      option.value=a.id;
+      option.textContent=new Date(a.created_at).toLocaleString('es-ES')+
+        ' · '+formatMs(a.elapsed_ms)+
+        ' · '+(a.source_filename||'GPS')+
+        (a.gps_status==='compatible'?'':' · revisar GPS');
+      el.append(option);
+    }
+  }
+  if(attemptHistory.length>1){
+    $('comparisonFirst').value=attemptHistory[1].id;
+    $('comparisonSecond').value=attemptHistory[0].id;
+  }
+}
+function showComparisonMessage(message) {
+  const out=$('comparisonResults');out.replaceChildren();
+  const p=document.createElement('p');p.className='placeholder';p.textContent=message;out.append(p);
+}
+async function refreshAttemptHistory() {
+  if(!cloudApi||!cloudUser)throw Error('Conecta FastAPI e inicia sesión para recuperar tus intentos.');
+  const circuit=selectedCircuit();
+  if(!circuit?.cloud_id)throw Error('Primero guarda el circuito en PostgreSQL. Los circuitos solo locales no tienen historial compartido.');
+  attemptHistory=await cloudApi.listAttempts(circuit);
+  fillHistorySelectors();
+  showComparisonMessage(attemptHistory.length>1?
+    'Elige dos intentos y pulsa «Comparar sectores en el mapa».':
+    'Se han encontrado '+attemptHistory.length+' intento(s). Guarda al menos dos del mismo circuito para compararlos.');
+  return attemptHistory.length;
+}
+$('loadAttemptHistory').addEventListener('click',async()=>{
+  const btn=$('loadAttemptHistory');btn.disabled=true;
+  try {
+    const n=await refreshAttemptHistory();
+    status(n+' intento(s) recuperados de PostgreSQL para '+selectedCircuit().name+'.','success');
+  }catch(err){showComparisonMessage(err.message);status(err.message,'error')}
+  finally{btn.disabled=false}
+});
+function showComparisonOnMap(circuit, comparison) {
+  viewCircuit(circuit);
+  const colors={faster:'#1ddd93',slower:'#ff6275',equal:'#85caff',unknown:'#9facc0'};
+  for(const s of comparison.sectors) {
+    const layer=drawLine(circuit.points.slice(s.from,s.to+1),
+      {color:colors[s.status],weight:8,opacity:.95});
+    if(layer)layer.bindTooltip(
+      'Sector '+(s.index+1)+' · '+(s.deltaMs===null?'Sin datos':formatDelta(s.deltaMs)),
+      {sticky:true,direction:'top'});
+  }
+  $('mapTag').textContent='COMPARACIÓN A / B · '+circuit.name.toUpperCase();
+}
+$('compareAttempts').addEventListener('click',()=>{
+  const circuit=selectedCircuit();
+  try{
+    if(!circuit?.cloud_id)throw Error('Guarda primero el circuito en PostgreSQL.');
+    const first=attemptHistory.find(a=>a.id===$('comparisonFirst').value);
+    const second=attemptHistory.find(a=>a.id===$('comparisonSecond').value);
+    const comparison=compareSectorTimes(circuit,first,second);
+    const out=$('comparisonResults');out.replaceChildren();
+    const headline=document.createElement('div');headline.className='comparison-head';
+    const text=document.createElement('div');text.textContent='B frente a A';text.className='caps';
+    const total=document.createElement('strong');
+    total.textContent=comparison.totalDeltaMs===null?'Total sin datos':formatDelta(comparison.totalDeltaMs);
+    total.className='comparison-delta '+(comparison.totalDeltaMs===null?'unknown':comparison.totalDeltaMs<0?'faster':'slower');
+    headline.append(text,total);out.append(headline);
+    const info=document.createElement('p');info.className='comparison-info';
+    info.textContent='A: '+formatMs(comparison.firstTotal)+' · B: '+formatMs(comparison.secondTotal);
+    out.append(info);
+    if(comparison.hasGpsReview || !comparison.complete){
+      const note=document.createElement('p');note.className='comparison-warning';
+      note.textContent=(comparison.hasGpsReview?'Al menos uno de los intentos requiere revisión GPS. ':'')+
+        (!comparison.complete?'Hay sectores sin parcial válido; no se calcula su diferencia. ':'')+
+        'Comparación orientativa, no homologada.';
+      out.append(note);
+    }
+    const table=document.createElement('table');table.className='comparison-table';
+    const head=document.createElement('thead'),header=document.createElement('tr');
+    for(const title of ['Sector','A','B','Δ B−A','Acum.']) {
+      const th=document.createElement('th');th.textContent=title;header.append(th);
+    }
+    head.append(header);table.append(head);
+    const body=document.createElement('tbody');
+    for(const s of comparison.sectors) {
+      const row=document.createElement('tr');
+      row.className='sector-'+s.status;
+      row.tabIndex=0;
+      row.setAttribute('aria-label','Sector '+(s.index+1)+', '+(s.name)+', '+formatDelta(s.deltaMs));
+      const vals=[
+        String(s.index+1)+' · '+s.name,
+        formatMs(s.firstMs),
+        formatMs(s.secondMs),
+        formatDelta(s.deltaMs),
+        formatDelta(s.cumulativeDeltaMs)
+      ];
+      vals.forEach((v,i)=>{
+        const cell=document.createElement('td');
+        cell.textContent=v;
+        if(i===3)cell.className='sector-delta';
+        row.append(cell);
+      });
+      row.title='Ver sector '+(s.index+1)+' en el mapa';
+      const zoom=()=>map.fitBounds(L.latLngBounds(circuit.points.slice(s.from,s.to+1).map(point)),{padding:[55,55],maxZoom:18});
+      row.addEventListener('click',zoom);
+      row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();zoom()}});
+      body.append(row);
+    }
+    table.append(body);out.append(table);
+    const legend=document.createElement('p');legend.className='comparison-info';
+    legend.textContent='Verde: B más rápido · Rojo: B más lento · Azul: empate · Gris: parcial desconocido. Pulsa cualquier sector para verlo.';
+    out.append(legend);
+    showComparisonOnMap(circuit,comparison);
+    status('Comparación de '+comparison.sectors.length+' sectores lista. Los tiempos son estimaciones GPS.','success');
+  }catch(err){showComparisonMessage(err.message);status('Comparación no disponible: '+err.message,'error')}
+});
 function cloudMessage(message,type=''){
   const el=$('cloudStatus');
   el.textContent=message;

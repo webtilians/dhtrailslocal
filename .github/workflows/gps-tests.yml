@@ -24,5 +24,6 @@ jobs:
           node --check gps-engine.mjs
           node --check editor.mjs
           node --check api-client.mjs
+          node --check sector-comparison.mjs
       - name: Test geometry, storage and cloud mapping
         run: node --test tests/*.test.mjs
