@@ -20,4 +20,4 @@ jobs:
         with:
           node-version: '22'
       - name: Test geometry and timing
-        run: node --test tests/gps-engine.test.mjs
+        run: node --test tests/*.test.mjs
