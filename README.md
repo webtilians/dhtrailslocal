@@ -1,4 +1,4 @@
-# DH Trails Local — GPS Lab v0.4
+# DH Trails Local — GPS Lab v0.5
 
 Plataforma de entrenamiento de descenso MTB con editor de circuitos, sectores manuales y cronometraje GPS estimado.
 
@@ -10,6 +10,19 @@ Plataforma de entrenamiento de descenso MTB con editor de circuitos, sectores ma
 Web pública (versión estática): https://webtilians.github.io/dhtrailslocal/  
 Editor: https://webtilians.github.io/dhtrailslocal/editor.html  
 Editor con backend local: **http://127.0.0.1:8000/editor.html**
+
+## Novedad v0.5 — Comparar bajadas por sectores
+
+Desde **04 Detectar y cronometrar → Comparar entrenamientos** puedes elegir dos intentos de un mismo circuito que estén guardados en **PostgreSQL**. La interfaz muestra, por cada sector:
+
+- Tiempo del intento **A** (referencia) y del intento **B**.
+- Diferencia **B − A** (negativa = B más rápido; positiva = B más lento).
+- Diferencia acumulada, mientras no falten parciales.
+- El recorrido coloreado en **verde** si B mejora, **rojo** si B pierde, **azul** si empata y **gris** si no hay tiempos comparables.
+
+Pulsa una fila para acercarte a ese sector en el mapa. Una marca **Revisión GPS** o un parcial ausente no se considera prueba de recorrido válido. Los tiempos proceden de GPX/TCX y son **estimaciones**, no cronometrajes homologados.
+
+**Para probar:** abre la app con FastAPI en local, selecciona Santa Cruz, guarda al menos dos intentos desde «Detectar y cronometrar», pulsa **Cargar mis intentos guardados**, elige A y B y pulsa **Comparar sectores en el mapa**. Si el circuito existe solo en el navegador, guárdalo primero en PostgreSQL.
 
 ## Funcionalidades
 
