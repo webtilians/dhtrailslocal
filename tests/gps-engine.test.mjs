@@ -30,6 +30,13 @@ test('snaps clicks to a real source point',()=>{
   assert.equal(snap.index,37);
   assert.equal(snap.meters,0);
 });
+test('accepts Leaflet click LatLng objects and selects a GPS point',()=>{
+  const click={lat:ref[37].lat,lng:ref[37].lon};
+  const snap=nearestTrackIndex(ref,click);
+  assert.equal(snap.index,37);
+  assert.ok(Number.isFinite(snap.meters));
+  assert.ok(snap.meters<1);
+});
 test('finds the candidate and computes ordered sector splits',()=>{
   const r=route(origin,2000);
   const attempts=detectAttempts(r,create());
