@@ -1,4 +1,4 @@
-import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts} from './gps-engine.mjs';
+import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
 
 const $ = id => document.getElementById(id);
 const map = L.map('map', {zoomControl:true}).setView([36.76,-4.46],12);
@@ -6,6 +6,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
   {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 
 const STORAGE = 'dhtrailslocal:v0.2:circuits';
+let storageProblem = null;
 let circuits = readLibrary();
 let selectedId = '';
 let source = null, attemptRoute = null, activeTool = '';
@@ -19,9 +20,32 @@ const point = p => Array.isArray(p) ? [p[0],p[1]] : [p.lat,p.lon];
 const coordinates = p => ({lat:point(p)[0],lon:point(p)[1]});
 function blankDraft(){return {start:null,finish:null,sectors:[],zones:[]};}
 function snapshot(){history.push(JSON.stringify(draft));if(history.length>30)history.shift();}
-function readLibrary(){try{const data=JSON.parse(localStorage.getItem(STORAGE)||'[]');return Array.isArray(data)?data:[]}catch{return []}}
-function saveLibrary(){localStorage.setItem(STORAGE,JSON.stringify(circuits));}
+function readLibrary(){
+  try {return readCircuitCollection(localStorage, STORAGE);}
+  catch(e) {storageProblem=e?.message||'Acceso al almacenamiento bloqueado';return [];}
+}
+function saveLibrary(nextCircuits){
+  try {writeCircuitCollection(localStorage,STORAGE,nextCircuits);}
+  catch(e){throw new Error('El navegador no ha podido guardar el circuito ('+(e?.message||'almacenamiento bloqueado')+').');}
+}
 function selectedCircuit(){return circuits.find(c=>c.id===selectedId)||null;}
+function reportSave(message, type) {
+  const feedback=$('saveFeedback');feedback.textContent=message;
+  feedback.className='save-feedback '+(type||'');
+  status(message,type);
+  feedback.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function downloadCircuit(c) {
+  const blob = new Blob([JSON.stringify(c,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  try {
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=c.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9-_]+/gi,'-')+'.dhtrails.json';
+    document.body.append(a);a.click();a.remove();
+    return true;
+  }finally{setTimeout(()=>URL.revokeObjectURL(url),30000)}
+}
 function fillLibrary() {
   const select=$('circuitSelect');select.replaceChildren();
   if(!circuits.length){const opt=document.createElement('option');opt.textContent='Aún no hay circuitos';opt.value='';select.appendChild(opt);selectedId='';return;}
@@ -164,13 +188,31 @@ $('routeFile').addEventListener('change',async e=>{
   }catch(err){status(err.message,'error')}
 });
 $('saveCircuit').addEventListener('click',()=>{
-  try{
-    if(!source)throw Error('Importa primero la ruta de referencia.');
-    if(draft.start===null||draft.finish===null)throw Error('Debes marcar salida y meta.');
-    const circuit=buildCircuit($('circuitName').value,source,draft.start,draft.finish,draft.sectors,draft.zones);
-    circuits.push(circuit);selectedId=circuit.id;saveLibrary();fillLibrary();viewCircuit(circuit);
-    status('Circuito '+circuit.name+' guardado localmente. Puedes exportarlo a JSON o cronometrar un GPX.','success');
-  }catch(err){status('No se pudo guardar: '+err.message,'error')}
+  let circuit;
+  try {
+    if(!source)throw Error('Importa primero una ruta GPX/TCX para crear un circuito.');
+    if(draft.start===null||draft.finish===null)throw Error('Debes marcar la salida y la meta antes de guardar.');
+    circuit=buildCircuit($('circuitName').value,source,draft.start,draft.finish,draft.sectors,draft.zones);
+  }catch(err){reportSave('No se ha guardado: '+err.message,'error');return;}
+  const next=[...circuits,circuit];
+  try {
+    saveLibrary(next);
+  }catch(err){
+    let backup=false;
+    try {backup=downloadCircuit(circuit)}catch(e){/* no backup possible */}
+    reportSave('No se ha podido guardar en este navegador. '+err.message+
+      (backup?' Se ha solicitado la descarga de un archivo JSON de respaldo; comprueba la carpeta Descargas.':' Descarga o exporta una copia antes de cerrar esta pestaña.'),'error');
+    return; // Keep markers and route intact so the user can try again.
+  }
+  circuits=next;selectedId=circuit.id;fillLibrary();
+  let backup=false;
+  try{backup=downloadCircuit(circuit)}catch(e){/* circuit is already stored */}
+  try{viewCircuit(circuit)}catch(err){
+    reportSave('Circuito guardado y verificado en este navegador, pero hubo un error al mostrarlo: '+err.message,'error');
+    return;
+  }
+  reportSave('Circuito «'+circuit.name+'» guardado y verificado en este navegador ('+circuits.length+
+    ' en Mis circuitos). '+(backup?'Se ha solicitado una descarga JSON de seguridad; comprueba Descargas.':'Pulsa Exportar JSON para crear una copia de seguridad.'),'success');
 });
 function viewCircuit(circuit) {
   resetArt();
@@ -200,10 +242,12 @@ function viewCircuit(circuit) {
 $('circuitSelect').addEventListener('change',e=>{selectedId=e.target.value;});
 $('loadCircuit').addEventListener('click',()=>{const c=selectedCircuit();if(!c)return status('No hay circuito seleccionado.','error');viewCircuit(c);status('Circuito '+c.name+' cargado. Puedes importar una actividad para detectar intentos.','success')});
 $('exportCircuit').addEventListener('click',()=>{
-  const c=selectedCircuit();if(!c)return status('Selecciona un circuito primero.','error');
-  const blob=new Blob([JSON.stringify(c,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=c.name.toLowerCase().replace(/[^a-z0-9-_]+/gi,'-')+'.dhtrails.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-  status('Copia JSON del circuito descargada.','success');
+  const c=selectedCircuit();
+  if(!c)return status('Selecciona un circuito primero.','error');
+  try {
+    downloadCircuit(c);
+    status('Se ha solicitado la descarga del JSON de «'+c.name+'». Comprueba Descargas.','success');
+  }catch(err){status('No se ha podido exportar: '+err.message,'error');}
 });
 function validateImport(c) {
   if(!c||c.version!==2||typeof c.name!=='string'||!Array.isArray(c.points)||c.points.length<16||c.points.length>12000)throw Error('El JSON no tiene un circuito v0.2 válido.');
@@ -217,8 +261,10 @@ function validateImport(c) {
 $('importCircuit').addEventListener('change',async e=>{
   const file=e.target.files[0];if(!file)return;
   try{if(file.size>3e6)throw Error('JSON demasiado grande.');
-    const circuit=validateImport(JSON.parse(await file.text()));circuits.push(circuit);saveLibrary();selectedId=circuit.id;fillLibrary();viewCircuit(circuit);
-    status('Circuito '+circuit.name+' importado correctamente.','success');
+    const circuit=validateImport(JSON.parse(await file.text()));
+    const next=[...circuits,circuit];
+    saveLibrary(next);circuits=next;selectedId=circuit.id;fillLibrary();viewCircuit(circuit);
+    status('Circuito '+circuit.name+' importado y guardado en este navegador. Conserva el JSON original como copia de respaldo.','success');
   }catch(err){status('Error al importar: '+err.message,'error')}
 });
 $('attemptFile').addEventListener('change',async e=>{
@@ -271,5 +317,5 @@ $('match').addEventListener('click',()=>{
   }catch(err){status('Fallo del detector: '+err.message,'error')}
 });
 fillLibrary();
-if(selectedCircuit()){viewCircuit(selectedCircuit());status('Biblioteca de circuitos cargada. Puedes editar uno nuevo importando un GPX.');}
-else{refreshDraft();}
+if(selectedCircuit()){viewCircuit(selectedCircuit());status('Biblioteca local de '+circuits.length+' circuito(s) cargada. Los JSON exportados son tu copia de seguridad.');}
+else{refreshDraft();if(storageProblem)status('El almacenamiento del navegador no está disponible o contiene datos inválidos: '+storageProblem+'. Usa siempre una copia JSON.','error');}
