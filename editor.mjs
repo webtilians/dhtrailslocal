@@ -94,7 +94,7 @@ function refreshDraft(){
   });
   if(pendingZone!==null)insertRow(zones,'Inicio en punto '+pendingZone+' · marca el final',null);
   if(s!==null&&f!==null&&source)showStats(source.slice(s,f+1),draft.sectors.length+1);
-  else showStats(source,draft.sectors.length+1);
+  else if(source)showStats(source,draft.sectors.length+1);
 }
 function insertRow(parent,label,button){const row=document.createElement('div');row.className='item';row.textContent=label;if(button)row.appendChild(button);parent.append(row);}
 function redraw(){
