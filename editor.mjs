@@ -1,4 +1,4 @@
-import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
+import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, referenceStops, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
 import {discoverApi, setLocalCloudConfig, createCloudApi} from './api-client.mjs';
 import {compareSectorTimes, formatMs, formatDelta} from './sector-comparison.mjs';
 
@@ -195,6 +195,7 @@ $('saveCircuit').addEventListener('click',async()=>{
   try {
     if(!source)throw Error('Importa primero una ruta GPX/TCX para crear un circuito.');
     if(draft.start===null||draft.finish===null)throw Error('Debes marcar la salida y la meta antes de guardar.');
+    if(!referenceIsClean())return;
     circuit=buildCircuit($('circuitName').value,source,draft.start,draft.finish,draft.sectors,draft.zones);
   }catch(err){reportSave('No se ha guardado: '+err.message,'error');return;}
   const next=[...circuits,circuit];
@@ -240,6 +241,35 @@ $('saveCircuit').addEventListener('click',async()=>{
     }
   }
 });
+// A watch that keeps recording while the rider stands still writes repeated points and GPS drift:
+// as a reference they would draw a scribble into the circuit. Offer a run of the same file
+// without stops, keeping the same gates, or keep this one if the organizer prefers.
+function referenceIsClean() {
+  const stopped=referenceStops(source,draft.start,draft.finish);
+  if(stopped<30)return true;
+  const minutes=(stopped/60).toFixed(1).replace('.',',');
+  let clean=null;
+  try{
+    const provisional=buildCircuit($('circuitName').value||'Provisional',source,draft.start,draft.finish,draft.sectors,draft.zones);
+    clean=detectAttempts(source,provisional)
+      .filter(a=>a.startIndex!==draft.start&&a.status==='compatible'&&a.gateIndices.every(Number.isInteger)&&referenceStops(source,a.startIndex,a.finishIndex)<30)
+      .sort((a,b)=>a.seconds-b.seconds)[0]||null;
+  }catch{}
+  const warning='La bajada marcada incluye una parada de '+minutes+' min. El GPS sigue grabando mientras estás parado y dibujaría un garabato en el circuito.';
+  if(!clean)return window.confirm(warning+'\n\nEste archivo no tiene otra bajada sin paradas. ¿Guardar igualmente?');
+  if(!window.confirm(warning+'\n\nEn este mismo archivo hay otra bajada sin paradas ('+timeString(clean.seconds)+'). ¿Usarla como referencia, con las mismas puertas?'))return true;
+  const within=i=>nearestTrackIndex(source,coordinates(source[i]),clean.startIndex,clean.finishIndex).index;
+  const names=draft.sectors.map(s=>s.name);
+  snapshot();
+  draft={start:clean.startIndex,finish:clean.finishIndex,
+    sectors:clean.gateIndices.slice(1,-1).map((index,i)=>({index,name:names[i]})),
+    zones:draft.zones.map(z=>({...z,from:within(z.from),to:within(z.to)})).filter(z=>z.to>z.from)};
+  pendingZone=null;
+  redraw();
+  map.fitBounds(L.latLngBounds(source.slice(draft.start,draft.finish+1).map(point)),{padding:[25,25]});
+  reportSave('Referencia cambiada a la bajada sin paradas. Revisa las puertas en el mapa y pulsa Guardar otra vez.','success');
+  return false;
+}
 function viewCircuit(circuit) {
   resetArt();
   source=null;draft=blankDraft();history=[];pendingZone=null;showTool('');
@@ -253,7 +283,8 @@ function viewCircuit(circuit) {
   map.fitBounds(L.latLngBounds(pts),{padding:[30,30]});
   $('mapTag').textContent='CIRCUITO: '+circuit.name.toUpperCase();
   refreshDraft();
-  showStats(ref,circuit.sectors.length+1);
+  // Saved points are [lat, lon, ele] arrays; the summary reads named fields.
+  showStats(ref.map(p=>({lat:p[0],lon:p[1],ele:p[2]??null})),circuit.sectors.length+1);
   $('sectorCount').textContent=String(circuit.sectors.length+1);
   $('zoneCount').textContent=String((circuit.weakZones||[]).length);
   const gateList=$('gatesList');gateList.replaceChildren();
@@ -272,6 +303,20 @@ $('circuitSelect').addEventListener('change',e=>{
   showComparisonMessage('Circuito cambiado. Carga sus intentos guardados para comparar.');
 });
 $('loadCircuit').addEventListener('click',()=>{const c=selectedCircuit();if(!c)return status('No hay circuito seleccionado.','error');viewCircuit(c);status('Circuito '+c.name+' cargado. Puedes importar una actividad para detectar intentos.','success')});
+$('deleteCircuit').addEventListener('click',async()=>{
+  const c=selectedCircuit();
+  if(!c)return status('Selecciona un circuito primero.','error');
+  // In the local database too, or it would come back the next time the app connects.
+  const inDatabase=!!(cloudApi&&cloudUser?.organizer&&c.cloud_id);
+  if(!window.confirm('¿Borrar «'+c.name+'»?\n'+(inDatabase?'Se borra de este navegador y de la base de datos, con sus intentos guardados.':'Se borra de este navegador.')+'\nEsta acción no se puede deshacer.'))return;
+  try{
+    if(inDatabase)await cloudApi.deleteCircuit(c.cloud_id);
+    const next=circuits.filter(x=>x!==c);
+    saveLibrary(next);circuits=next;selectedId='';fillLibrary();
+    if(selectedCircuit())viewCircuit(selectedCircuit());else{resetArt();refreshDraft();}
+    status('Circuito «'+c.name+'» borrado.','success');
+  }catch(err){status('No se pudo borrar: '+err.message,'error')}
+});
 $('exportCircuit').addEventListener('click',()=>{
   const c=selectedCircuit();
   if(!c)return status('Selecciona un circuito primero.','error');

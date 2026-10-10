@@ -28,6 +28,12 @@ Cada bajada cuenta en el mes en que se hizo (zona horaria `Europe/Madrid`). Como
 
 **Para probar en local:** crea y guarda un circuito en PostgreSQL desde el editor, abre http://127.0.0.1:8000/competicion.html, publícalo en «Organización», elige tu nombre de piloto y sube un GPX reciente de ese circuito.
 
+### Detección de puertas a lo largo del trazado (v0.6.1)
+
+Cada bajada se sigue por su posición a lo largo del trazado de referencia: una puerta cuenta cuando esa posición la cruza, aunque el GPS se desvíe hasta 60 m hacia un lado. Antes una puerta exigía pasar a menos de 18 m de un punto, y un error de 25–50 m dejaba dos sectores sin tiempo. Si la traza se aleja más de 30 m del trazado durante 50 m o más, el tiempo se calcula igualmente pero la bajada queda en *Revisión GPS*, indicando entre qué kilómetros. Esperar en la salida o cruzarla varias veces no cuenta: el tiempo empieza en el último cruce antes de bajar. El motor del navegador (`gps-engine.mjs`) y el del servidor (`backend/app/timing.py`) dan exactamente los mismos tiempos.
+
+Al guardar un circuito, el editor avisa si la bajada de referencia incluye paradas: el reloj sigue grabando parado y dibujaría un garabato en el circuito. Si el mismo archivo tiene otra bajada sin paradas, la propone con las mismas puertas.
+
 ## v0.5 — Comparar bajadas por sectores
 
 Desde **04 Detectar y cronometrar → Comparar entrenamientos** puedes elegir dos intentos de un mismo circuito que estén guardados en **PostgreSQL**. La interfaz muestra, por cada sector:

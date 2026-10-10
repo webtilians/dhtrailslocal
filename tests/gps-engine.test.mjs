@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildCircuit, detectAttempts, distanceSeries, nearestTrackIndex, summarize, readCircuitCollection, writeCircuitCollection} from '../gps-engine.mjs';
+import {buildCircuit, detectAttempts, distanceSeries, nearestTrackIndex, referenceStops, summarize, readCircuitCollection, writeCircuitCollection} from '../gps-engine.mjs';
 
 const origin = Date.UTC(2026,9,9,12,0,0);
 function route(t0=origin, step=2000, withoutTime=false) {
@@ -99,4 +99,32 @@ test('storage quota or privacy errors are reported rather than ignored',()=>{
 test('corrupt library is not silently accepted as an empty valid collection',()=>{
   const invalid={getItem:()=>'{invalid',setItem:()=>{}};
   assert.throws(()=>readCircuitCollection(invalid,'circuits'),/JSON/);
+});
+
+// v0.6.1 — gates follow the position along the circuit, not a radius around one point.
+const eastMetres = m => m / (111195 * Math.cos(36.74 * Math.PI / 180));
+test('a gate passed 35 m to one side is still timed, and the separation is reported',()=>{
+  const shifted=route().map((p,i)=>i>=55&&i<=69?{...p,lon:p.lon+eastMetres(35)}:p);
+  const [run]=detectAttempts(shifted,create());
+  assert.ok(Math.abs(run.seconds-154)<1.1);
+  assert.equal(run.missing,0);
+  assert.ok(run.splits.every(s=>s>0));
+  assert.equal(run.status,'revisar');
+  assert.ok(run.issues.some(x=>x.startsWith('te separas hasta 35 m')));
+});
+test('waiting at the start line is not timed',()=>{
+  const r=route(), wait=[];
+  // Rolling back and forth over the line for a minute; the last position is behind it.
+  for(let j=0;j<30;j++)wait.push({...r[10],lat:r[10].lat+(j%2===0?-0.00002:0.00002),time:r[10].time+j*2000});
+  const shiftedTimes=r.slice(10).map(p=>({...p,time:p.time+60000}));
+  const runs=detectAttempts([...r.slice(0,10),...wait,...shiftedTimes],create());
+  assert.equal(runs.length,1);
+  assert.ok(Math.abs(runs[0].seconds-154)<1.1,String(runs[0].seconds));
+});
+test('a stop inside the reference stretch is measured',()=>{
+  const r=route(), stop=Array.from({length:60},(_,j)=>({...r[40],time:r[40].time+(j+1)*2000}));
+  const withStop=[...r.slice(0,41),...stop,...r.slice(41).map(p=>({...p,time:p.time+120000}))];
+  const seconds=referenceStops(withStop,10,withStop.length-13);
+  assert.ok(seconds>=110&&seconds<=140,String(seconds));
+  assert.equal(referenceStops(r,10,87),0);
 });

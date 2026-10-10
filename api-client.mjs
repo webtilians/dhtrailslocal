@@ -103,6 +103,7 @@ export function createCloudApi(config) {
       return result.id;
     },
     async listCircuits(){return request('/circuits')},
+    async deleteCircuit(id){return request('/circuits/'+encodeURIComponent(id),{method:'DELETE'})},
     async saveAttempt(circuit,attempt,filename,route){
       if(!circuit?.cloud_id)throw new Error('Guarda primero el circuito en el servidor.');
       const began=route?.[attempt.startIndex]?.time;
