@@ -31,4 +31,3 @@ LOCAL_PILOT_ID = uuid.UUID("d48951f3-59a3-49b1-9635-ea0da0fb5d87")
 ORGANIZER_EMAILS = {x.strip().lower() for x in os.getenv("ORGANIZER_EMAILS", "").split(",") if x.strip()}
 INVITE_CODE = os.getenv("INVITE_CODE", "").strip()
 COMPETITION_TIMEZONE = os.getenv("COMPETITION_TIMEZONE", "Europe/Madrid")
-ENTRY_MAX_AGE_DAYS = int(os.getenv("ENTRY_MAX_AGE_DAYS", "7"))

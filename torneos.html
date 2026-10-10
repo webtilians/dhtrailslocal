@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<title>Torneos | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main>
+<header class="heading">
+  <div><div class="kicker">ORGANIZACIÓN / TORNEOS</div><h1>Crea el torneo. <span>Elige circuito y fechas.</span></h1>
+  <p>Un torneo es un time trial sobre uno de tus circuitos guardados entre dos fechas. Las bajadas que coinciden con el circuito al menos el porcentaje que elijas, y sin tramos imposibles, entran solas en la clasificación. Aquí puedes revisarlas y aceptar o rechazar cualquiera a mano.</p></div>
+</header>
+<section id="notAllowed" class="panel notice" hidden><div class="panel-content">Solo la organización crea torneos. Entra con tu cuenta de organizador.</div></section>
+<div class="layout" id="workspace">
+  <aside class="stack">
+    <section class="panel">
+      <div class="panel-title"><h2>Nuevo <span>torneo</span></h2></div>
+      <div class="panel-content">
+        <form id="newTournament">
+          <label class="field-title" for="tName">Nombre</label>
+          <input id="tName" maxlength="100" required autocomplete="off">
+          <label class="field-title" for="tCircuit">Circuito</label>
+          <select id="tCircuit" required><option value="">Cargando circuitos…</option></select>
+          <div class="two-cols">
+            <div><label class="field-title" for="tStart">Desde</label><input id="tStart" type="date" required></div>
+            <div><label class="field-title" for="tEnd">Hasta</label><input id="tEnd" type="date" required></div>
+          </div>
+          <label class="field-title" for="tMatch">Coincidencia mínima con el circuito (%)</label>
+          <input id="tMatch" type="number" min="50" max="100" step="1" value="85" required>
+          <p class="help">Parte de la bajada que debe ir por el trazado (a menos de 30 m). Con GPS normal se consigue más del 90 %.</p>
+          <button class="btn primary full" type="submit">Crear torneo</button>
+        </form>
+        <p id="createFeedback" class="save-feedback" role="status" aria-live="polite">El circuito queda fijo mientras lo use un torneo.</p>
+      </div>
+    </section>
+  </aside>
+  <div class="stack wide">
+    <section class="panel">
+      <div class="panel-title"><h2><span>Torneos</span></h2><span class="caps" id="tCount"></span></div>
+      <div class="panel-content"><div id="tList" class="items"><p class="placeholder">Cargando…</p></div></div>
+    </section>
+    <section class="panel" id="entriesPanel" hidden>
+      <div class="panel-title"><h2><span id="entriesTitle">Bajadas</span></h2><span class="caps" id="entriesCount"></span></div>
+      <div class="panel-content"><div id="entries" class="table-wrap"></div></div>
+    </section>
+  </div>
+</div>
+<p id="status" class="status" role="status" aria-live="polite">Crea un torneo para que los pilotos puedan subir sus bajadas en Time trial.</p>
+</main>
+<script type="module" src="./torneos.mjs"></script>
+</body></html>

@@ -316,6 +316,16 @@ class DetectedAttempt:
     notes: list[str]    # information that does not affect the status
     status: str  # 'compatible' | 'revisar'
     gate_indices: list[int | None]
+    # [metres along the circuit, ms since the start, lat, lon] of each reliable fix, for telemetry.
+    profile: list[list[float]] | None = None
+
+def _profile(route, track, started, seconds, length):
+    """Position and time of the run from the start line to the finish line, reliable fixes only."""
+    def point(s, ms, k):
+        return [round(s, 1), round(ms), round(route[k].lat, 6), round(route[k].lon, 6)]
+    inside = [f for f in track if 0 < f[1] < length and _finite(route[f[0]].time)]
+    return ([point(0, 0, track[0][0])] + [point(f[1], route[f[0]].time - started, f[0]) for f in inside]
+            + [point(length, seconds * 1000, track[-1][0])])
 
 def detect_attempts(route: list[Fix], circuit: dict, radius: float | None = None) -> list[DetectedAttempt]:
     ref = circuit.get("points") or []
@@ -380,7 +390,8 @@ def detect_attempts(route: list[Fix], circuit: dict, radius: float | None = None
             notes.append(f"salida estimada: el GPS empieza {_whole(estimated_start)} m después de la línea")
         results.append(DetectedAttempt(i0, i1, times[0] if timed else None, seconds, splits, confidence, missing,
                                        issues, notes, "compatible" if ok else "revisar",
-                                       [i0, *[_nearest_index(g, gates_at[i]) if g else None for i, g in enumerate(run["gates"])], i1]))
+                                       [i0, *[_nearest_index(g, gates_at[i]) if g else None for i, g in enumerate(run["gates"])], i1],
+                                       _profile(route, track, times[0], seconds, length) if seconds else None))
         cursor = i1 + 1
     return results
 

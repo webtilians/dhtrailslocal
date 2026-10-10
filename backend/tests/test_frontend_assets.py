@@ -10,7 +10,7 @@ _HTML_REF=re.compile(r'(?:src|href)="\./([^"/?#]+)"')
 _MODULE_REF=re.compile(r"""from\s+['"]\./([^'"/]+)['"]""")
 
 def local_assets():
-    found,pending=set(),["index.html","editor.html"]
+    found,pending=set(),["index.html","entrenamiento.html","circuitos.html","torneos.html","editor.html","competicion.html"]
     while pending:
         name=pending.pop()
         if name in found:continue
@@ -22,7 +22,7 @@ def local_assets():
 
 def test_every_local_asset_is_served():
     assets=local_assets()
-    assert "sector-comparison.mjs" in assets
+    assert {"app-shell.mjs","telemetry.mjs","charts.mjs","sector-comparison.mjs"} <= assets
     client=TestClient(app)
     missing=[name for name in sorted(assets) if client.get("/"+name).status_code!=200]
     assert missing==[],"Añade a _PUBLIC_FILES: "+", ".join(missing)

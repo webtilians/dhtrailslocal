@@ -1,5 +1,5 @@
 """Shared API validation. The client can submit GPS estimates, never official results."""
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -68,8 +68,22 @@ class AttemptIn(BaseModel):
             raise ValueError("Tiempo de sector negativo")
         return v
 
+def readable_name(value:str)->str:
+    import re
+    value=" ".join(value.split())
+    if not re.fullmatch(r"[\w][\w .'-]{2,29}",value):
+        raise ValueError("Usa de 3 a 30 letras, números, espacios, puntos o guiones")
+    return value
+
 class RegisterIn(Credentials):
     invite_code: str | None = Field(default=None,max_length=100)
+    # The name shown in the standings; asked for when the account is created.
+    display_name: str | None = Field(default=None,max_length=60)
+
+    @field_validator("display_name")
+    @classmethod
+    def readable(cls,v):
+        return readable_name(v) if v is not None and v.strip() else None
 
 class ProfileIn(BaseModel):
     display_name: str = Field(min_length=3,max_length=30)
@@ -77,11 +91,22 @@ class ProfileIn(BaseModel):
     @field_validator("display_name")
     @classmethod
     def readable(cls,v):
-        import re
-        v=" ".join(v.split())
-        if not re.fullmatch(r"[\w][\w .'-]{2,29}",v):
-            raise ValueError("Usa de 3 a 30 letras, números, espacios, puntos o guiones")
-        return v
+        return readable_name(v)
+
+class TournamentIn(BaseModel):
+    name: str = Field(min_length=1,max_length=100)
+    circuit_id: UUID
+    starts_on: date
+    ends_on: date
+    min_match: float = Field(default=0.85,ge=0.5,le=1)
+
+    @model_validator(mode="after")
+    def dates(self):
+        self.name=" ".join(self.name.split())
+        if not self.name:raise ValueError("Escribe el nombre del torneo")
+        if self.ends_on<self.starts_on:raise ValueError("El torneo debe terminar después de empezar")
+        if (self.ends_on-self.starts_on).days>366:raise ValueError("Un torneo dura como mucho un año")
+        return self
 
 class ReviewIn(BaseModel):
     decision: Literal["approved","rejected"]

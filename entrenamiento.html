@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<title>Entrenamiento | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main>
+<header class="heading">
+  <div><div class="kicker">DH / ENTRENAMIENTO</div><h1>Sube tus rutas. <span>Compara cada bajada.</span></h1>
+  <p>Sube cualquier GPX: buscamos en él los circuitos de la aplicación y guardamos cada bajada que encontremos. Después superpón bajadas del mismo circuito para ver dónde vas más rápido y dónde pierdes tiempo.</p></div>
+</header>
+<section id="needLogin" class="panel notice" hidden><div class="panel-content">
+  <p>Para guardar tus rutas y compararlas necesitas una cuenta.</p>
+  <button id="loginButton" class="btn primary" type="button">Entrar o crear cuenta</button>
+</div></section>
+<div class="layout" id="workspace" hidden>
+  <aside class="stack">
+    <section class="panel">
+      <div class="panel-title"><h2><span>Sube una ruta</span></h2></div>
+      <div class="panel-content">
+        <label class="file-input" for="routeFile"><span class="upload">↥</span><span><b>Importar GPX / TCX</b><small id="routeName">Una salida completa: encontraremos las bajadas</small></span></label>
+        <input id="routeFile" type="file" accept=".gpx,.tcx" hidden>
+        <button id="analyze" class="btn primary full cloud-spaced" type="button">Buscar circuitos</button>
+        <div id="found" class="results"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Tus rutas</span></h2><span class="caps" id="routesCount"></span></div>
+      <div class="panel-content"><div id="routes" class="items"><p class="placeholder">Cargando…</p></div></div>
+    </section>
+  </aside>
+  <div class="stack wide">
+    <section class="panel map-panel">
+      <div class="panel-title"><h2><span>Compara</span></h2><span class="caps" id="compareTag">—</span></div>
+      <div class="panel-content compare-controls">
+        <select id="circuitSelect" aria-label="Circuito"><option value="">Sin bajadas todavía</option></select>
+        <div id="runList" class="run-list"></div>
+        <p class="help">Elige hasta 4 bajadas. La referencia es la más rápida de las elegidas.</p>
+      </div>
+      <div id="map" aria-label="Mapa con las bajadas superpuestas"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Velocidad</span></h2><span class="caps">KM/H A LO LARGO DEL CIRCUITO</span></div>
+      <div class="panel-content"><div id="legend" class="chart-legend"></div><div id="speedChart" class="chart"></div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Diferencia de tiempo</span></h2><span class="caps">FRENTE A LA MÁS RÁPIDA · ARRIBA PIERDES</span></div>
+      <div class="panel-content"><div id="gapChart" class="chart"></div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Por segmentos</span></h2></div>
+      <div class="panel-content"><div id="segments" class="standings-wrap"><p class="placeholder">Elige bajadas para compararlas.</p></div></div>
+    </section>
+  </div>
+</div>
+<p id="status" class="status" role="status" aria-live="polite">Las bajadas de entrenamiento son privadas y no cuentan para ningún torneo.</p>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="./entrenamiento.mjs"></script>
+</body></html>
