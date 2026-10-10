@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildCircuit, detectAttempts, distanceSeries, nearestTrackIndex, referenceStops, summarize, readCircuitCollection, writeCircuitCollection} from '../gps-engine.mjs';
+import {buildCircuit, detectAttempts, distanceSeries, nearestTrackIndex, referenceStops, withoutStops, summarize, readCircuitCollection, writeCircuitCollection} from '../gps-engine.mjs';
 
 const origin = Date.UTC(2026,9,9,12,0,0);
 function route(t0=origin, step=2000, withoutTime=false) {
@@ -62,13 +62,22 @@ test('does not falsely claim a matching lap on a distant activity',()=>{
   const r=route().map(p=>({...p,lat:p.lat+0.05}));
   assert.equal(detectAttempts(r,create()).length,0);
 });
-test('marking known weak GPS areas does not silently approve missing timing',()=>{
+test('losing GPS for 15 s at a believable speed does not invalidate the run',()=>{
   const r=route();
   const broken=r.map((p,i)=>({...p,time:i>=48?p.time+15000:p.time}));
   const result=detectAttempts(broken,create());
   assert.equal(result.length,1);
-  assert.equal(result[0].status,'revisar');
-  assert.ok(result[0].issues.some(x=>x.includes('intervalo')));
+  assert.equal(result[0].status,'compatible');
+  assert.ok(Math.abs(result[0].seconds-169)<1.1);
+  assert.ok(result[0].notes.some(x=>x.startsWith('GPS perdido o desviado 17 s')));
+});
+test('a shortcut while the GPS is lost is flagged by its impossible speed',()=>{
+  const r=route();
+  // Points 51-69 never recorded and point 70 reached 6 s after point 50: 136 m at 82 km/h.
+  const cut=[...r.slice(0,51),...r.slice(70).map(p=>({...p,time:p.time-32000}))];
+  const [run]=detectAttempts(cut,create());
+  assert.equal(run.status,'revisar');
+  assert.ok(run.issues.some(x=>x.includes('¿atajo o fallo del GPS?')));
 });
 test('reports distance, elevation and time',()=>{
   const stats=summarize(ref);
@@ -103,14 +112,14 @@ test('corrupt library is not silently accepted as an empty valid collection',()=
 
 // v0.6.1 — gates follow the position along the circuit, not a radius around one point.
 const eastMetres = m => m / (111195 * Math.cos(36.74 * Math.PI / 180));
-test('a gate passed 35 m to one side is still timed, and the separation is reported',()=>{
+test('a gate passed with the GPS 35 m to one side is timed at the average speed of that stretch',()=>{
   const shifted=route().map((p,i)=>i>=55&&i<=69?{...p,lon:p.lon+eastMetres(35)}:p);
   const [run]=detectAttempts(shifted,create());
   assert.ok(Math.abs(run.seconds-154)<1.1);
   assert.equal(run.missing,0);
-  assert.ok(run.splits.every(s=>s>0));
-  assert.equal(run.status,'revisar');
-  assert.ok(run.issues.some(x=>x.startsWith('te separas hasta 35 m')));
+  assert.ok(Math.abs(run.splits[1]-68)<1.5,String(run.splits[1]));
+  assert.equal(run.status,'compatible');
+  assert.ok(run.notes.some(x=>x.includes('parciales estimados')));
 });
 test('waiting at the start line is not timed',()=>{
   const r=route(), wait=[];
@@ -127,4 +136,15 @@ test('a stop inside the reference stretch is measured',()=>{
   const seconds=referenceStops(withStop,10,withStop.length-13);
   assert.ok(seconds>=110&&seconds<=140,String(seconds));
   assert.equal(referenceStops(r,10,87),0);
+});
+test('a circuit built from a run with a stop leaves the stop out',()=>{
+  const r=route(), stop=Array.from({length:60},(_,j)=>({...r[40],lat:r[40].lat+(j%3-1)*0.00002,time:r[40].time+(j+1)*2000}));
+  const withStop=[...r.slice(0,41),...stop,...r.slice(41).map(p=>({...p,time:p.time+120000}))];
+  const finish=withStop.length-13, gates=[{index:28,name:'Curvas'},{index:62+60,name:'Rock garden'}];
+  const clean=withoutStops(withStop,10,finish,gates,[]);
+  assert.ok(clean.seconds>=110);
+  const c=buildCircuit('Santa Cruz',clean.route,clean.start,clean.finish,clean.sectors,clean.zones);
+  assert.ok(Math.abs(distanceSeries(c.points).at(-1)-distanceSeries(create().points).at(-1))<15);
+  assert.deepEqual(c.sectors.map(g=>g.name),['Curvas','Rock garden']);
+  assert.equal(detectAttempts(r,c)[0].status,'compatible');
 });
