@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Bring DH Trails up to date from GitHub (branch in /etc/dhtrails/branch) and restart it.
+# Backs the data up first.
+set -euo pipefail
+exec bash /opt/dhtrails/deploy/vps/setup.sh "$@"

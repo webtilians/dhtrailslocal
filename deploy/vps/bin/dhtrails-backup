@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Copy of the DH Trails database and private GPS files; keeps 14 days.
+set -euo pipefail
+dir=/var/backups/dhtrails
+stamp=$(date -u +%Y%m%dT%H%M%SZ)
+install -d -o root -g root -m 700 "$dir"
+cd /
+runuser -u dhtrails -- pg_dump -Fc dhtrails > "$dir/dhtrails-$stamp.dump.part"
+mv "$dir/dhtrails-$stamp.dump.part" "$dir/dhtrails-$stamp.dump"
+tar -C /var/lib/dhtrails -czf "$dir/gps-$stamp.tar.gz.part" activities
+mv "$dir/gps-$stamp.tar.gz.part" "$dir/gps-$stamp.tar.gz"
+find "$dir" -name '*.part' -mmin +60 -delete
+find "$dir" \( -name 'dhtrails-*.dump' -o -name 'gps-*.tar.gz' \) -mtime +14 -delete
+echo "Copia: $dir/dhtrails-$stamp.dump y gps-$stamp.tar.gz"

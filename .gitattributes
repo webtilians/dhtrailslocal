@@ -1,0 +1,2 @@
+# Files the Linux server runs must keep LF line endings in a Windows checkout.
+deploy/vps/** text eol=lf

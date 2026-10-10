@@ -22,7 +22,7 @@ from .database import get_db
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot
 from .ratelimit import RateLimit
 from .schemas import ProfileIn, ReviewIn
-from .security import current_pilot, is_organizer, pilot_payload
+from .security import current_pilot, pilot_payload, require_organizer
 from .timing import GpsError, best_attempt, detect_attempts, distance_series, parse_gps
 
 router=APIRouter(prefix="/api")
@@ -31,10 +31,6 @@ _MONTH=re.compile(r"\d{4}-(0[1-9]|1[0-2])")
 
 def utcnow()->datetime:
     return datetime.now(timezone.utc)
-
-def require_organizer(p:Pilot):
-    if not is_organizer(p):
-        raise HTTPException(403,"Solo la organización puede hacer esto")
 
 def local_text(column,pattern:str):
     # Months and days follow the competition's own time zone, computed by PostgreSQL.

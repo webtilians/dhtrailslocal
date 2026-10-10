@@ -204,7 +204,7 @@ $('saveCircuit').addEventListener('click',async()=>{
     // Local quota/full storage MUST NOT prevent remote saving.
     let backup=false;
     try{backup=downloadCircuit(circuit)}catch(e){}
-    if(cloudApi && cloudUser){
+    if(cloudApi && cloudUser?.organizer){
       try{
         circuit.cloud_id=await cloudApi.saveCircuit(circuit);
         circuits=next;selectedId=circuit.id;fillLibrary();viewCircuit(circuit);
@@ -229,7 +229,7 @@ $('saveCircuit').addEventListener('click',async()=>{
   reportSave('Circuito «'+circuit.name+'» guardado en este navegador ('+circuits.length+
     ' en Mis circuitos). '+(backup?'Se ha solicitado una descarga JSON de seguridad.':'Exporta un JSON de seguridad.'),'success');
   // Remote persistence is optional: never lose the local copy due to a network error.
-  if(cloudApi && cloudUser) {
+  if(cloudApi && cloudUser?.organizer) {
     try {
       const id=await cloudApi.saveCircuit(circuit);
       circuit.cloud_id=id;
@@ -497,6 +497,8 @@ function reflectCloudUser(){
   $('storageMode').textContent=cloudUser?.local?'EN ESTE PC':'ALMACENAMIENTO';
   if(cloudUser?.local)$('storageHelp').textContent='Guarda tus circuitos, actividades y tiempos en este ordenador. No necesitas registrarte.';
   $('cloudLogout').hidden=!!cloudUser?.local;
+  // Only organizers store circuits on the server; riders upload their runs in Competición.
+  $('cloudPush').hidden=!cloudUser?.organizer;
   $('cloudConfigDetails').hidden=!!cloudUser?.local;
 }
 async function refreshCloudActivities(){

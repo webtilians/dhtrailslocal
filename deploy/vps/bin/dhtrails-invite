@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Show the code riders need to create an account, or replace it:  dhtrails-invite [nuevo]
+set -euo pipefail
+env_file=/etc/dhtrails/dhtrails.env
+if [ "${1:-}" = nuevo ]; then
+  code="dh-$(python3 -c 'import secrets; print(secrets.token_hex(3))')"
+  sed -i "s/^INVITE_CODE=.*/INVITE_CODE=$code/" "$env_file"
+  systemctl restart dhtrails
+  echo "Código cambiado. Las cuentas ya creadas siguen funcionando."
+fi
+grep '^INVITE_CODE=' "$env_file" | cut -d= -f2-
