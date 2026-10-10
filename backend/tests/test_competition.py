@@ -135,8 +135,11 @@ def test_entries_need_a_recent_complete_run(organizer):
         assert client.get(f"/api/public/circuits/{cid}/leaderboard?month=2026-13").status_code == 422
 
 def test_invite_code_closes_sign_up(monkeypatch):
+    with TestClient(app) as client:
+        assert client.get("/api/health").json()["invite_required"] is False
     monkeypatch.setattr(config, "INVITE_CODE", "monte-2026")
     with TestClient(app) as client:
+        assert client.get("/api/health").json()["invite_required"] is True
         body = {"email": f"rider-{uuid.uuid4().hex}@example.com", "password": "very-long-testing-password"}
         assert client.post("/api/auth/register", json=body).status_code == 403
         assert client.post("/api/auth/register", json={**body, "invite_code": "otro"}).status_code == 403

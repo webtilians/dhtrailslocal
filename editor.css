@@ -65,3 +65,9 @@ input:not([type=file]),select{width:100%;border:1px solid #385a76;padding:11px 1
 .badge.bad{background:#4a1f2a;color:#ffb3bd}
 #myEntries .item{align-items:flex-start;line-height:1.5}
 #myEntries .badge{white-space:nowrap}
+
+/* v0.7 — informational notes and circuit state */
+.note{color:#a9bfd2;font-size:11px;padding:0 13px 10px;line-height:1.5}
+.circuit-state{margin:10px 0 8px}
+.item .publish-btn{color:#cfebff;background:#193650;border:1px solid #365778;border-radius:4px;padding:6px 10px;font-size:10px;font-weight:800;text-transform:uppercase}
+.editor-link{display:block;text-align:center;text-decoration:none;margin-top:6px}
