@@ -21,11 +21,16 @@ jobs:
           node-version: '22'
       - name: Check browser modules syntax
         run: |
+          node --check app-shell.mjs
+          node --check timetrial.mjs
+          node --check entrenamiento.mjs
+          node --check circuitos.mjs
+          node --check torneos.mjs
+          node --check telemetry.mjs
+          node --check charts.mjs
           node --check gps-engine.mjs
-          node --check editor.mjs
           node --check api-client.mjs
           node --check sector-comparison.mjs
-          node --check competition.mjs
           node --check competition-core.mjs
       - name: Test geometry, storage and cloud mapping
         run: node --test tests/*.test.mjs

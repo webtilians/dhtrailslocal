@@ -29,17 +29,25 @@ jobs:
       - name: Prepare static site
         run: |
           test -s index.html
+          test -s entrenamiento.html
+          test -s circuitos.html
+          test -s torneos.html
           test -s editor.html
+          test -s competicion.html
+          test -s app.css
+          test -s app-shell.mjs
+          test -s timetrial.mjs
+          test -s entrenamiento.mjs
+          test -s circuitos.mjs
+          test -s torneos.mjs
+          test -s telemetry.mjs
+          test -s charts.mjs
           test -s gps-engine.mjs
-          test -s editor.mjs
-          test -s editor.css
           test -s api-client.mjs
           test -s sector-comparison.mjs
-          test -s competicion.html
-          test -s competition.mjs
           test -s competition-core.mjs
           mkdir -p _site
-          cp index.html editor.html editor.css editor.mjs gps-engine.mjs api-client.mjs sector-comparison.mjs competicion.html competition.mjs competition-core.mjs _site/
+          cp index.html entrenamiento.html circuitos.html torneos.html editor.html competicion.html app.css app-shell.mjs timetrial.mjs entrenamiento.mjs circuitos.mjs torneos.mjs telemetry.mjs charts.mjs gps-engine.mjs api-client.mjs sector-comparison.mjs competition-core.mjs _site/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

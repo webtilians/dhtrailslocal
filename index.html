@@ -1,75 +1,68 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DH Trails Local | GPS Lab</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<title>Time trial | DH Trails Local</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<style>
-:root{font-family:Inter,system-ui,sans-serif;color:#edf5ff;background:#080f1b;--blue:#199aff;--muted:#9eb2c9;--panel:#101e30;--stroke:#283b50}
-*{box-sizing:border-box}body{margin:0;min-width:310px}button,input{font:inherit}button{cursor:pointer}
-.top{height:78px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(20px,4vw,68px);background:#0b1626;border-bottom:1px solid #253952}
-.brand{display:flex;align-items:center;gap:13px}.mark{display:grid;grid-template-columns:repeat(4,10px);grid-template-rows:repeat(4,10px);transform:skew(-12deg) rotate(-9deg);gap:0}.mark i:nth-child(odd){background:#fff}.mark i:nth-child(3n){background:#139dff}.brand-name{font:900 29px 'Barlow Condensed',sans-serif;letter-spacing:.7px}.brand-name span{color:#2aafff}.micro{font-size:10px;color:#9db1ca;font-weight:800;letter-spacing:2.5px}.navtag{border:1px solid #2d4c6c;padding:9px 12px;border-radius:5px;font-size:11px;color:#83cfff;letter-spacing:1.2px;font-weight:800}
-.checkstripe{height:10px;background:conic-gradient(#fff 25%,#07111d 0 50%,#fff 0 75%,#07111d 0) 0 0 / 20px 20px;opacity:.75}
-main{max-width:1560px;margin:auto;padding:35px clamp(18px,4vw,64px)}.eyebrow{color:#2aaaff;text-transform:uppercase;font-weight:800;letter-spacing:3px;font-size:11px}h1,h2,h3{font-family:'Barlow Condensed',sans-serif;margin:0;text-transform:uppercase}h1{font-size:clamp(38px,5vw,68px);line-height:1;letter-spacing:.5px;margin:12px 0}h1 em{font-style:normal;color:#2babff}p{color:var(--muted);line-height:1.55}header.intro{display:flex;justify-content:space-between;gap:20px;align-items:end;margin-bottom:25px}.sub{max-width:660px;margin:0}.tag{color:#67c4ff;font-size:12px;font-weight:700}
-.columns{display:grid;grid-template-columns:330px minmax(0,1fr);gap:20px}.panel{background:var(--panel);border:1px solid var(--stroke);border-radius:10px;overflow:hidden}.panelhd{padding:17px 20px;border-bottom:1px solid var(--stroke);display:flex;justify-content:space-between;align-items:center}h2{font-size:23px;letter-spacing:.5px}.panelbody{padding:20px}
-.drop{border:2px dashed #315b81;border-radius:9px;background:#10253c;padding:25px 14px;text-align:center;transition:.2s;outline:none}.drop.drag,.drop:focus{border-color:#21adff;background:#123e62}.uploadicon{font-size:34px;margin-bottom:10px}.drop b{display:block;font-size:14px}.drop p{font-size:12px;margin:7px 0 17px}.btn{display:inline-block;border:0;background:#168ce7;color:white;padding:12px 17px;border-radius:5px;font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:1px}.btn:hover{background:#2cabff}.btn.secondary{background:#1c334b;border:1px solid #315475;color:#c5e4ff}.btn:focus-visible{outline:3px solid white}#file{display:none}.support{font-size:11px;color:#87a2bb;margin-top:12px}.sectionline{height:1px;background:var(--stroke);margin:22px 0}h3{font-size:19px;margin-bottom:12px}.detail{font-size:12px;color:#a9bdd1;line-height:1.8}.detail strong{color:#ebf6ff}.status{font-size:12px;color:#9eb2c9;min-height:40px;overflow-wrap:anywhere}.status.error{color:#ff9d9d}.row{display:flex;gap:8px;flex-wrap:wrap}
-.mapwrap{height:490px;position:relative;background:#142b3f}#map{height:100%;width:100%}.map-overlay{position:absolute;z-index:500;left:17px;top:17px;background:#0b1b2de6;padding:12px 15px;border:1px solid #355475;border-radius:5px;font-size:11px;color:#8fd2ff;font-weight:800;letter-spacing:1px}.map-overlay b{color:white;display:block;font-size:14px;margin-top:4px}
-.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px}.stat{padding:20px;background:#122238;border:1px solid #29425a;border-radius:9px}.stat small{font-size:10px;color:#9aafc7;font-weight:800;letter-spacing:1.4px;text-transform:uppercase}.stat strong{display:block;margin-top:8px;font:800 clamp(20px,2.4vw,32px) 'Barlow Condensed',sans-serif}.stat strong span{color:#58baff;font-size:.58em}
-.bottom{margin-top:19px}.profile{width:100%;height:145px;display:block}.muted{color:#8faac4;font-size:12px}.legend{font-size:11px;color:#a4c5e3;padding:7px 20px 14px}.footer{margin-top:34px;padding:22px 0;border-top:1px solid #26364a;color:#7e97ae;font-size:12px;display:flex;justify-content:space-between}.leaflet-container{background:#152c40}.leaflet-control-attribution{font-size:10px!important}
-@media(max-width:900px){.columns{grid-template-columns:1fr}.mapwrap{height:430px}.intro{align-items:start!important;flex-direction:column}.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:480px){.top{padding:0 15px}.brand-name{font-size:24px}.mark{grid-template-columns:repeat(4,8px);grid-template-rows:repeat(4,8px)}.mapwrap{height:350px}.stats{gap:8px}.stat{padding:13px}.footer{flex-direction:column;gap:7px}}
-</style>
+<link rel="stylesheet" href="./app.css">
 </head>
-<body><div class="checkstripe"></div><div class="top"><div class="brand"><div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><div class="brand-name">DH<span>TRAILS</span> LOCAL</div><div class="micro">DOWNHILL PERFORMANCE LAB</div></div></div><div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap"><a href="./competicion.html" style="display:inline-flex;padding:11px 14px;border:1px solid #2e597f;color:#cfebff;border-radius:5px;text-decoration:none;font-weight:800;font-size:11px;letter-spacing:.7px">COMPETICIÓN DEL MES</a><a href="./editor.html" style="display:inline-flex;padding:11px 14px;background:#1597e9;color:#fff;border-radius:5px;text-decoration:none;font-weight:800;font-size:11px;letter-spacing:.7px">CREAR CIRCUITO / SECTORES →</a><div class="navtag">BETA / 0.6</div></div></div>
-<main><header class="intro"><div><div class="eyebrow">GPS Analysis / MTB Downhill</div><h1>Tu bajada. <em>Tus datos.</em></h1><p class="sub">Importa tu recorrido, explóralo sobre el mapa y empieza a convertir cada descenso en información útil para entrenar.</p></div><div class="tag">● GPS ROUTE VIEWER</div></header>
-<div class="columns"><aside class="panel"><div class="panelhd"><h2>Importar ruta</h2><span class="micro">01 / UPLOAD</span></div><div class="panelbody">
-<div id="drop" class="drop" tabindex="0" role="button" aria-label="Importar archivo de ruta GPS"><div class="uploadicon">↥</div><b>Arrastra tu ruta aquí</b><p>O selecciona un archivo GPS de tu dispositivo</p><label class="btn" for="file">Elegir archivo</label><input id="file" type="file" accept=".gpx,.tcx,application/gpx+xml,application/xml,text/xml"><div class="support">Compatible: GPX y TCX · máx. 20 MB</div></div>
-<div class="sectionline"></div><h3>Ruta cargada</h3><div id="details" class="detail">Todavía no hay ningún recorrido cargado.</div><div class="sectionline"></div><div class="row"><button id="demo" class="btn secondary">Ver demo</button><button id="clear" class="btn secondary">Limpiar</button></div><p id="status" class="status" role="status" aria-live="polite">Los datos se procesan en tu navegador; no se suben a un servidor.</p></div></aside>
-<div><section class="panel"><div class="panelhd"><h2>Visor de recorrido</h2><span class="micro">02 / MAP</span></div><div class="mapwrap"><div id="map" aria-label="Mapa interactivo de la ruta"></div><div class="map-overlay">DH GPS VIEWER <b id="mapname">SIN RUTA CARGADA</b></div></div><div class="legend">● Azul: recorrido GPS &nbsp; ● Verde: salida &nbsp; ● Rojo: llegada</div></section>
-<section class="stats" aria-label="Estadísticas"><div class="stat"><small>Distancia</small><strong id="distance">— <span>km</span></strong></div><div class="stat"><small>Duración</small><strong id="duration">—</strong></div><div class="stat"><small>Desnivel negativo</small><strong id="descent">— <span>m</span></strong></div><div class="stat"><small>Velocidad media</small><strong id="speed">— <span>km/h</span></strong></div></section>
-<section class="panel bottom"><div class="panelhd"><h2>Perfil de altitud</h2><span class="micro">03 / ELEVATION</span></div><div class="panelbody"><svg id="profile" class="profile" role="img" aria-label="Perfil de elevación del recorrido" viewBox="0 0 700 145" preserveAspectRatio="none"><text x="350" y="70" text-anchor="middle" fill="#789ab9" font-size="13">Importa una ruta con altitudes para visualizar su perfil.</text></svg><div id="profile-meta" class="muted">El perfil de elevación aparecerá aquí.</div></div></section></div></div>
-<footer class="footer"><span>© DH Trails Local · MTB Downhill GPS Lab</span><span>V0.6 · Competición mensual y comparación por sectores · FastAPI + PostgreSQL · Tiempos GPS estimados</span></footer></main>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main>
+<header class="heading">
+  <div><div class="kicker">DH / TIME TRIAL</div><h1>Baja cuando quieras. <span>Gana el más rápido.</span></h1>
+  <p>Sube el GPX de tu bajada: si sigue el circuito del torneo y la velocidad es creíble, entra al momento en la clasificación. El tiempo lo calcula el servidor con las mismas puertas para todos.</p></div>
+</header>
+<div class="layout">
+  <aside class="stack">
+    <section class="panel">
+      <div class="panel-title"><h2><span>Torneo</span></h2><span class="caps" id="tState"></span></div>
+      <div class="panel-content">
+        <select id="tournamentSelect" aria-label="Torneo"><option value="">Cargando torneos…</option></select>
+        <p id="tInfo" class="help"></p>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Participa</span></h2></div>
+      <div class="panel-content">
+        <div id="needLogin" hidden>
+          <p class="help">Para subir tus bajadas necesitas una cuenta. La clasificación es pública.</p>
+          <button id="loginButton" class="btn primary full" type="button">Entrar o crear cuenta</button>
+        </div>
+        <div id="needName" hidden>
+          <label for="displayName" class="field-title">Tu nombre en la clasificación</label>
+          <div class="action-row"><input id="displayName" maxlength="30" autocomplete="nickname" placeholder="Ej. Rider Uno"><button id="saveName" class="btn outline" type="button">Guardar</button></div>
+        </div>
+        <div id="uploadBox" hidden>
+          <label class="file-input" for="entryFile"><span class="upload">↥</span><span><b>Sube tu bajada</b><small id="entryFileName">GPX / TCX del día de la bajada</small></span></label>
+          <input id="entryFile" type="file" accept=".gpx,.tcx" hidden>
+          <button id="submitEntry" class="btn primary full cloud-spaced" type="button">Enviar al time trial</button>
+          <div id="entryResult" class="results"></div>
+          <div class="box-heading">Mis bajadas en este torneo</div>
+          <div id="myEntries" class="items"><p class="placeholder">Todavía no has enviado bajadas.</p></div>
+        </div>
+        <p id="account" class="save-feedback" role="status" aria-live="polite" hidden></p>
+      </div>
+    </section>
+  </aside>
+  <div class="stack wide">
+    <section class="panel map-panel">
+      <div class="panel-title"><h2><span>Clasificación</span></h2><span class="caps" id="boardTag">—</span></div>
+      <div id="map" aria-label="Mapa del circuito del torneo"></div>
+      <div class="map-footer"><span><i class="dot blue"></i> Circuito</span><span><i class="dot green"></i> Más rápido que el líder</span><span><i class="dot red"></i> Más lento que el líder</span><span><i class="dot gold"></i> Límite de segmento</span></div>
+      <div class="stats"><div><small>Pilotos</small><strong id="statRiders">—</strong></div><div><small>Mejor tiempo</small><strong id="statBest">—</strong></div><div><small>Tiempo ideal</small><strong id="statIdeal" title="Suma de los mejores parciales">—</strong></div></div>
+      <div id="standings" class="standings-wrap"><p class="board-empty">Elige un torneo para ver la clasificación.</p></div>
+    </section>
+  </div>
+</div>
+<p id="status" class="status" role="status" aria-live="polite">Pulsa un piloto de la clasificación para ver en el mapa dónde gana o pierde tiempo frente al líder.</p>
+<footer>DH TRAILS LOCAL <span>v0.8 · Time trial · Tiempos calculados en el servidor a partir del GPS · No es un cronometraje homologado.</span></footer>
+</main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-(()=>{'use strict';
-const $=id=>document.getElementById(id), map=L.map('map',{zoomControl:true}).setView([36.75,-4.45],11);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
-let layer=null,markers=[],active=null;
-const setStatus=(message,error=false)=>{$('status').textContent=message;$('status').className='status'+(error?' error':'')};
-const num=v=>Number.isFinite(v)?v:null;
-const float=s=>s==null||s.trim()===''?null:num(Number(s));
-const text=(parent,tag)=>parent?.getElementsByTagNameNS('*',tag)[0]?.textContent??null;
-const hav=(a,b)=>{const r=Math.PI/180,p1=a.lat*r,p2=b.lat*r,dp=(b.lat-a.lat)*r,dl=(b.lon-a.lon)*r,q=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return 6371000*2*Math.atan2(Math.sqrt(q),Math.sqrt(1-q))};
-const parseTime=s=>{if(!s)return null;const t=Date.parse(s);return Number.isFinite(t)?t:null};
-function parseXML(source,type){const doc=new DOMParser().parseFromString(source,'application/xml');if(doc.getElementsByTagName('parsererror').length)throw Error('El archivo XML no es válido.');
-const tag=doc.documentElement.localName.toLowerCase();if(type==='gpx'&&tag!=='gpx'||type==='tcx'&&tag!=='trainingcenterdatabase')throw Error('El contenido no corresponde con la extensión.');
-let nodes=[...doc.getElementsByTagNameNS('*',type==='gpx'?'trkpt':'Trackpoint')];if(type==='gpx'&&!nodes.length)nodes=[...doc.getElementsByTagNameNS('*','rtept')];
-if(nodes.length>250000)throw Error('Demasiados puntos GPS (máximo 250.000).');
-const pts=nodes.map(el=>{let lat,lon;if(type==='gpx'){lat=float(el.getAttribute('lat'));lon=float(el.getAttribute('lon'))}else{const pos=el.getElementsByTagNameNS('*','Position')[0];lat=float(text(pos,'LatitudeDegrees'));lon=float(text(pos,'LongitudeDegrees'))}return{lat,lon,ele:float(text(el,type==='gpx'?'ele':'AltitudeMeters')),time:parseTime(text(el,type==='gpx'?'time':'Time'))}}).filter(p=>p.lat!==null&&p.lon!==null&&Math.abs(p.lat)<=90&&Math.abs(p.lon)<=180);
-if(pts.length<2)throw Error('No se han encontrado al menos dos puntos GPS válidos.');
-return pts}
-function show(pts,name){let meters=0,down=0;const dist=[0];for(let i=1;i<pts.length;i++){const step=hav(pts[i-1],pts[i]);meters+=step;dist.push(meters);if(pts[i].ele!=null&&pts[i-1].ele!=null){const d=pts[i].ele-pts[i-1].ele;if(d<0&&d>-100)down-=d}}
-const times=pts.map(p=>p.time).filter(t=>t!==null);const seconds=times.length>=2&&times[times.length-1]>times[0]?(times[times.length-1]-times[0])/1000:null;
-if(layer)map.removeLayer(layer);markers.forEach(m=>map.removeLayer(m));markers=[];
-layer=L.polyline(pts.map(p=>[p.lat,p.lon]),{color:'#17a3ff',weight:5,opacity:.95}).addTo(map);
-markers.push(L.circleMarker([pts[0].lat,pts[0].lon],{radius:7,color:'#d4ffea',weight:2,fillColor:'#1acf75',fillOpacity:1}).bindPopup('Salida').addTo(map));
-const last=pts.at(-1);markers.push(L.circleMarker([last.lat,last.lon],{radius:7,color:'#ffe7e7',weight:2,fillColor:'#f64d60',fillOpacity:1}).bindPopup('Llegada').addTo(map));map.fitBounds(layer.getBounds(),{padding:[30,30],maxZoom:16});
-$('mapname').textContent=name.length>35?name.slice(0,32)+'…':name;
-$('distance').innerHTML=(meters/1000).toFixed(2)+' <span>km</span>';$('duration').textContent=seconds==null?'Sin datos':Math.floor(seconds/3600).toString().padStart(2,'0')+':'+Math.floor(seconds%3600/60).toString().padStart(2,'0')+':'+Math.floor(seconds%60).toString().padStart(2,'0');$('descent').innerHTML=pts.some(p=>p.ele!=null)?Math.round(down)+' <span>m</span>':'— <span>m</span>';$('speed').innerHTML=seconds>0?(meters/seconds*3.6).toFixed(1)+' <span>km/h</span>':'— <span>km/h</span>';
-$('details').innerHTML='<strong></strong><br><span></span>';$('details').querySelector('strong').textContent=name;$('details').querySelector('span').textContent=pts.length.toLocaleString('es-ES')+' puntos GPS · '+(times.length?'con marcas de tiempo':'sin tiempos');
-renderProfile(pts,dist);active=pts;setStatus('Ruta cargada correctamente. El cálculo de desnivel es aproximado y no está filtrado para competición.')}
-function renderProfile(pts,dist){const data=pts.map((p,i)=>({x:dist[i],y:p.ele})).filter(p=>p.y!=null);const svg=$('profile');svg.replaceChildren();if(data.length<2){$('profile-meta').textContent='Este archivo no contiene suficientes datos de elevación.';return}
-const min=data.reduce((v,p)=>Math.min(v,p.y),Infinity),max=data.reduce((v,p)=>Math.max(v,p.y),-Infinity),range=Math.max(1,max-min),end=Math.max(1,dist.at(-1)),ns='http://www.w3.org/2000/svg';
-const point=p=>[Math.round(10+680*p.x/end),Math.round(132-116*(p.y-min)/range)];
-const sampled=data.filter((_,i)=>i%Math.max(1,Math.floor(data.length/700))===0);if(sampled.at(-1)!==data.at(-1))sampled.push(data.at(-1));
-const d=sampled.map((p,i)=>(i?'L':'M')+point(p).join(',')).join(' ');const fill=document.createElementNS(ns,'path');fill.setAttribute('d',d+' L690,132 L10,132 Z');fill.setAttribute('fill','#1266b3');fill.setAttribute('fill-opacity','.24');svg.appendChild(fill);
-const line=document.createElementNS(ns,'path');line.setAttribute('d',d);line.setAttribute('fill','none');line.setAttribute('stroke','#32b9ff');line.setAttribute('stroke-width','3');line.setAttribute('stroke-linejoin','round');svg.appendChild(line);
-$('profile-meta').textContent='Altitud mínima: '+Math.round(min)+' m · máxima: '+Math.round(max)+' m · estimaciones sin corrección barométrica'}
-async function load(file){if(!file)return;if(file.size>20*1024*1024){setStatus('El archivo supera el límite de 20 MB.',true);return}const ext=file.name.split('.').at(-1).toLowerCase();if(!['gpx','tcx'].includes(ext)){setStatus('Formato no admitido en v0.1. Exporta el archivo como GPX o TCX.',true);return}try{setStatus('Leyendo recorrido…');const pts=parseXML(await file.text(),ext);show(pts,file.name)}catch(e){setStatus('Error: '+e.message,true)}}
-$('file').addEventListener('change',e=>load(e.target.files[0]));const drop=$('drop');drop.addEventListener('click',e=>{if(e.target.tagName!=='LABEL'&&e.target.tagName!=='INPUT')$('file').click()});drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click()}});['dragenter','dragover'].forEach(k=>drop.addEventListener(k,e=>{e.preventDefault();drop.classList.add('drag')}));['dragleave','drop'].forEach(k=>drop.addEventListener(k,e=>{e.preventDefault();drop.classList.remove('drag')}));drop.addEventListener('drop',e=>load(e.dataTransfer.files[0]));
-$('clear').addEventListener('click',()=>{if(layer)map.removeLayer(layer);markers.forEach(m=>map.removeLayer(m));layer=null;markers=[];active=null;$('file').value='';$('details').textContent='Todavía no hay ningún recorrido cargado.';$('mapname').textContent='SIN RUTA CARGADA';['distance','duration','descent','speed'].forEach(id=>$(id).textContent='—');$('profile').replaceChildren();$('profile-meta').textContent='El perfil de elevación aparecerá aquí.';setStatus('Ruta eliminada del visor.');map.setView([36.75,-4.45],11)});
-$('demo').addEventListener('click',()=>{const start=Date.now(),pts=Array.from({length:180},(_,i)=>({lat:36.755-i*.00014+Math.sin(i/10)*.00032,lon:-4.430+i*.00012+Math.sin(i/8)*.00032,ele:690-i*1.4+Math.sin(i/13)*5,time:start+i*1600}));show(pts,'DEMOSTRACIÓN · CIRCUITO FICTICIO');setStatus('Ruta de demostración simulada: no representa un circuito real.')});
-})();
-</script></body></html>
+<script type="module" src="./timetrial.mjs"></script>
+</body></html>

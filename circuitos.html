@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<title>Circuitos | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main>
+<header class="heading">
+  <div><div class="kicker">ORGANIZACIÓN / CIRCUITOS</div><h1>Crea el circuito. <span>Salida, segmentos y meta.</span></h1>
+  <p>Importa el GPX de una bajada, marca sobre el mapa la salida, la meta y los límites de los segmentos, y guarda la ruta. Después podrás usarla en un torneo, y aparecerá en los entrenamientos de quien la baje.</p></div>
+</header>
+<section id="notAllowed" class="panel notice" hidden><div class="panel-content">Solo la organización crea circuitos. Entra con tu cuenta de organizador.</div></section>
+<div class="layout" id="workspace">
+  <aside class="stack">
+    <section class="panel">
+      <div class="panel-title"><h2>1 <span>Importar archivo</span></h2></div>
+      <div class="panel-content">
+        <label class="file-input" for="routeFile"><span class="upload">↥</span><span><b>Importar GPX / TCX</b><small id="sourceName">La ruta de una bajada que pase por todo el circuito</small></span></label>
+        <input id="routeFile" type="file" accept=".gpx,.tcx,.json" hidden>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2>2 <span>Salida, meta y segmentos</span></h2></div>
+      <div class="panel-content">
+        <div class="tool-grid three">
+          <button class="tool start" data-tool="start" type="button"><span>●</span> Salida</button>
+          <button class="tool finish" data-tool="finish" type="button"><span>■</span> Meta</button>
+          <button class="tool" data-tool="gate" type="button"><span>◆</span> Segmento</button>
+        </div>
+        <div class="tool-footer"><button id="undo" class="text-btn" type="button">↶ Deshacer</button><span id="toolHint">Importa una ruta para empezar.</span></div>
+        <div id="gatesList" class="items"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2>3 <span>Guardar ruta</span></h2></div>
+      <div class="panel-content">
+        <label class="field-title" for="circuitName">Nombre del circuito</label>
+        <input id="circuitName" maxlength="100" placeholder="Ej. Kawasaki" autocomplete="off">
+        <button id="saveRoute" type="button" class="btn primary full cloud-spaced">Guardar ruta</button>
+        <p id="saveFeedback" class="save-feedback" role="status" aria-live="polite">Si la bajada tiene paradas, se quitan solas del trazado al guardar.</p>
+      </div>
+    </section>
+  </aside>
+  <div class="stack wide">
+    <section class="panel map-panel">
+      <div class="panel-title"><h2><span>Mapa</span></h2><span class="caps" id="mapTag">SIN RUTA</span></div>
+      <div id="map" aria-label="Mapa para marcar salida, segmentos y meta"></div>
+      <div class="map-footer"><span><i class="dot blue"></i> Circuito</span><span><i class="dot green"></i> Salida</span><span><i class="dot gold"></i> Límite de segmento</span><span><i class="dot red"></i> Meta</span></div>
+      <div class="stats"><div><small>Distancia</small><strong id="statDistance">—</strong></div><div><small>Segmentos</small><strong id="statSegments">—</strong></div><div><small>Desnivel</small><strong id="statDescent">—</strong></div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Circuitos guardados</span></h2><span class="caps" id="savedCount"></span></div>
+      <div class="panel-content"><div id="savedList" class="items"><p class="placeholder">Cargando…</p></div></div>
+    </section>
+  </div>
+</div>
+<p id="status" class="status" role="status" aria-live="polite">Selecciona una herramienta y haz clic sobre la línea de la ruta: el punto se ajusta al GPS más cercano. Puedes arrastrar los marcadores.</p>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="./circuitos.mjs"></script>
+</body></html>

@@ -1,4 +1,4 @@
-// DH Trails Local v0.6 — public FastAPI client (no Supabase).
+// DH Trails Local v0.8 — public FastAPI client (no Supabase).
 // Same-origin when the page is served by FastAPI (this PC or the public server).
 const ENDPOINT_CONFIG='dhtrailslocal:api:url';
 
@@ -84,83 +84,53 @@ export function createCloudApi(config) {
       persistToken(result.access_token);
       return {user:result.user,session:{user:result.user}};
     },
-    async signUp(email,password,inviteCode){
-      const result=await request('/auth/register',{method:'POST',body:{email,password,invite_code:inviteCode||null}});
+    async signUp(email,password,{inviteCode,displayName}={}){
+      const result=await request('/auth/register',{method:'POST',
+        body:{email,password,invite_code:inviteCode||null,display_name:displayName||null}});
       persistToken(result.access_token);
       return {user:result.user,session:{user:result.user}};
     },
     async signOut(){persistToken(null);},
+    async me(){return request('/auth/me')},
+    async setDisplayName(name){return request('/me/profile',{method:'PUT',body:{display_name:name}})},
+    // Circuits (organizers)
     async saveCircuit(circuit){
       const isRemote=/^[0-9a-f-]{36}$/i.test(circuit.cloud_id||'');
       const result=await request(isRemote?'/circuits/'+circuit.cloud_id:'/circuits',{
         method:isRemote?'PUT':'POST',
-        body:{
-          name:circuit.name,points:circuit.points,
-          sectors:circuit.sectors||[],weakZones:circuit.weakZones||[],
-          gateRadius:circuit.gateRadius||18
-        }
+        body:{name:circuit.name,points:circuit.points,sectors:circuit.sectors||[],
+          weakZones:circuit.weakZones||[],gateRadius:circuit.gateRadius||18}
       });
       return result.id;
     },
     async listCircuits(){return request('/circuits')},
     async deleteCircuit(id){return request('/circuits/'+encodeURIComponent(id),{method:'DELETE'})},
-    async saveAttempt(circuit,attempt,filename,route){
-      if(!circuit?.cloud_id)throw new Error('Guarda primero el circuito en el servidor.');
-      const began=route?.[attempt.startIndex]?.time;
-      const saved=await request('/attempts',{method:'POST',body:{
-        circuit_id:circuit.cloud_id,
-        source_filename:String(filename||'ruta.gpx').slice(0,200),
-        started_at:Number.isFinite(began)?new Date(began).toISOString():null,
-        elapsed_ms:Number.isFinite(attempt.seconds)?Math.round(attempt.seconds*1000):null,
-        sector_splits_ms:(attempt.splits||[]).map(v=>Number.isFinite(v)?Math.round(v*1000):null),
-        confidence:Number.isFinite(attempt.confidence)?attempt.confidence:null,
-        gps_status:attempt.status==='compatible'?'compatible':'review',
-        notes:[...(attempt.issues||[]),...(attempt.notes||[])].join(' · ').slice(0,500)
-      }});
-      return saved.id;
-    },
-    async listAttempts(circuit) {
-      if(!circuit?.cloud_id)throw new Error('Guarda el circuito en PostgreSQL primero.');
-      const id=encodeURIComponent(circuit.cloud_id);
-      return request('/attempts?circuit_id='+id);
-    },
-    async uploadActivity(file,points,distance){
-      const ext=String(file.name||'').split('.').at(-1).toLowerCase();
-      if(!['gpx','tcx'].includes(ext))throw new Error('Solo GPX/TCX.');
+    async circuitCatalog(){return request('/public/circuits')},
+    // Time trial
+    async tournaments(){return request('/public/tournaments')},
+    async tournament(id){return request('/public/tournaments/'+encodeURIComponent(id))},
+    async createTournament(body){return request('/tournaments',{method:'POST',body})},
+    async deleteTournament(id){return request('/tournaments/'+encodeURIComponent(id),{method:'DELETE'})},
+    async submitEntry(tournamentId,file){
       const data=new FormData();
       data.append('file',file,file.name);
-      if(points?.length)data.append('gps_points',String(points.length));
-      if(Number.isFinite(distance))data.append('distance_m',String(distance));
-      return request('/activities',{method:'POST',body:data,form:true});
+      return request('/tournaments/'+encodeURIComponent(tournamentId)+'/entries',{method:'POST',body:data,form:true});
     },
-    async listActivities(){return request('/activities')},
-    async downloadActivity(id){
-      const items=await request('/activities');
-      const item=items.find(x=>x.id===id);
-      if(!item)throw new Error('Actividad no encontrada.');
-      const blob=await request('/activities/'+encodeURIComponent(id)+'/file');
-      return {blob,item};
-    },
-    async deleteActivity(id){return request('/activities/'+encodeURIComponent(id),{method:'DELETE'})},
-    // v0.6 monthly competition
-    async me(){return request('/auth/me')},
-    async setDisplayName(name){return request('/me/profile',{method:'PUT',body:{display_name:name}})},
-    async publicCircuits(){return request('/public/circuits')},
-    async leaderboard(circuitId,month){
-      return request('/public/circuits/'+encodeURIComponent(circuitId)+'/leaderboard'+(month?'?month='+encodeURIComponent(month):''));
-    },
-    async publishCircuit(id){return request('/circuits/'+encodeURIComponent(id)+'/publish',{method:'POST'})},
-    async submitEntry(circuitId,file){
-      const data=new FormData();
-      data.append('circuit_id',circuitId);
-      data.append('file',file,file.name);
-      return request('/competition/entries',{method:'POST',body:data,form:true});
-    },
-    async myEntries(){return request('/competition/entries')},
-    async reviewQueue(status='pending'){return request('/competition/review?status='+encodeURIComponent(status))},
+    async myEntries(tournamentId){return request('/tournaments/'+encodeURIComponent(tournamentId)+'/entries/mine')},
+    async tournamentEntries(tournamentId){return request('/tournaments/'+encodeURIComponent(tournamentId)+'/entries')},
     async reviewEntry(id,decision,note){
-      return request('/competition/entries/'+encodeURIComponent(id)+'/review',{method:'POST',body:{decision,note:note||null}});
+      return request('/entries/'+encodeURIComponent(id)+'/review',{method:'POST',body:{decision,note:note||null}});
     },
-    async entryFile(id){return request('/competition/entries/'+encodeURIComponent(id)+'/file')}
+    async entryFile(id){return request('/entries/'+encodeURIComponent(id)+'/file')},
+    // Training
+    async uploadTrainingRoute(file){
+      const data=new FormData();
+      data.append('file',file,file.name);
+      return request('/training/routes',{method:'POST',body:data,form:true});
+    },
+    async trainingRoutes(){return request('/training/routes')},
+    async deleteTrainingRoute(id){return request('/training/routes/'+encodeURIComponent(id),{method:'DELETE'})},
+    async trainingRuns(circuitId){return request('/training/runs'+(circuitId?'?circuit_id='+encodeURIComponent(circuitId):''))},
+    async trainingRun(id){return request('/training/runs/'+encodeURIComponent(id))}
   };
 }
