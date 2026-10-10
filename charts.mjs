@@ -16,7 +16,7 @@ function niceTicks(min, max, count = 5) {
 }
 
 // series: [{label, color, points: [{x, y}]}]; x is km along the circuit.
-export function lineChart(host, {series, yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220}) {
+export function lineChart(host, {series, yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220, onSelect}) {
   host.replaceChildren();
   const width = Math.max(280, host.clientWidth || 600);
   const m = {top: 12, right: 14, bottom: 26, left: 52};
@@ -25,7 +25,7 @@ export function lineChart(host, {series, yFormat = v => String(v), xFormat = v =
   const xMax = Math.max(...xs), y = niceTicks(Math.min(...ys, zero ? 0 : Infinity), Math.max(...ys, zero ? 0 : -Infinity));
   const sx = v => m.left + v / xMax * (width - m.left - m.right);
   const sy = v => m.top + (y.max - v) / (y.max - y.min) * (height - m.top - m.bottom);
-  const root = svg('svg', {viewBox: `0 0 ${width} ${height}`, width, height, class: 'chart-svg', role: 'img'});
+  const root = svg('svg', {viewBox: `0 0 ${width} ${height}`, width, height, class: 'chart-svg', role: onSelect ? 'group' : 'img', 'aria-label': 'Comparación por distancia'});
   for (const t of y.ticks) {
     root.append(svg('line', {x1: m.left, x2: width - m.right, y1: sy(t), y2: sy(t), class: t === 0 && zero ? 'chart-zero' : 'chart-grid'}));
     const label = svg('text', {x: m.left - 8, y: sy(t) + 4, 'text-anchor': 'end', class: 'chart-tick'});
@@ -50,15 +50,20 @@ export function lineChart(host, {series, yFormat = v => String(v), xFormat = v =
   const cross = svg('line', {y1: m.top, y2: height - m.bottom, class: 'chart-cross', visibility: 'hidden'});
   const dots = series.map(s => svg('circle', {r: 4, fill: s.color, stroke: 'var(--panel)', 'stroke-width': 2, visibility: 'hidden'}));
   const hit = svg('rect', {x: m.left, y: m.top, width: width - m.left - m.right, height: height - m.top - m.bottom, fill: 'transparent'});
-  root.append(cross, ...dots, hit);
+  const selection = svg('line', {y1: m.top, y2: height - m.bottom, class: 'chart-selection', visibility: 'hidden', 'pointer-events': 'none'});
+  root.append(cross, ...dots, selection, hit);
   const tip = document.createElement('div');
   tip.className = 'chart-tip';
   tip.hidden = true;
   host.append(root, tip);
   const nearest = (points, x) => points.reduce((best, p) => Math.abs(p.x - x) < Math.abs(best.x - x) ? p : best, points[0]);
-  hit.addEventListener('pointermove', event => {
+  const eventX = event => {
     const box = root.getBoundingClientRect();
-    const x = Math.max(0, Math.min(xMax, (event.clientX - box.left - m.left) / (width - m.left - m.right) * xMax));
+    // Convert rendered CSS pixels to viewBox units (also works on narrow screens).
+    return Math.max(0, Math.min(xMax, ((event.clientX - box.left) * width / box.width - m.left) / (width - m.left - m.right) * xMax));
+  };
+  hit.addEventListener('pointermove', event => {
+    const x = eventX(event);
     cross.setAttribute('x1', sx(x)); cross.setAttribute('x2', sx(x)); cross.setAttribute('visibility', 'visible');
     tip.replaceChildren();
     const head = document.createElement('b');
@@ -85,4 +90,27 @@ export function lineChart(host, {series, yFormat = v => String(v), xFormat = v =
     cross.setAttribute('visibility', 'hidden');
     dots.forEach(dot => dot.setAttribute('visibility', 'hidden'));
   });
+  let selected = null;
+  const setSelection = value => {
+    selected = value === null ? null : Math.max(0, Math.min(xMax, value));
+    selection.setAttribute('visibility', selected === null ? 'hidden' : 'visible');
+    if (selected !== null) {
+      selection.setAttribute('x1', sx(selected)); selection.setAttribute('x2', sx(selected));
+    }
+    hit.setAttribute('aria-valuenow', selected ?? 0);
+    hit.setAttribute('aria-valuetext', xFormat(selected ?? 0));
+  };
+  if (onSelect) {
+    Object.entries({tabindex: 0, role: 'slider', 'aria-label': 'Punto del circuito: flechas para mover, Inicio y Fin para los extremos',
+      'aria-valuemin': 0, 'aria-valuemax': xMax, class: 'chart-hit'}).forEach(([k, v]) => hit.setAttribute(k, v));
+    setSelection(null);
+    hit.addEventListener('click', event => {setSelection(eventX(event)); onSelect(selected);});
+    hit.addEventListener('keydown', event => {
+      const moves = {ArrowLeft: (selected ?? 0) - .01, ArrowRight: (selected ?? 0) + .01, Home: 0, End: xMax};
+      if (!(event.key in moves)) return;
+      event.preventDefault();
+      setSelection(moves[event.key]); onSelect(selected, {reveal: false});
+    });
+  }
+  return {setSelection};
 }

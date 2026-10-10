@@ -2,6 +2,19 @@
 // A profile is [[metres along the circuit, ms since the start, lat, lon], ...] from the start
 // line to the finish line, one entry per reliable GPS fix (see timing.py).
 
+// Locate chart distances on the official circuit, including between GPS vertices.
+export function circuitPosition(points, distances, metres) {
+  if (!points.length || !Number.isFinite(metres)) return null;
+  const s = Math.max(0, Math.min(distances.at(-1), metres));
+  for (let i = 1; i < points.length; i++) {
+    const span = distances[i] - distances[i - 1];
+    if (span <= 0 || distances[i] < s) continue;
+    const f = (s - distances[i - 1]) / span;
+    return [0, 1].map(k => points[i - 1][k] + f * (points[i][k] - points[i - 1][k]));
+  }
+  return points.at(-1).slice(0, 2);
+}
+
 // Time when the rider first reached position s. GPS jitter can step back a little:
 // a position only counts once it goes beyond everything reached before.
 export function timeAt(profile, s) {

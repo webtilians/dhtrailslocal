@@ -116,6 +116,12 @@ input[type=date],input[type=number]{color-scheme:dark}
 .chart-zero{stroke:#5d7c99;stroke-width:1}
 .chart-tick{fill:#8faac4;font-size:10px;font-family:Inter,system-ui,sans-serif}
 .chart-cross{stroke:#8faac4;stroke-width:1;stroke-dasharray:3 3}
+.chart-selection{stroke:#ffe066;stroke-width:2;stroke-dasharray:5 3}
+.chart-hit{cursor:crosshair}
+.chart-hit:focus-visible{outline:2px solid #ffe066;outline-offset:-2px}
+.segment-button{font:inherit;color:inherit;background:transparent;border:0;cursor:pointer;padding:8px 4px;min-height:40px;min-width:44px;text-decoration:underline;text-underline-offset:3px;border-radius:3px}
+.segment-button:focus-visible{outline:2px solid #ffe066}
+#segments .segment-selected{background:#50451c;color:#ffe066}
 .chart-tip{position:absolute;pointer-events:none;background:#0b1d2e;border:1px solid #365778;border-radius:6px;padding:8px 10px;font-size:11px;color:#e6f1fb;min-width:150px;box-shadow:0 6px 18px #0008}
 .chart-tip b{display:block;margin-bottom:4px;color:#cfe6f8}
 .chart-tip div{display:flex;align-items:center;gap:6px;white-space:nowrap}
