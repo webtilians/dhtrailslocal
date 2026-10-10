@@ -1,12 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {timeAt, resample, speedSeries, gapSeries, segmentTimes} from '../telemetry.mjs';
+import {timeAt, resample, speedSeries, gapSeries, segmentTimes, circuitPosition} from '../telemetry.mjs';
 
 // 100 m at a steady 10 m/s, one fix per second, with a GPS step back at 50 m.
 const steady = [[0, 0, 0, 0], [10, 1000, 0, 0], [20, 2000, 0, 0], [30, 3000, 0, 0], [40, 4000, 0, 0],
   [50, 5000, 0, 0], [47, 6000, 0, 0], [60, 6000, 0, 0], [70, 7000, 0, 0], [80, 8000, 0, 0], [90, 9000, 0, 0], [100, 10000, 0, 0]];
 // Same course, slow in the second half (5 m/s).
 const slower = [[0, 0, 0, 0], [25, 2500, 0, 0], [50, 5000, 0, 0], [75, 10000, 0, 0], [100, 15000, 0, 0]];
+
+test('chart distances interpolate along the circuit bends, not the start/finish chord', () => {
+  const points = [[36, -4, 400], [36, -3, 390], [37, -3, 380]];
+  assert.deepEqual(circuitPosition(points, [0, 100, 300], 50), [36, -3.5]);
+  assert.deepEqual(circuitPosition(points, [0, 100, 300], 200), [36.5, -3]);
+  assert.deepEqual(circuitPosition(points, [0, 100, 300], -10), [36, -4]);
+  assert.deepEqual(circuitPosition(points, [0, 100, 300], 500), [37, -3]);
+});
+
+test('map position handles repeated vertices and empty or invalid data', () => {
+  assert.deepEqual(circuitPosition([[36, -4], [36, -4], [37, -3]], [0, 0, 100], 50), [36.5, -3.5]);
+  assert.deepEqual(circuitPosition([[36, -4]], [0], 0), [36, -4]);
+  assert.equal(circuitPosition([], [], 10), null);
+  assert.equal(circuitPosition([[36, -4]], [0], NaN), null);
+});
 
 test('time at a position is the first time the rider got there', () => {
   assert.equal(timeAt(steady, 0), 0);

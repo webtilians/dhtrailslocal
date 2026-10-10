@@ -1,6 +1,6 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
-import {resample, speedSeries, gapSeries, segmentTimes} from './telemetry.mjs';
+import {resample, speedSeries, gapSeries, segmentTimes, circuitPosition} from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
@@ -15,6 +15,49 @@ const status = (message, type = '') => say($('status'), message, type);
 const when = iso => iso ? new Date(iso).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : '—';
 const runLabel = r => when(r.started_at) + ' · ' + formatMs(r.elapsed_ms);
 const circuitOf = id => catalog.find(c => c.id === id);
+const HIGHLIGHT = '#ffe066';
+let mapSelection = null, selectionLayer = null, charts = [], comparisonVersion = 0;
+
+function showSelection(circuit, {reveal = false} = {}) {
+  if (selectionLayer) view.map.removeLayer(selectionLayer);
+  selectionLayer = null;
+  charts.forEach(chart => chart?.setSelection(mapSelection?.kind === 'point' ? mapSelection.metres / 1000 : null));
+  document.querySelectorAll('#segments [data-segment]').forEach(button => {
+    const active = mapSelection?.kind === 'segment' && Number(button.dataset.segment) === mapSelection.index;
+    button.setAttribute('aria-pressed', String(active));
+    button.closest('td, th').classList.toggle('segment-selected', active);
+  });
+  $('clearMapSelection').hidden = !mapSelection;
+  if (!mapSelection) {
+    $('mapSelection').textContent = 'Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.';
+    return;
+  }
+  const distances = distanceSeries(circuit.points);
+  if (mapSelection.kind === 'point') {
+    const point = circuitPosition(circuit.points, distances, mapSelection.metres);
+    const label = Math.round(Math.min(distances.at(-1), mapSelection.metres)) + ' m desde la salida';
+    selectionLayer = L.circleMarker(point, {radius: 9, color: '#071423', weight: 3, fillColor: HIGHLIGHT, fillOpacity: 1})
+      .addTo(view.map).bindTooltip(label, {permanent: true, direction: 'top', offset: [0, -10]});
+    $('mapSelection').textContent = 'Punto seleccionado · ' + label;
+    if (reveal) view.map.panTo(point);
+  } else {
+    const bounds = [0, ...circuit.sectors.map(s => s.index), circuit.points.length - 1];
+    const start = bounds[mapSelection.index], end = bounds[mapSelection.index + 1];
+    const points = circuit.points.slice(start, end + 1).map(p => p.slice(0, 2));
+    selectionLayer = L.layerGroup([
+      L.polyline(points, {color: '#071423', weight: 12, opacity: 1}),
+      L.polyline(points, {color: HIGHLIGHT, weight: 7, opacity: 1}),
+    ]).addTo(view.map);
+    $('mapSelection').textContent = 'Sector S' + (mapSelection.index + 1) + ' resaltado · ' + Math.round(distances[start]) + '–' + Math.round(distances[end]) + ' m desde la salida';
+    if (reveal) view.fit(points, 45);
+  }
+  if (reveal) $('map').scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+function selectPoint(circuit, kilometres, {reveal = true} = {}) {
+  mapSelection = {kind: 'point', circuitId: circuit.id, metres: kilometres * 1000};
+  showSelection(circuit, {reveal});
+}
 
 async function loadRuns(keepCircuit) {
   runs = await shell.api.trainingRuns();
@@ -61,9 +104,15 @@ async function profileOf(id) {
 }
 
 async function compare() {
+  const version = ++comparisonVersion;
   const circuit = circuitOf($('circuitSelect').value);
+  if (mapSelection?.circuitId !== circuit?.id) mapSelection = null;
+  charts = [];
+  if (selectionLayer) view.map.removeLayer(selectionLayer);
+  selectionLayer = null;
   view.clear();
-  ['legend', 'speedChart', 'gapChart'].forEach(id => $(id).replaceChildren());
+  ['legend', 'speedChart', 'gapChart', 'segments'].forEach(id => $(id).replaceChildren());
+  showSelection(circuit);
   if (!circuit) {$('compareTag').textContent = '—'; return;}
   $('compareTag').textContent = circuit.name.toUpperCase();
   const pts = circuit.points.map(p => [p[0], p[1]]);
@@ -75,6 +124,7 @@ async function compare() {
     const profile = await profileOf(r.id);
     return {run: r, color: COLORS[i], label: runLabel(r), profile, samples: resample(profile, 10)};
   }));
+  if (version !== comparisonVersion) return;
   // Each run's own GPS line, in its colour.
   for (const d of data) view.add(L.polyline(d.profile.map(p => [p[2], p[3]]), {color: d.color, weight: 3, opacity: .95}))
     .bindTooltip(d.label, {sticky: true});
@@ -82,13 +132,15 @@ async function compare() {
   $('legend').replaceChildren(...data.map(d => node('span', {className: 'legend-item'}, [
     Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color}),
     node('span', {textContent: d.label + (d === reference ? ' · referencia' : '')})])));
-  lineChart($('speedChart'), {series: data.map(d => ({label: d.label, color: d.color,
+  charts.push(lineChart($('speedChart'), {series: data.map(d => ({label: d.label, color: d.color,
     points: speedSeries(d.samples).map(p => ({x: p.s / 1000, y: p.kmh === null ? null : Math.round(p.kmh * 10) / 10}))})),
-    yFormat: v => Math.round(v) + ' km/h'});
-  lineChart($('gapChart'), {series: data.map(d => ({label: d.label, color: d.color,
+    yFormat: v => Math.round(v) + ' km/h', onSelect: (x, options) => selectPoint(circuit, x, options)}));
+  charts.push(lineChart($('gapChart'), {series: data.map(d => ({label: d.label, color: d.color,
     points: gapSeries(d.samples, reference.samples).map(p => ({x: p.s / 1000, y: p.ms / 1000}))})),
-    yFormat: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' s', zero: true});
+    yFormat: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' s', zero: true,
+    onSelect: (x, options) => selectPoint(circuit, x, options)}));
   renderSegments(circuit, data, reference);
+  showSelection(circuit);
   const gates = gatesOf(circuit), referenceTimes = segmentTimes(reference.profile, gates);
   const worst = data.filter(d => d !== reference).map(d => {
     const lost = segmentTimes(d.profile, gates).map((t, i) => t - referenceTimes[i]);
@@ -104,14 +156,33 @@ function gatesOf(circuit) {
 function renderSegments(circuit, data, reference) {
   const times = data.map(d => segmentTimes(d.profile, gatesOf(circuit)));
   const best = times[0].map((_, i) => Math.min(...times.map(t => t[i])));
-  const head = node('tr', {}, ['Bajada', 'Total', ...times[0].map((_, i) => 'S' + (i + 1))].map(t => node('th', {textContent: t})));
+  const sectorButton = (text, i) => {
+    const button = node('button', {type: 'button', className: 'segment-button', textContent: text,
+      title: 'Ver sector S' + (i + 1) + ' en el mapa'});
+    button.dataset.segment = i;
+    button.setAttribute('aria-label', 'Ver sector S' + (i + 1) + ' en el mapa: ' + text);
+    button.addEventListener('click', () => {
+      mapSelection = {kind: 'segment', circuitId: circuit.id, index: i};
+      showSelection(circuit, {reveal: true});
+    });
+    return button;
+  };
+  const head = node('tr', {}, [node('th', {textContent: 'Bajada'}), node('th', {textContent: 'Total'}),
+    ...times[0].map((_, i) => node('th', {}, [sectorButton('S' + (i + 1), i)]))]);
   const rows = data.map((d, n) => node('tr', {}, [
     node('td', {}, [Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color}), node('span', {textContent: ' ' + when(d.run.started_at)})]),
     node('td', {className: 'time', textContent: formatMs(d.run.elapsed_ms) + (d === reference ? '' : ' (' + formatDelta(d.run.elapsed_ms - reference.run.elapsed_ms) + ')')}),
-    ...times[n].map((t, i) => node('td', {className: t === best[i] ? 'best' : '', textContent: formatMs(t)}))]));
+    ...times[n].map((t, i) => node('td', {className: t === best[i] ? 'best' : ''}, [sectorButton(formatMs(t), i)]))]));
   $('segments').replaceChildren(node('table', {className: 'standings'}, [node('thead', {}, [head]), node('tbody', {}, rows)]),
-    node('p', {className: 'help', textContent: 'En morado, el mejor tiempo de cada segmento entre las bajadas elegidas.'}));
+    node('p', {className: 'help', textContent: 'Pulsa un sector o su tiempo para verlo en amarillo en el mapa. En morado, el mejor tiempo de cada segmento.'}));
 }
+
+$('clearMapSelection').addEventListener('click', () => {
+  mapSelection = null;
+  const circuit = circuitOf($('circuitSelect').value);
+  showSelection(circuit);
+  if (circuit) view.fit(circuit.points.map(p => p.slice(0, 2)));
+});
 
 async function loadRoutes() {
   const routes = await shell.api.trainingRoutes();

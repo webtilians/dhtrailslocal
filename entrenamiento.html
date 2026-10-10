@@ -47,14 +47,15 @@
         <p class="help">Elige hasta 4 bajadas. La referencia es la más rápida de las elegidas.</p>
       </div>
       <div id="map" aria-label="Mapa con las bajadas superpuestas"></div>
+      <div class="map-footer"><span id="mapSelection" role="status" aria-live="polite">Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.</span><button id="clearMapSelection" class="text-btn" type="button" hidden>Quitar selección</button></div>
     </section>
     <section class="panel">
       <div class="panel-title"><h2><span>Velocidad</span></h2><span class="caps">KM/H A LO LARGO DEL CIRCUITO</span></div>
-      <div class="panel-content"><div id="legend" class="chart-legend"></div><div id="speedChart" class="chart"></div></div>
+      <div class="panel-content"><div id="legend" class="chart-legend"></div><div id="speedChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa.</p></div>
     </section>
     <section class="panel">
       <div class="panel-title"><h2><span>Diferencia de tiempo</span></h2><span class="caps">FRENTE A LA MÁS RÁPIDA · ARRIBA PIERDES</span></div>
-      <div class="panel-content"><div id="gapChart" class="chart"></div></div>
+      <div class="panel-content"><div id="gapChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa.</p></div>
     </section>
     <section class="panel">
       <div class="panel-title"><h2><span>Por segmentos</span></h2></div>
