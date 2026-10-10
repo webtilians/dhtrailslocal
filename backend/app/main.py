@@ -23,7 +23,7 @@ from .database import get_db
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone
 from .ratelimit import RateLimit
 from .schemas import AttemptIn, CircuitIn, Credentials, RegisterIn
-from .security import current_pilot, issue_token, password_hash, pilot_payload, verify_password
+from .security import current_pilot, issue_token, password_hash, pilot_payload, require_organizer, verify_password
 
 app=FastAPI(title="DH Trails Local API",version="0.6.0",description="GPS training and monthly competition API; times are GPS estimates")
 app.add_middleware(CORSMiddleware,allow_origins=CORS_ORIGINS,allow_methods=["GET","POST","PUT","DELETE"],allow_headers=["Authorization","Content-Type"])
@@ -137,6 +137,8 @@ def list_circuits(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
 
 @app.post("/api/circuits",status_code=201)
 def create_circuit(payload:CircuitIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    # Circuits are the organizers' job; riders only upload their GPS runs.
+    require_organizer(p)
     c=Circuit(owner_id=p.id,name=payload.name.strip(),reference_points=[])
     assign_circuit(c,payload)
     db.add(c)
@@ -150,6 +152,7 @@ def get_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(
 
 @app.put("/api/circuits/{circuit_id}")
 def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    require_organizer(p)
     c=circuit_for_user(db,circuit_id,p.id)
     refuse_if_published(c)
     # Delete old sector gates first: PostgreSQL enforces (circuit_id,sort_order)
@@ -163,6 +166,7 @@ def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,db:Session=Depends(get
 
 @app.delete("/api/circuits/{circuit_id}",status_code=204)
 def delete_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    require_organizer(p)
     c=circuit_for_user(db,circuit_id,p.id)
     refuse_if_published(c)
     db.delete(c)

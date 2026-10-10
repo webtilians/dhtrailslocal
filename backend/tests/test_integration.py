@@ -2,11 +2,21 @@
 from __future__ import annotations
 
 import uuid
+import pytest
 from fastapi.testclient import TestClient
+from app import config
 from app.main import app
 
-def pilot(client):
+@pytest.fixture
+def organizers(monkeypatch):
+    # Accounts registered through admin() become organizers: only they may create circuits.
+    emails=set()
+    monkeypatch.setattr(config,"ORGANIZER_EMAILS",emails)
+    return emails
+
+def pilot(client,organizers=None):
     email=f"rider-{uuid.uuid4().hex}@example.com"
+    if organizers is not None:organizers.add(email)
     p=client.post("/api/auth/register",json={"email":email,"password":"very-long-testing-password"})
     assert p.status_code==201,p.text
     return {"Authorization":"Bearer "+p.json()["access_token"]}
@@ -18,9 +28,15 @@ def circuit_payload(name="Santa Cruz"):
       "weakZones":[{"from":12,"to":15,"name":"Mala señal"}],
       "gateRadius":18}
 
-def test_auth_circuit_persistence_and_tenant_isolation():
+def test_only_organizers_create_circuits(organizers):
     with TestClient(app) as client:
-        a=pilot(client);b=pilot(client)
+        rider=pilot(client)
+        assert client.post("/api/circuits",json=circuit_payload(),headers=rider).status_code==403
+        assert client.get("/api/auth/me",headers=rider).json()["organizer"] is False
+
+def test_auth_circuit_persistence_and_tenant_isolation(organizers):
+    with TestClient(app) as client:
+        a=pilot(client,organizers);b=pilot(client,organizers)
         created=client.post("/api/circuits",json=circuit_payload(),headers=a)
         assert created.status_code==201,created.text
         cid=created.json()["id"]

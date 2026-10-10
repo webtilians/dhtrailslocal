@@ -46,5 +46,9 @@ def is_organizer(pilot:Pilot)->bool:
     # Read settings at call time so deployments and tests can change them.
     return pilot.email in config.ORGANIZER_EMAILS or (config.LOCAL_SINGLE_USER and pilot.id==config.LOCAL_PILOT_ID)
 
+def require_organizer(pilot:Pilot)->None:
+    if not is_organizer(pilot):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Solo la organización puede hacer esto")
+
 def pilot_payload(pilot:Pilot)->dict:
     return {"id":str(pilot.id),"email":pilot.email,"display_name":pilot.display_name,"organizer":is_organizer(pilot)}
