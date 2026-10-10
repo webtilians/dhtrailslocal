@@ -1,0 +1,8 @@
+# Written by deploy/vps/setup.sh into /etc/caddy/sites.d/. Caddy gets and renews the HTTPS certificate.
+__HOST__ {
+	encode gzip
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy 127.0.0.1:8100
+}

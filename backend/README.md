@@ -92,6 +92,27 @@ El servidor cronometra cada envío con `app/timing.py` y lo guarda como `timed_b
 
 `run.py` aplica la migración `0002` al arrancar.
 
+## Servidor público junto a LAIN (`deploy/vps`)
+
+La competición se publica en el mismo servidor que LAIN, con su propia dirección HTTPS (`https://dh.<ip-con-guiones>.sslip.io`). Caddy, que ya sirve LAIN, añade el sitio desde `/etc/caddy/sites.d/dhtrails.caddy`.
+
+| Pieza | Dónde |
+|---|---|
+| Código | `/opt/dhtrails` (rama en `/etc/dhtrails/branch`, por defecto `master`) |
+| Python | `/opt/dhtrails-venv` |
+| Configuración y secretos | `/etc/dhtrails/dhtrails.env` (solo root; se crea una vez) |
+| API | `dhtrails.service`, uvicorn en `127.0.0.1:8100`, máximo 400 MB de memoria |
+| Base de datos | PostgreSQL local, base `dhtrails`, sin contraseña: se entra con el usuario del sistema `dhtrails` |
+| Archivos GPS | `/var/lib/dhtrails/activities` |
+| Copias | `/var/backups/dhtrails`, diarias y antes de cada actualización, 14 días |
+
+Comandos en el servidor, como root:
+
+- Primera instalación: `git clone https://github.com/webtilians/dhtrailslocal.git /opt/dhtrails && DH_ORGANIZERS=tu@correo bash /opt/dhtrails/deploy/vps/setup.sh`
+- Actualizar desde GitHub: `dhtrails-update` (otra rama: `DH_BRANCH=nombre dhtrails-update`).
+- Código de invitación para los pilotos: `dhtrails-invite`; cambiarlo: `dhtrails-invite nuevo`.
+- Copia inmediata: `dhtrails-backup`. Estado y registro: `systemctl status dhtrails`, `journalctl -u dhtrails -n 50`.
+
 ## Pasar a un servidor de producción
 
 1. Haz un **pg_dump** de la base local y restáuralo con **pg_restore** en PostgreSQL del servidor.

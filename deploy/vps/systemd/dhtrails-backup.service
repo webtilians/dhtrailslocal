@@ -1,0 +1,7 @@
+[Unit]
+Description=DH Trails backup of the database and GPS files
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dhtrails-backup

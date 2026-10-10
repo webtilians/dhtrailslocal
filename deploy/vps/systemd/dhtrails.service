@@ -1,0 +1,25 @@
+[Unit]
+Description=DH Trails (FastAPI) - monthly MTB downhill competition
+Wants=network-online.target
+After=network-online.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+User=dhtrails
+Group=dhtrails
+WorkingDirectory=/opt/dhtrails/backend
+EnvironmentFile=/etc/dhtrails/dhtrails.env
+ExecStartPre=/opt/dhtrails-venv/bin/alembic upgrade head
+ExecStart=/opt/dhtrails-venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=3
+# Shares the machine with LAIN: never let DH Trails take its memory.
+MemoryMax=400M
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/dhtrails
+
+[Install]
+WantedBy=multi-user.target
