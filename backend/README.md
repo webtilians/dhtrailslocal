@@ -70,7 +70,7 @@ Las rutas completas **solo se suben al servidor cuando eliges guardarlas** en el
 
 En el editor local, en «02 Mis circuitos», selecciona Santa Cruz y pulsa «Guardar circuito seleccionado en servidor». Para moverlo desde GitHub Pages a localhost, exporta el JSON con «Exportar JSON» en tu navegador anterior e impórtalo en el editor local. La misma cuenta lo podrá recuperar desde otro navegador conectado a este servidor.
 
-## Competición mensual (v0.6)
+## Time trial, torneos y entrenamiento (v0.8)
 
 Variables de `backend/.env`:
 
@@ -79,18 +79,18 @@ Variables de `backend/.env`:
 | `ORGANIZER_EMAILS` | Correos (separados por comas) que pueden publicar circuitos y aprobar bajadas. En tu PC con `LOCAL_SINGLE_USER=true` el perfil local ya es organizador. |
 | `INVITE_CODE` | Vacío (por defecto): inscripción abierta. Si tiene valor, crear cuenta exige este código. El registro está limitado a 5 cuentas por hora y dirección. |
 | `COMPETITION_TIMEZONE` | Zona horaria de los meses de la clasificación (por defecto `Europe/Madrid`). |
-| `ENTRY_MAX_AGE_DAYS` | Antigüedad máxima de una bajada al enviarla (por defecto 7 días). |
 | `API_HOST`, `API_PORT` | Dirección y puerto de `python run.py`. |
 
-Endpoints nuevos (documentados en `/docs`):
+Endpoints (documentados en `/docs`):
 
-- Públicos: `GET /api/public/circuits`, `GET /api/public/circuits/{id}/leaderboard?month=AAAA-MM`.
-- Pilotos: `PUT /api/me/profile` (nombre en la clasificación), `POST /api/competition/entries` (multipart `circuit_id` + `file`), `GET /api/competition/entries`.
-- Organización: `POST /api/circuits/{id}/publish`, `GET /api/competition/review?status=pending`, `POST /api/competition/entries/{id}/review`, `GET /api/competition/entries/{id}/file`.
+- Públicos: `GET /api/public/circuits` (todos los circuitos guardados), `GET /api/public/tournaments`, `GET /api/public/tournaments/{id}` (torneo, circuito y clasificación).
+- Organización: `POST/PUT/DELETE /api/circuits`, `POST /api/tournaments`, `DELETE /api/tournaments/{id}` (sin bajadas), `GET /api/tournaments/{id}/entries`, `POST /api/entries/{id}/review`.
+- Pilotos: `POST /api/auth/register` (con `display_name`), `PUT /api/me/profile`, `POST /api/tournaments/{id}/entries` (multipart `file`), `GET /api/tournaments/{id}/entries/mine`, `GET /api/entries/{id}/file`.
+- Entrenamiento: `POST /api/training/routes` (multipart `file`; busca todos los circuitos en la ruta), `GET /api/training/routes`, `DELETE /api/training/routes/{id}`, `GET /api/training/runs?circuit_id=`, `GET /api/training/runs/{id}` (con perfil).
 
-El servidor cronometra cada envío con `app/timing.py` y lo guarda como `timed_by='server'` y `review_status='pending'`. La clasificación solo usa bajadas aprobadas cronometradas por el servidor. Los intentos de entrenamiento del editor siguen siendo privados y no entran en la clasificación.
+El servidor cronometra cada bajada con `app/timing.py`. Una bajada de torneo entra sola en la clasificación (`review_status='approved'`) si se hizo en las fechas del torneo, coincide con el circuito al menos `min_match` y no tiene tramos imposibles; si no, queda `rejected` con el motivo. Las bajadas de entrenamiento no tienen torneo (`tournament_id` nulo) y nunca entran en ninguna clasificación.
 
-`run.py` aplica la migración `0002` al arrancar.
+`run.py` aplica las migraciones pendientes (la `0003` crea los torneos) al arrancar.
 
 ## Servidor público junto a LAIN (`deploy/vps`)
 

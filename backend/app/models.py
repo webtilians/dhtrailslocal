@@ -2,8 +2,10 @@
 import uuid
 from datetime import datetime, timezone
 
+from datetime import date
+
 from sqlalchemy import (
-    DateTime, ForeignKey, Integer, String, Boolean, Text, CheckConstraint,
+    Date, DateTime, ForeignKey, Integer, String, Boolean, Text, CheckConstraint,
     UniqueConstraint, Index, Float
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -71,12 +73,32 @@ class Activity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     __table_args__=(CheckConstraint("format IN ('gpx','tcx')", name="activity_format"),)
 
+class Tournament(Base):
+    """A time trial on one circuit between two dates (local calendar days, both included)."""
+    __tablename__ = "tournaments"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    circuit_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("circuits.id", ondelete="RESTRICT"), nullable=False, index=True)
+    starts_on: Mapped[date] = mapped_column(Date, nullable=False)
+    ends_on: Mapped[date] = mapped_column(Date, nullable=False)
+    # Share of the run that must follow the circuit line to enter the standings automatically.
+    min_match: Mapped[float] = mapped_column(Float, nullable=False, default=0.85)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pilots.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    circuit: Mapped[Circuit] = relationship()
+    __table_args__=(
+        CheckConstraint("ends_on >= starts_on", name="tournament_dates"),
+        CheckConstraint("min_match BETWEEN 0.5 AND 1", name="tournament_min_match"),
+    )
+
 class Attempt(Base):
     __tablename__ = "training_attempts"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     pilot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False, index=True)
     circuit_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("circuits.id", ondelete="CASCADE"), nullable=False, index=True)
     activity_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("gps_activities.id", ondelete="SET NULL"))
+    # Set for time trial entries; NULL for training runs.
+    tournament_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("tournaments.id", ondelete="CASCADE"), index=True)
     source_filename: Mapped[str | None] = mapped_column(String(200))
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     elapsed_ms: Mapped[int | None] = mapped_column(Integer)
@@ -89,6 +111,8 @@ class Attempt(Base):
     review_status: Mapped[str | None] = mapped_column(String(8))
     review_note: Mapped[str | None] = mapped_column(String(300))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # [metres along the circuit, ms since the start, lat, lon] per reliable fix (server-timed runs).
+    profile: Mapped[list | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     splits: Mapped[list["AttemptSplit"]] = relationship(cascade="all, delete-orphan", order_by="AttemptSplit.sort_order", passive_deletes=True)
     __table_args__=(

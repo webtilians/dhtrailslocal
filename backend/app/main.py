@@ -12,12 +12,13 @@ from defusedxml.ElementTree import fromstring as safe_xml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from sqlalchemy import select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from . import config
 from .competition import router as competition_router
+from .training import router as training_router
 from .config import CORS_ORIGINS, GPS_STORAGE_DIR, MAX_UPLOAD_BYTES, REPO_ROOT, require_secret, LOCAL_SINGLE_USER, LOCAL_PILOT_ID
 from .database import get_db
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone
@@ -28,6 +29,7 @@ from .security import current_pilot, issue_token, password_hash, pilot_payload, 
 app=FastAPI(title="DH Trails Local API",version="0.6.0",description="GPS training and monthly competition API; times are GPS estimates")
 app.add_middleware(CORSMiddleware,allow_origins=CORS_ORIGINS,allow_methods=["GET","POST","PUT","DELETE"],allow_headers=["Authorization","Content-Type"])
 app.include_router(competition_router)
+app.include_router(training_router)
 
 # Per client address: slows password guessing and mass sign-up on a public server.
 login_limit=RateLimit(10,300)
@@ -81,7 +83,10 @@ def register(credentials:RegisterIn,request:Request,db:Session=Depends(get_db)):
     email=str(credentials.email).strip().lower()
     if db.scalar(select(Pilot.id).where(Pilot.email==email)):
         raise HTTPException(409,"El correo ya está registrado")
-    p=Pilot(email=email,password_hash=password_hash(credentials.password))
+    name=credentials.display_name
+    if name and db.scalar(select(Pilot.id).where(func.lower(Pilot.display_name)==name.lower())):
+        raise HTTPException(409,"Ese nombre de piloto ya está en uso")
+    p=Pilot(email=email,password_hash=password_hash(credentials.password),display_name=name)
     db.add(p)
     try: db.commit()
     except IntegrityError:
@@ -128,7 +133,7 @@ def assign_circuit(c:Circuit,payload:CircuitIn):
 def refuse_if_published(c:Circuit):
     # Ranked splits refer to these exact gates; changing them would corrupt the standings.
     if c.published_at is not None:
-        raise HTTPException(409,"Circuito publicado en la competición: su trazado y sectores ya no se pueden cambiar ni borrar")
+        raise HTTPException(409,"Este circuito se usa en un torneo: su trazado y sus segmentos ya no se pueden cambiar ni borrar")
 
 @app.get("/api/circuits")
 def list_circuits(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
@@ -255,23 +260,29 @@ def download_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=D
 @app.delete("/api/activities/{activity_id}",status_code=204)
 def delete_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     a=activity_for_user(db,activity_id,p)
-    if db.scalar(select(Attempt.id).where(Attempt.activity_id==a.id,Attempt.review_status.is_not(None)).limit(1)):
-        raise HTTPException(409,"Este GPS es la prueba de una bajada presentada a la competición y no se puede borrar")
+    if db.scalar(select(Attempt.id).where(Attempt.activity_id==a.id,Attempt.tournament_id.is_not(None)).limit(1)):
+        raise HTTPException(409,"Este GPS es una bajada presentada a un torneo y no se puede borrar")
     path=GPS_STORAGE_DIR/str(a.owner_id)/a.storage_name
+    # Training runs found in this route go with it.
+    db.execute(delete(Attempt).where(Attempt.activity_id==a.id,Attempt.timed_by=="server"))
     db.delete(a);db.commit()
     path.unlink(missing_ok=True)
     return Response(status_code=204)
 
 # Serve ONLY the public frontend files. Never mount the repository root:
 # that would expose backend/.env, database passwords, uploads and Git metadata.
-_PUBLIC_FILES={"index.html","editor.html","editor.css","editor.mjs","gps-engine.mjs","api-client.mjs","sector-comparison.mjs",
-               "competicion.html","competition.mjs","competition-core.mjs"}
+_PUBLIC_FILES={"index.html","entrenamiento.html","circuitos.html","torneos.html","app.css","app-shell.mjs",
+               "timetrial.mjs","entrenamiento.mjs","circuitos.mjs","torneos.mjs","telemetry.mjs","charts.mjs",
+               "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs",
+               "editor.html","competicion.html"}  # the last two only redirect old links
+# Pages and modules change together on every update: browsers must check before reusing a copy.
+_REVALIDATE={"Cache-Control":"no-cache"}
 @app.get("/",include_in_schema=False)
 def home():
-    return FileResponse(REPO_ROOT/"index.html")
+    return FileResponse(REPO_ROOT/"index.html",headers=_REVALIDATE)
 
 @app.get("/{asset_name}",include_in_schema=False)
 def frontend_asset(asset_name:str):
     if asset_name not in _PUBLIC_FILES:
         raise HTTPException(404,"Recurso no encontrado")
-    return FileResponse(REPO_ROOT/asset_name)
+    return FileResponse(REPO_ROOT/asset_name,headers=_REVALIDATE)
