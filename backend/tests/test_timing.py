@@ -80,3 +80,23 @@ def test_tcx_is_read():
 def test_rejects_invalid_files(data, ext):
     with pytest.raises(GpsError):
         parse_gps(data, ext)
+
+# Gates follow the position along the circuit, not a radius around one point.
+def east_degrees(metres):
+    return metres / (111195 * math.cos(math.radians(36.74)))
+
+def test_gate_passed_35_m_to_one_side_is_still_timed():
+    shifted = [Fix(p.lat, p.lon + east_degrees(35), p.ele, p.time) if 55 <= i <= 69 else p for i, p in enumerate(route())]
+    run = detect_attempts(shifted, circuit())[0]
+    assert abs(run.seconds - 154) < 1.1
+    assert run.missing == 0 and all(s > 0 for s in run.splits)
+    assert run.status == "revisar"
+    assert any(issue.startswith("te separas hasta 35 m") for issue in run.issues)
+
+def test_waiting_at_the_start_line_is_not_timed():
+    r = route()
+    # Rolling back and forth over the line for a minute; the last position is behind it.
+    wait = [Fix(r[10].lat + (-0.00002 if j % 2 == 0 else 0.00002), r[10].lon, r[10].ele, r[10].time + j * 2000) for j in range(30)]
+    later = [Fix(p.lat, p.lon, p.ele, p.time + 60000) for p in r[10:]]
+    runs = detect_attempts(r[:10] + wait + later, circuit())
+    assert len(runs) == 1 and abs(runs[0].seconds - 154) < 1.1
