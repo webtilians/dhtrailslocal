@@ -162,6 +162,91 @@ def test_training_finds_saved_circuits_in_any_route(organizer):
         assert client.delete(f"/api/training/routes/{routes[0]['id']}", headers=rider).status_code == 204
         assert client.get("/api/training/runs", headers=rider).json() == []
 
+@pytest.mark.parametrize("rejected", [False, True], ids=["approved", "rejected"])
+def test_time_trial_entries_are_available_for_training_comparison(organizer, rejected):
+    with TestClient(app) as client:
+        org = account(client, email=organizer)
+        cid = new_circuit(client, org)
+        tid = new_tournament(client, org, cid)
+        rider = account(client, "Training " + uuid.uuid4().hex[:6])
+        other = account(client)
+        points = fixes(recent(30), 1500 if rejected else 2000)
+        if rejected:
+            points = points[:61] + [(lat, lon, ele, t - 22500) for lat, lon, ele, t in points[80:]]
+        entry = upload(client, rider, f"/api/tournaments/{tid}/entries", gpx(points))
+        assert entry.status_code == 201, entry.text
+        expected_status = "rejected" if rejected else "approved"
+        assert entry.json()["review_status"] == expected_status
+        entry_id = entry.json()["id"]
+
+        # Entrenamiento loads the unfiltered list, then filters by circuit in the browser.
+        for path in ("/api/training/runs", f"/api/training/runs?circuit_id={cid}"):
+            response = client.get(path, headers=rider)
+            assert response.status_code == 200, response.text
+            assert [r["id"] for r in response.json()] == [entry_id]
+            run = response.json()[0]
+            assert run["circuit_id"] == cid and run["circuit_name"] == "Santa Cruz DH"
+            assert run["tournament_name"] == "Torneo de prueba"
+            assert run["review_status"] == expected_status
+        detail = client.get(f"/api/training/runs/{entry_id}", headers=rider)
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["profile"][0][:2] == [0, 0]
+        assert len(detail.json()["profile"]) > 20
+        assert abs(detail.json()["profile"][-1][1] - run["elapsed_ms"]) <= 1
+        assert client.get("/api/training/routes", headers=rider).json() == []
+        assert client.get("/api/training/runs", headers=other).json() == []
+        assert client.get(f"/api/training/runs/{entry_id}", headers=other).status_code == 404
+        assert client.get(f"/api/training/runs/{entry_id}", headers=org).status_code == 404
+        assert client.get("/api/training/runs").status_code in (401, 403)
+
+
+def test_training_accepts_entry_file_without_duplicate_runs_or_losing_evidence(organizer):
+    with TestClient(app) as client:
+        org = account(client, email=organizer)
+        cid = new_circuit(client, org)
+        far = new_circuit(client, org, "Other circuit", lat_shift=0.05)
+        tid = new_tournament(client, org, cid)
+        rider = account(client, "Import " + uuid.uuid4().hex[:6])
+        other = account(client)
+        data = gpx(fixes(recent(30), 2000))
+        entry = upload(client, rider, f"/api/tournaments/{tid}/entries", data)
+        assert entry.status_code == 201, entry.text
+        entry_id = entry.json()["id"]
+        board_before = client.get(f"/api/public/tournaments/{tid}").json()
+
+        imported = upload(client, rider, "/api/training/routes", data, "entreno.gpx")
+        assert imported.status_code == 201, imported.text
+        route_id = imported.json()["activity"]["id"]
+        training_run = next(r for r in imported.json()["runs"] if r["circuit_id"] == cid)
+        assert training_run["id"] != entry_id
+        assert training_run["tournament_name"] is None
+        routes = client.get("/api/training/routes", headers=rider).json()
+        assert len(routes) == 1 and routes[0]["id"] == route_id
+        assert routes[0]["filename"] == "entreno.gpx" and routes[0]["runs"] >= 1
+        for path in ("/api/training/runs", f"/api/training/runs?circuit_id={cid}"):
+            response = client.get(path, headers=rider)
+            assert response.status_code == 200, response.text
+            assert [r["id"] for r in response.json() if r["circuit_id"] == cid] == [entry_id]
+        assert client.get(f"/api/training/runs?circuit_id={far}", headers=rider).json() == []
+        # A renamed copy remains a duplicate; another rider can import the same bytes.
+        assert upload(client, rider, "/api/training/routes", data, "renamed.gpx").status_code == 409
+        assert upload(client, other, "/api/training/routes", data).status_code == 201
+        assert client.delete(f"/api/training/routes/{route_id}", headers=other).status_code == 404
+
+        entry_detail = client.get(f"/api/training/runs/{entry_id}", headers=rider).json()
+        evidence_id = entry_detail["activity_id"]
+        assert evidence_id != route_id
+        assert client.delete(f"/api/training/routes/{evidence_id}", headers=rider).status_code == 409
+        assert client.delete(f"/api/training/routes/{route_id}", headers=rider).status_code == 204
+        assert client.get("/api/training/routes", headers=rider).json() == []
+        assert client.get(f"/api/training/runs/{training_run['id']}", headers=rider).status_code == 404
+        remaining = client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()
+        assert [r["id"] for r in remaining] == [entry_id]
+        evidence = client.get(f"/api/entries/{entry_id}/file", headers=rider)
+        assert evidence.status_code == 200 and evidence.content == data
+        assert client.get(f"/api/public/tournaments/{tid}").json() == board_before
+
+
 def test_sign_up_takes_the_rider_name():
     with TestClient(app) as client:
         name = "Nombre " + uuid.uuid4().hex[:6]
