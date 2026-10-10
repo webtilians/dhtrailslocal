@@ -51,7 +51,7 @@ function renderRunList() {
     const chip = node('i', {className: 'chip'});
     if (slot >= 0) chip.style.background = COLORS[slot];
     return node('label', {className: 'run-option' + (slot >= 0 ? ' on' : '')}, [box, chip,
-      node('span', {textContent: runLabel(r)}), node('small', {textContent: r.source_filename || ''})]);
+      node('span', {textContent: runLabel(r)}), node('small', {textContent: r.tournament_name ? 'Torneo · ' + r.tournament_name : r.source_filename || ''})]);
   }));
 }
 
