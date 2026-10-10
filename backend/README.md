@@ -70,6 +70,28 @@ Las rutas completas **solo se suben al servidor cuando eliges guardarlas** en el
 
 En el editor local, en «02 Mis circuitos», selecciona Santa Cruz y pulsa «Guardar circuito seleccionado en servidor». Para moverlo desde GitHub Pages a localhost, exporta el JSON con «Exportar JSON» en tu navegador anterior e impórtalo en el editor local. La misma cuenta lo podrá recuperar desde otro navegador conectado a este servidor.
 
+## Competición mensual (v0.6)
+
+Variables de `backend/.env`:
+
+| Variable | Uso |
+|---|---|
+| `ORGANIZER_EMAILS` | Correos (separados por comas) que pueden publicar circuitos y aprobar bajadas. En tu PC con `LOCAL_SINGLE_USER=true` el perfil local ya es organizador. |
+| `INVITE_CODE` | Si tiene valor, crear cuenta exige este código. Imprescindible en un servidor público. |
+| `COMPETITION_TIMEZONE` | Zona horaria de los meses de la clasificación (por defecto `Europe/Madrid`). |
+| `ENTRY_MAX_AGE_DAYS` | Antigüedad máxima de una bajada al enviarla (por defecto 7 días). |
+| `API_HOST`, `API_PORT` | Dirección y puerto de `python run.py`. |
+
+Endpoints nuevos (documentados en `/docs`):
+
+- Públicos: `GET /api/public/circuits`, `GET /api/public/circuits/{id}/leaderboard?month=AAAA-MM`.
+- Pilotos: `PUT /api/me/profile` (nombre en la clasificación), `POST /api/competition/entries` (multipart `circuit_id` + `file`), `GET /api/competition/entries`.
+- Organización: `POST /api/circuits/{id}/publish`, `GET /api/competition/review?status=pending`, `POST /api/competition/entries/{id}/review`, `GET /api/competition/entries/{id}/file`.
+
+El servidor cronometra cada envío con `app/timing.py` y lo guarda como `timed_by='server'` y `review_status='pending'`. La clasificación solo usa bajadas aprobadas cronometradas por el servidor. Los intentos de entrenamiento del editor siguen siendo privados y no entran en la clasificación.
+
+`run.py` aplica la migración `0002` al arrancar.
+
 ## Pasar a un servidor de producción
 
 1. Haz un **pg_dump** de la base local y restáuralo con **pg_restore** en PostgreSQL del servidor.
@@ -84,8 +106,8 @@ En el editor local, en «02 Mis circuitos», selecciona Santa Cruz y pulsa «Gua
 
 ## Pruebas
 
-- Pruebas de validación local: `python -m pytest backend/tests/test_validation.py` desde la carpeta `backend` (usa `python -m pytest tests/test_validation.py`).
-- Integración real: con PostgreSQL local disponible y migrado, `python -m pytest -q`.
+- Pruebas sin base de datos, desde `backend`: `python -m pytest tests/test_validation.py tests/test_timing.py tests/test_frontend_assets.py`.
+- Integración real: con un PostgreSQL **de pruebas** migrado, `python -m pytest -q`. No la ejecutes contra tu base de datos real: crea pilotos y circuitos de prueba.
 - GitHub Actions arranca un PostgreSQL 16 temporal, aplica Alembic y prueba creación/login, aislamiento de usuarios, circuitos, sectores, intentos, subida/descarga privada de GPX, y que las rutas secretas no estén servidas.
 - Documentación OpenAPI interactiva: /docs.
 

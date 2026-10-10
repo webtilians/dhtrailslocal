@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
 
+from . import config
 from .config import require_secret
 from .database import get_db
 from .models import Pilot
@@ -40,3 +41,10 @@ def current_pilot(
     pilot=db.get(Pilot,user_id)
     if not pilot:raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,detail="Piloto no encontrado")
     return pilot
+
+def is_organizer(pilot:Pilot)->bool:
+    # Read settings at call time so deployments and tests can change them.
+    return pilot.email in config.ORGANIZER_EMAILS or (config.LOCAL_SINGLE_USER and pilot.id==config.LOCAL_PILOT_ID)
+
+def pilot_payload(pilot:Pilot)->dict:
+    return {"id":str(pilot.id),"email":pilot.email,"display_name":pilot.display_name,"organizer":is_organizer(pilot)}

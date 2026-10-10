@@ -43,3 +43,25 @@ input:not([type=file]),select{width:100%;border:1px solid #385a76;padding:11px 1
 .comparison-table tbody tr:hover,.comparison-table tbody tr:focus-visible{outline:1px solid #52a7d8;background:#1a3d59}
 .comparison-table td:first-child{max-width:145px;overflow-wrap:anywhere}
 @media(max-width:720px){.comparison-pickers{grid-template-columns:1fr}.comparison-table{font-size:10px}.comparison-table th,.comparison-table td{padding:9px 4px}}
+
+/* v0.6 — monthly competition standings and review */
+.standings-wrap{overflow-x:auto;padding:0 0 6px}
+.standings{border-collapse:collapse;width:100%;min-width:460px;font-variant-numeric:tabular-nums;font-size:12px}
+.standings th{text-align:left;color:#9bbbd4;font-weight:700;background:#102b41;padding:10px 9px;white-space:nowrap}
+.standings td{padding:10px 9px;border-bottom:1px solid #28465b;white-space:nowrap}
+.standings tbody tr{cursor:pointer}
+.standings tbody tr:hover,.standings tbody tr:focus-visible{outline:1px solid #52a7d8;background:#1a3d59}
+.standings tbody tr.selected{background:#163a57}
+.standings .pos{font:800 21px 'Barlow Condensed',sans-serif;color:#cfe6f8;width:44px}
+.standings tbody tr:first-child .pos{color:#ffd166}
+.standings .time{font:800 19px 'Barlow Condensed',sans-serif}
+.standings .lead{color:#7df0be;font-weight:800}
+.standings .gap{color:#ff97a3}
+.standings .best{color:#d7a2ff;font-weight:800}
+.board-empty{padding:20px 18px;margin:0;color:#9eb2c7;font-size:13px;line-height:1.6}
+.entry-actions{display:flex;flex-wrap:wrap;gap:7px;padding:0 13px 13px}
+.entry-actions input{flex-basis:100%}
+.entry-actions .btn{flex:1;padding:10px 8px}
+.badge.bad{background:#4a1f2a;color:#ffb3bd}
+#myEntries .item{align-items:flex-start;line-height:1.5}
+#myEntries .badge{white-space:nowrap}

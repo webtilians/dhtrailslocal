@@ -25,5 +25,7 @@ jobs:
           node --check editor.mjs
           node --check api-client.mjs
           node --check sector-comparison.mjs
+          node --check competition.mjs
+          node --check competition-core.mjs
       - name: Test geometry, storage and cloud mapping
         run: node --test tests/*.test.mjs

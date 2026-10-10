@@ -35,8 +35,11 @@ jobs:
           test -s editor.css
           test -s api-client.mjs
           test -s sector-comparison.mjs
+          test -s competicion.html
+          test -s competition.mjs
+          test -s competition-core.mjs
           mkdir -p _site
-          cp index.html editor.html editor.css editor.mjs gps-engine.mjs api-client.mjs sector-comparison.mjs _site/
+          cp index.html editor.html editor.css editor.mjs gps-engine.mjs api-client.mjs sector-comparison.mjs competicion.html competition.mjs competition-core.mjs _site/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

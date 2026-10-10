@@ -1,5 +1,5 @@
-// DH Trails Local v0.4 — public FastAPI client (no Supabase).
-// Same-origin when run from http://127.0.0.1:8000/editor.html
+// DH Trails Local v0.6 — public FastAPI client (no Supabase).
+// Same-origin when the page is served by FastAPI (this PC or the public server).
 const ENDPOINT_CONFIG='dhtrailslocal:api:url';
 
 export function validateApiUrl(raw) {
@@ -21,6 +21,16 @@ export function getCloudConfig() {
     if(saved)return validateApiUrl(saved);
   }catch{}
   return null;
+}
+// A page served by FastAPI itself uses its own origin; GitHub Pages falls back to the saved URL.
+export async function discoverApi() {
+  if(typeof window!=='undefined' && /^https?:$/.test(window.location.protocol)) {
+    try {
+      const response=await fetch(window.location.origin+'/api/health',{cache:'no-store'});
+      if(response.ok && (await response.json())?.service==='dhtrailslocal-fastapi')return validateApiUrl(window.location.origin);
+    }catch{}
+  }
+  return getCloudConfig();
 }
 export function setLocalCloudConfig(raw) {
   const safe=validateApiUrl(raw);
@@ -44,7 +54,7 @@ export function createCloudApi(config) {
     })}catch(e){throw new Error('No se puede acceder a FastAPI en '+url+'. ¿Está arrancado python run.py?')}
     if(!response.ok){
       let info;try{info=await response.json()}catch{}
-      if(response.status===401)throw new Error('Sesión caducada. Vuelve a iniciar sesión.');
+      if(response.status===401&&!path.startsWith('/auth/'))throw new Error('Sesión caducada. Vuelve a iniciar sesión.');
       const detail=info?.detail;
       throw new Error(typeof detail==='string'?detail:JSON.stringify(detail||response.statusText));
     }
@@ -74,8 +84,8 @@ export function createCloudApi(config) {
       persistToken(result.access_token);
       return {user:result.user,session:{user:result.user}};
     },
-    async signUp(email,password){
-      const result=await request('/auth/register',{method:'POST',body:{email,password}});
+    async signUp(email,password,inviteCode){
+      const result=await request('/auth/register',{method:'POST',body:{email,password,invite_code:inviteCode||null}});
       persistToken(result.access_token);
       return {user:result.user,session:{user:result.user}};
     },
@@ -130,6 +140,26 @@ export function createCloudApi(config) {
       const blob=await request('/activities/'+encodeURIComponent(id)+'/file');
       return {blob,item};
     },
-    async deleteActivity(id){return request('/activities/'+encodeURIComponent(id),{method:'DELETE'})}
+    async deleteActivity(id){return request('/activities/'+encodeURIComponent(id),{method:'DELETE'})},
+    // v0.6 monthly competition
+    async me(){return request('/auth/me')},
+    async setDisplayName(name){return request('/me/profile',{method:'PUT',body:{display_name:name}})},
+    async publicCircuits(){return request('/public/circuits')},
+    async leaderboard(circuitId,month){
+      return request('/public/circuits/'+encodeURIComponent(circuitId)+'/leaderboard'+(month?'?month='+encodeURIComponent(month):''));
+    },
+    async publishCircuit(id){return request('/circuits/'+encodeURIComponent(id)+'/publish',{method:'POST'})},
+    async submitEntry(circuitId,file){
+      const data=new FormData();
+      data.append('circuit_id',circuitId);
+      data.append('file',file,file.name);
+      return request('/competition/entries',{method:'POST',body:data,form:true});
+    },
+    async myEntries(){return request('/competition/entries')},
+    async reviewQueue(status='pending'){return request('/competition/review?status='+encodeURIComponent(status))},
+    async reviewEntry(id,decision,note){
+      return request('/competition/entries/'+encodeURIComponent(id)+'/review',{method:'POST',body:{decision,note:note||null}});
+    },
+    async entryFile(id){return request('/competition/entries/'+encodeURIComponent(id)+'/file')}
   };
 }

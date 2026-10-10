@@ -1,5 +1,5 @@
 import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
-import {getCloudConfig, setLocalCloudConfig, createCloudApi} from './api-client.mjs';
+import {discoverApi, setLocalCloudConfig, createCloudApi} from './api-client.mjs';
 import {compareSectorTimes, formatMs, formatDelta} from './sector-comparison.mjs';
 
 const $ = id => document.getElementById(id);
@@ -646,15 +646,15 @@ $('cloudPull').addEventListener('click',async()=>{
   }catch(err){cloudMessage('No se pudieron recuperar circuitos: '+err.message,'error')}
   finally{btn.disabled=false;}
 });
-const initialCloudConfig=getCloudConfig();
-if(initialCloudConfig) {
-  $('cloudUrl').value=initialCloudConfig.url;
-  connectCloud(initialCloudConfig).catch(err=>cloudMessage('Error de conexión: '+err.message,'error'));
-}else{
+discoverApi().then(config=>{
+  if(config){
+    $('cloudUrl').value=config.url;
+    return connectCloud(config);
+  }
   $('cloudConfigDetails').open=false;
   reflectCloudUser();
   cloudMessage('Versión web: guardado en este navegador. La base de datos está disponible al abrir la aplicación en tu PC.');
-}
+}).catch(err=>cloudMessage('Error de conexión: '+err.message,'error'));
 fillLibrary();
 if(selectedCircuit()){viewCircuit(selectedCircuit());status('Biblioteca local de '+circuits.length+' circuito(s) cargada. Los JSON exportados son tu copia de seguridad.');}
 else{refreshDraft();if(storageProblem)status('El almacenamiento del navegador no está disponible o contiene datos inválidos: '+storageProblem+'. Usa siempre una copia JSON.','error');}

@@ -18,6 +18,7 @@ class Pilot(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(254), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(30), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 class Circuit(Base):
@@ -27,6 +28,8 @@ class Circuit(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     reference_points: Mapped[list] = mapped_column(JSONB, nullable=False)
     gate_radius_m: Mapped[int] = mapped_column(Integer, nullable=False, default=18)
+    # Set once by an organizer: the circuit joins the monthly competition and its gates are frozen.
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     sectors: Mapped[list["Sector"]] = relationship(back_populates="circuit", cascade="all, delete-orphan", order_by="Sector.sort_order", passive_deletes=True)
@@ -64,6 +67,7 @@ class Activity(Base):
     gps_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     distance_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     __table_args__=(CheckConstraint("format IN ('gpx','tcx')", name="activity_format"),)
 
@@ -79,12 +83,21 @@ class Attempt(Base):
     confidence: Mapped[float | None] = mapped_column(Float)
     gps_status: Mapped[str] = mapped_column(String(12), nullable=False, default="review")
     notes: Mapped[str | None] = mapped_column(String(500))
+    # 'server' times come from the uploaded GPS file; only those can be ranked.
+    timed_by: Mapped[str] = mapped_column(String(6), nullable=False, default="client", server_default="client")
+    # NULL for private training; competition entries go pending -> approved/rejected.
+    review_status: Mapped[str | None] = mapped_column(String(8))
+    review_note: Mapped[str | None] = mapped_column(String(300))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     splits: Mapped[list["AttemptSplit"]] = relationship(cascade="all, delete-orphan", order_by="AttemptSplit.sort_order", passive_deletes=True)
     __table_args__=(
         CheckConstraint("elapsed_ms >= 0 OR elapsed_ms IS NULL", name="attempt_elapsed_positive"),
         CheckConstraint("confidence BETWEEN 0 AND 1 OR confidence IS NULL", name="attempt_confidence"),
         CheckConstraint("gps_status IN ('review','compatible')", name="attempt_status"),
+        CheckConstraint("timed_by IN ('client','server')", name="attempt_timed_by"),
+        CheckConstraint("review_status IN ('pending','approved','rejected') OR review_status IS NULL", name="attempt_review_status"),
+        Index("ix_training_attempts_ranking", "circuit_id", "review_status"),
     )
 
 class AttemptSplit(Base):
