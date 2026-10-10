@@ -1,4 +1,4 @@
-import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, referenceStops, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
+import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, referenceStops, withoutStops, readCircuitCollection, writeCircuitCollection} from './gps-engine.mjs';
 import {discoverApi, setLocalCloudConfig, createCloudApi} from './api-client.mjs';
 import {compareSectorTimes, formatMs, formatDelta} from './sector-comparison.mjs';
 
@@ -51,10 +51,11 @@ function downloadCircuit(c) {
 }
 function fillLibrary() {
   const select=$('circuitSelect');select.replaceChildren();
-  if(!circuits.length){const opt=document.createElement('option');opt.textContent='Aún no hay circuitos';opt.value='';select.appendChild(opt);selectedId='';return;}
-  circuits.forEach(c=>{const opt=document.createElement('option');opt.value=c.id;opt.textContent=c.name;select.appendChild(opt)});
+  if(!circuits.length){const opt=document.createElement('option');opt.textContent='Aún no hay circuitos';opt.value='';select.appendChild(opt);selectedId='';showCircuitState();return;}
+  circuits.forEach(c=>{const opt=document.createElement('option');opt.value=c.id;opt.textContent=c.name+(c.published?' · publicado':'');select.appendChild(opt)});
   if(!circuits.some(c=>c.id===selectedId))selectedId=circuits[0].id;
   select.value=selectedId;
+  showCircuitState();
 }
 function showTool(t) {
   activeTool=t;
@@ -191,12 +192,15 @@ $('routeFile').addEventListener('change',async e=>{
   }catch(err){status(err.message,'error')}
 });
 $('saveCircuit').addEventListener('click',async()=>{
-  let circuit;
+  let circuit, stopNote='';
   try {
     if(!source)throw Error('Importa primero una ruta GPX/TCX para crear un circuito.');
     if(draft.start===null||draft.finish===null)throw Error('Debes marcar la salida y la meta antes de guardar.');
     if(!referenceIsClean())return;
-    circuit=buildCircuit($('circuitName').value,source,draft.start,draft.finish,draft.sectors,draft.zones);
+    // Stops never belong to the circuit line: they are cut out before building it.
+    const clean=withoutStops(source,draft.start,draft.finish,draft.sectors,draft.zones);
+    if(clean.seconds>=30)stopNote=' Se ha quitado del trazado una parada de '+(clean.seconds/60).toFixed(1).replace('.',',')+' min.';
+    circuit=buildCircuit($('circuitName').value,clean.route,clean.start,clean.finish,clean.sectors,clean.zones);
   }catch(err){reportSave('No se ha guardado: '+err.message,'error');return;}
   const next=[...circuits,circuit];
   try {
@@ -228,14 +232,15 @@ $('saveCircuit').addEventListener('click',async()=>{
     return;
   }
   reportSave('Circuito «'+circuit.name+'» guardado en este navegador ('+circuits.length+
-    ' en Mis circuitos). '+(backup?'Se ha solicitado una descarga JSON de seguridad.':'Exporta un JSON de seguridad.'),'success');
+    ' en Mis circuitos). '+(backup?'Se ha solicitado una descarga JSON de seguridad.':'Exporta un JSON de seguridad.')+stopNote,'success');
   // Remote persistence is optional: never lose the local copy due to a network error.
   if(cloudApi && cloudUser?.organizer) {
     try {
       const id=await cloudApi.saveCircuit(circuit);
       circuit.cloud_id=id;
       try{saveLibrary(circuits)}catch(e){/* already safely in remote DB */}
-      cloudMessage('Circuito «'+circuit.name+'» guardado también en la base de datos.','success');
+      cloudMessage('Circuito «'+circuit.name+'» guardado también en el servidor. Para que cuente en la competición, pulsa «Publicar en la competición» en 02 Mis circuitos.','success');
+      showCircuitState();
     } catch(err) {
       cloudMessage('Guardado local correcto, pero falló la sincronización: '+(err.message||err),'error');
     }
@@ -250,14 +255,17 @@ function referenceIsClean() {
   const minutes=(stopped/60).toFixed(1).replace('.',',');
   let clean=null;
   try{
-    const provisional=buildCircuit($('circuitName').value||'Provisional',source,draft.start,draft.finish,draft.sectors,draft.zones);
+    const c=withoutStops(source,draft.start,draft.finish,draft.sectors,draft.zones);
+    const provisional=buildCircuit($('circuitName').value||'Provisional',c.route,c.start,c.finish,c.sectors,c.zones);
     clean=detectAttempts(source,provisional)
-      .filter(a=>a.startIndex!==draft.start&&a.status==='compatible'&&a.gateIndices.every(Number.isInteger)&&referenceStops(source,a.startIndex,a.finishIndex)<30)
+      .filter(a=>(a.finishIndex<draft.start||a.startIndex>draft.finish)&&a.status==='compatible'&&a.gateIndices.every(Number.isInteger)&&referenceStops(source,a.startIndex,a.finishIndex)<30)
       .sort((a,b)=>a.seconds-b.seconds)[0]||null;
   }catch{}
-  const warning='La bajada marcada incluye una parada de '+minutes+' min. El GPS sigue grabando mientras estás parado y dibujaría un garabato en el circuito.';
-  if(!clean)return window.confirm(warning+'\n\nEste archivo no tiene otra bajada sin paradas. ¿Guardar igualmente?');
-  if(!window.confirm(warning+'\n\nEn este mismo archivo hay otra bajada sin paradas ('+timeString(clean.seconds)+'). ¿Usarla como referencia, con las mismas puertas?'))return true;
+  // Without a clean alternative the stop is simply cut out of the line when saving.
+  if(!clean)return true;
+  if(!window.confirm('La bajada marcada incluye una parada de '+minutes+' min (el GPS sigue grabando mientras estás parado).'+
+    '\n\nEn este mismo archivo hay otra bajada sin paradas ('+timeString(clean.seconds)+'). ¿Usarla como referencia, con las mismas puertas?'+
+    '\n\nSi cancelas, se guarda la marcada quitando la parada del trazado.'))return true;
   const within=i=>nearestTrackIndex(source,coordinates(source[i]),clean.startIndex,clean.finishIndex).index;
   const names=draft.sectors.map(s=>s.name);
   snapshot();
@@ -298,11 +306,34 @@ function viewCircuit(circuit) {
 }
 $('circuitSelect').addEventListener('change',e=>{
   selectedId=e.target.value;
+  showCircuitState();
   attemptHistory=[];
   fillHistorySelectors();
   showComparisonMessage('Circuito cambiado. Carga sus intentos guardados para comparar.');
 });
 $('loadCircuit').addEventListener('click',()=>{const c=selectedCircuit();if(!c)return status('No hay circuito seleccionado.','error');viewCircuit(c);status('Circuito '+c.name+' cargado. Puedes importar una actividad para detectar intentos.','success')});
+// Where the selected circuit lives: only in this browser, on the server, or in the competition.
+function showCircuitState(){
+  const c=selectedCircuit();
+  $('circuitState').textContent=!c?'':c.published?'Publicado en la competición: los pilotos ya pueden subir sus bajadas. Su trazado y sus puertas no cambian.':
+    c.cloud_id?'Guardado en el servidor, todavía sin publicar.':'Guardado solo en este navegador.';
+  $('publishCircuit').hidden=!c||!!c.published||!(cloudApi&&cloudUser?.organizer);
+}
+$('publishCircuit').addEventListener('click',async()=>{
+  const c=selectedCircuit();
+  if(!c||!cloudApi||!cloudUser?.organizer)return;
+  if(!window.confirm('¿Publicar «'+c.name+'» en la competición?\nLos pilotos podrán subir sus bajadas. Su trazado y sus puertas quedarán fijos.'))return;
+  const btn=$('publishCircuit');btn.disabled=true;
+  try{
+    if(!c.cloud_id)c.cloud_id=await cloudApi.saveCircuit(c);
+    await cloudApi.publishCircuit(c.cloud_id);
+    c.published=true;
+    try{saveLibrary(circuits)}catch{}
+    fillLibrary();
+    status('«'+c.name+'» publicado: ya aparece en Competición y los pilotos pueden subir sus bajadas.','success');
+  }catch(err){status('No se pudo publicar: '+err.message,'error')}
+  finally{btn.disabled=false}
+});
 $('deleteCircuit').addEventListener('click',async()=>{
   const c=selectedCircuit();
   if(!c)return status('Selecciona un circuito primero.','error');
@@ -332,6 +363,8 @@ function validateImport(c) {
   if(c.weakZones.some(z=>!Number.isInteger(z.from)||!Number.isInteger(z.to)||z.from<0||z.to>=c.points.length||z.from>=z.to))throw Error('Zona GPS débil incorrecta.');
   c.name=c.name.slice(0,100);c.sectors=c.sectors.map(g=>({index:g.index,name:String(g.name||'Sector').slice(0,70)})).sort((a,b)=>a.index-b.index);
   c.weakZones=c.weakZones.map(z=>({from:z.from,to:z.to,name:String(z.name||'GPS débil').slice(0,70)}));
+  // A copy exported from a server belongs to that server: this one starts as a new draft.
+  delete c.cloud_id;delete c.published;
   c.id='dh-import-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);return c;
 }
 $('importCircuit').addEventListener('change',async e=>{
@@ -341,6 +374,13 @@ $('importCircuit').addEventListener('change',async e=>{
     const next=[...circuits,circuit];
     saveLibrary(next);circuits=next;selectedId=circuit.id;fillLibrary();viewCircuit(circuit);
     status('Circuito '+circuit.name+' importado y guardado en este navegador. Conserva el JSON original como copia de respaldo.','success');
+    if(cloudApi&&cloudUser?.organizer){
+      try{
+        circuit.cloud_id=await cloudApi.saveCircuit(circuit);
+        saveLibrary(circuits);showCircuitState();
+        status('Circuito '+circuit.name+' importado y guardado en el servidor. Pulsa «Publicar en la competición» cuando quieras que cuente.','success');
+      }catch(err){status('Importado en este navegador, pero no en el servidor: '+err.message,'error')}
+    }
   }catch(err){status('Error al importar: '+err.message,'error')}
 });
 $('attemptFile').addEventListener('change',async e=>{
@@ -379,6 +419,7 @@ $('match').addEventListener('click',()=>{
       const badge=document.createElement('span');badge.className='badge'+(a.status==='compatible'?' ok':'');
       badge.textContent=a.status==='compatible'?'Traza compatible':'Revisión GPS';head.append(left,badge);box.append(head);
       if(a.issues.length){const warning=document.createElement('div');warning.className='issue';warning.textContent=a.issues.join(' · ');box.append(warning);}
+      if(a.notes?.length){const note=document.createElement('div');note.className='note';note.textContent=a.notes.join(' · ');box.append(note);}
       const splits=document.createElement('div');splits.className='splits';
       a.splits.forEach((duration,n)=>{const row=document.createElement('div');row.className='split';
         const label=document.createElement('span');label.textContent=n===0?'Salida → '+(c.sectors[0]?.name||'Meta'):(c.sectors[n-1]?.name||'Sector '+n)+' → '+(c.sectors[n]?.name||'Meta');
@@ -545,6 +586,20 @@ function reflectCloudUser(){
   // Only organizers store circuits on the server; riders upload their runs in Competición.
   $('cloudPush').hidden=!cloudUser?.organizer;
   $('cloudConfigDetails').hidden=!!cloudUser?.local;
+  showCircuitState();
+}
+// Organizers see the circuits stored on the server, with their competition state.
+async function syncLibraryWithServer(){
+  if(!cloudApi||!cloudUser?.organizer)return;
+  for(const item of await cloudApi.listCircuits()){
+    const local=circuits.find(c=>c.cloud_id===item.id||c.id===item.id);
+    if(local)local.published=!!item.published;else circuits.push(item);
+  }
+  try{saveLibrary(circuits)}catch{}
+  if(!selectedCircuit()&&circuits.length)selectedId=circuits[0].id;
+  fillLibrary();
+  // Never throw away a route the organizer is editing.
+  if(selectedCircuit()&&!source)viewCircuit(selectedCircuit());
 }
 async function refreshCloudActivities(){
   if(!cloudApi||!cloudUser)return;
@@ -611,17 +666,7 @@ async function connectCloud(config){
   const health=await cloudApi.health();
   cloudUser=health.local_mode?await cloudApi.localSession():await cloudApi.user();
   reflectCloudUser();
-  if(cloudUser?.local){
-    const stored=await cloudApi.listCircuits();
-    for(const item of stored){
-      const index=circuits.findIndex(c=>c.cloud_id===item.id||c.id===item.id);
-      if(index<0)circuits.push(item);
-    }
-    try{saveLibrary(circuits)}catch{}
-    if(!selectedCircuit()&&circuits.length)selectedId=circuits[0].id;
-    fillLibrary();
-    if(selectedCircuit())viewCircuit(selectedCircuit());
-  }
+  await syncLibraryWithServer();
   if(cloudUser)refreshCloudActivities().catch(()=>{});
   cloudMessage(cloudUser?.local?'Base de datos local conectada. Todo listo para guardar tus datos.':cloudUser?'Sesión iniciada como '+cloudUser.email+'. Puedes guardar o recuperar circuitos.':'FastAPI conectado. Crea una cuenta o inicia sesión.','success');
 }
@@ -640,6 +685,7 @@ $('cloudLogin').addEventListener('click',async()=>{
     $('cloudPassword').value='';
     reflectCloudUser();
     cloudMessage('Sesión iniciada. Puedes subir tus circuitos existentes o recuperarlos.','success');
+    syncLibraryWithServer().catch(err=>cloudMessage('Sesión iniciada, pero no se pudieron leer tus circuitos: '+err.message,'error'));
     refreshCloudActivities().catch(err=>cloudMessage('Sesión iniciada, pero no se pudieron leer las actividades: '+err.message,'error'));
   }catch(err){cloudMessage('No se pudo iniciar sesión: '+err.message,'error')}
 });

@@ -147,7 +147,7 @@ async def submit_entry(circuit_id:uuid.UUID=Form(...),file:UploadFile=File(...),
     entry=Attempt(pilot_id=p.id,circuit_id=c.id,activity_id=activity_id,source_filename=filename,started_at=started,
         elapsed_ms=round(run.seconds*1000),confidence=run.confidence,
         gps_status="compatible" if run.status=="compatible" else "review",
-        notes=" · ".join(run.issues)[:500] or None,timed_by="server",review_status="pending")
+        notes=" · ".join(run.issues + run.notes)[:500] or None,timed_by="server",review_status="pending")
     entry.splits=[AttemptSplit(sort_order=i,elapsed_ms=None if s is None else round(s*1000)) for i,s in enumerate(run.splits)]
     try:
         db.add(activity);db.flush();db.add(entry);db.commit()

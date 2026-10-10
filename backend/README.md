@@ -77,7 +77,7 @@ Variables de `backend/.env`:
 | Variable | Uso |
 |---|---|
 | `ORGANIZER_EMAILS` | Correos (separados por comas) que pueden publicar circuitos y aprobar bajadas. En tu PC con `LOCAL_SINGLE_USER=true` el perfil local ya es organizador. |
-| `INVITE_CODE` | Si tiene valor, crear cuenta exige este código. Imprescindible en un servidor público. |
+| `INVITE_CODE` | Vacío (por defecto): inscripción abierta. Si tiene valor, crear cuenta exige este código. El registro está limitado a 5 cuentas por hora y dirección. |
 | `COMPETITION_TIMEZONE` | Zona horaria de los meses de la clasificación (por defecto `Europe/Madrid`). |
 | `ENTRY_MAX_AGE_DAYS` | Antigüedad máxima de una bajada al enviarla (por defecto 7 días). |
 | `API_HOST`, `API_PORT` | Dirección y puerto de `python run.py`. |
@@ -110,7 +110,7 @@ Comandos en el servidor, como root:
 
 - Primera instalación: `git clone https://github.com/webtilians/dhtrailslocal.git /opt/dhtrails && DH_ORGANIZERS=tu@correo bash /opt/dhtrails/deploy/vps/setup.sh`
 - Actualizar desde GitHub: `dhtrails-update` (otra rama: `DH_BRANCH=nombre dhtrails-update`).
-- Código de invitación para los pilotos: `dhtrails-invite`; cambiarlo: `dhtrails-invite nuevo`.
+- Inscripción: abierta por defecto. `dhtrails-invite nuevo` exige un código a los nuevos pilotos, `dhtrails-invite quitar` la vuelve a abrir y `dhtrails-invite` muestra el código actual.
 - Copia inmediata: `dhtrails-backup`. Estado y registro: `systemctl status dhtrails`, `journalctl -u dhtrails -n 50`.
 
 ## Pasar a un servidor de producción

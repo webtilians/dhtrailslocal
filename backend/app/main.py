@@ -42,7 +42,8 @@ def validate_settings():
 @app.get("/api/health")
 def health(db:Session=Depends(get_db)):
     db.execute(text("SELECT 1"))
-    return {"ok":True,"service":"dhtrailslocal-fastapi","database":"postgresql","local_mode":LOCAL_SINGLE_USER}
+    return {"ok":True,"service":"dhtrailslocal-fastapi","database":"postgresql","local_mode":LOCAL_SINGLE_USER,
+            "invite_required":bool(config.INVITE_CODE)}
 
 @app.post("/api/auth/local")
 def local_session(request:Request, db:Session=Depends(get_db)):

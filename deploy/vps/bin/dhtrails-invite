@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Show the code riders need to create an account, or replace it:  dhtrails-invite [nuevo]
+# Sign-up is open by default. Optionally require a code from new riders:
+#   dhtrails-invite          show the current code (empty: anyone can sign up)
+#   dhtrails-invite nuevo    require a new random code
+#   dhtrails-invite quitar   open sign-up again
 set -euo pipefail
 env_file=/etc/dhtrails/dhtrails.env
-if [ "${1:-}" = nuevo ]; then
-  code="dh-$(python3 -c 'import secrets; print(secrets.token_hex(3))')"
-  sed -i "s/^INVITE_CODE=.*/INVITE_CODE=$code/" "$env_file"
-  systemctl restart dhtrails
-  echo "Código cambiado. Las cuentas ya creadas siguen funcionando."
-fi
-grep '^INVITE_CODE=' "$env_file" | cut -d= -f2-
+case "${1:-}" in
+  nuevo) code="dh-$(python3 -c 'import secrets; print(secrets.token_hex(3))')" ;;
+  quitar) code="" ;;
+  "") code=$(grep '^INVITE_CODE=' "$env_file" | cut -d= -f2-); echo "${code:-(sin código: inscripción abierta)}"; exit 0 ;;
+  *) echo "Uso: dhtrails-invite [nuevo|quitar]" >&2; exit 2 ;;
+esac
+sed -i "s/^INVITE_CODE=.*/INVITE_CODE=$code/" "$env_file"
+systemctl restart dhtrails
+echo "${code:-Inscripción abierta, sin código.} Las cuentas ya creadas siguen funcionando."

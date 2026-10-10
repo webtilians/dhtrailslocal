@@ -20,7 +20,7 @@ Página **Competición** (`competicion.html`): tú publicas circuitos, los pilot
 - **Clasificación pública por mes**: el mejor tiempo aprobado de cada piloto, diferencia con el líder, parciales con el mejor de cada sector marcado y el *tiempo ideal* (suma de los mejores parciales). Pulsa un piloto para ver en el mapa en qué sectores gana o pierde frente al líder.
 - **Circuitos congelados al publicarse**: su trazado y sus puertas ya no se pueden cambiar ni borrar, para que todos los tiempos sean comparables.
 - **Reglas antitrampas básicas**: el mismo archivo GPS no se puede presentar dos veces (ni por otro piloto), solo se aceptan bajadas de los últimos 7 días y sin fechas futuras, nombre de piloto único y límite de intentos de acceso.
-- **Registro con código de invitación** (`INVITE_CODE`) para que solo se inscriban los pilotos de tu grupo.
+- **Inscripción abierta.** Opcionalmente se puede exigir un código de invitación (`INVITE_CODE`); la casilla solo aparece si el servidor lo pide.
 
 Cada bajada cuenta en el mes en que se hizo (zona horaria `Europe/Madrid`). Como se aceptan envíos hasta 7 días después, cierra la clasificación de un mes a partir del día 8 del siguiente.
 
@@ -28,11 +28,23 @@ Cada bajada cuenta en el mes en que se hizo (zona horaria `Europe/Madrid`). Como
 
 **Para probar en local:** crea y guarda un circuito en PostgreSQL desde el editor, abre http://127.0.0.1:8000/competicion.html, publícalo en «Organización», elige tu nombre de piloto y sube un GPX reciente de ese circuito.
 
-### Detección de puertas a lo largo del trazado (v0.6.1)
+### Cronometraje con GPS que falla (v0.7)
 
-Cada bajada se sigue por su posición a lo largo del trazado de referencia: una puerta cuenta cuando esa posición la cruza, aunque el GPS se desvíe hasta 60 m hacia un lado. Antes una puerta exigía pasar a menos de 18 m de un punto, y un error de 25–50 m dejaba dos sectores sin tiempo. Si la traza se aleja más de 30 m del trazado durante 50 m o más, el tiempo se calcula igualmente pero la bajada queda en *Revisión GPS*, indicando entre qué kilómetros. Esperar en la salida o cruzarla varias veces no cuenta: el tiempo empieza en el último cruce antes de bajar. El motor del navegador (`gps-engine.mjs`) y el del servidor (`backend/app/timing.py`) dan exactamente los mismos tiempos.
+Los senderos son de un metro: un punto GPS lejos del trazado es un fallo del GPS o una pérdida de cobertura, no otra línea.
 
-Al guardar un circuito, el editor avisa si la bajada de referencia incluye paradas: el reloj sigue grabando parado y dibujaría un garabato en el circuito. Si el mismo archivo tiene otra bajada sin paradas, la propone con las mismas puertas.
+- Cada bajada se sigue por su posición a lo largo del trazado. Las puertas, la salida y la meta se cronometran solo con puntos **fiables** (a menos de 30 m del trazado).
+- Si se pierden puntos o se desvían, el paso por las puertas de ese tramo se calcula con la **velocidad media** del tramo, entre el último punto fiable y el siguiente.
+- Un tramo sin GPS fiable de más de 5 s **no invalida la bajada** si su velocidad media es creíble: como mucho 1,6 veces tu ritmo justo antes y justo después, más 1 m/s, más el margen de error de los dos puntos de los extremos, y nunca más de 80 km/h. El tramo queda anotado en gris («GPS perdido 10 s entre el km 0,90 y el 1,01 a 39 km/h, coherente»).
+- Solo pasa a **Revisión GPS** si en ese tramo habrías ido más rápido de lo posible (un atajo), si no hay marcas de tiempo o si más de la mitad de la bajada está fuera del trazado.
+- Esperar en la salida o cruzarla varias veces no cuenta: el tiempo empieza en el último cruce antes de bajar.
+
+El motor del navegador (`gps-engine.mjs`) y el del servidor (`backend/app/timing.py`) dan exactamente los mismos tiempos y avisos. Las zonas de cobertura débil quedan como anotación en el mapa.
+
+### Crear y publicar el circuito del mes
+
+1. En el **editor**, importa el GPX de una bajada tuya, marca salida, puertas y meta y pulsa **Guardar**. Si esa bajada tiene una parada (el reloj sigue grabando parado), se quita sola del trazado; si el mismo archivo tiene otra bajada limpia, el editor te ofrece usarla.
+2. Con tu cuenta de organizador, el circuito se guarda también en el servidor. En **02 Mis circuitos** verás si está solo en el navegador, en el servidor o publicado.
+3. Pulsa **Publicar en la competición** (en el editor o en Competición → Organización). Desde ese momento los pilotos pueden subir sus bajadas y el trazado queda fijo.
 
 ## v0.5 — Comparar bajadas por sectores
 

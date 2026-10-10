@@ -53,7 +53,9 @@
       <div class="panel-content">
         <label class="field-title" for="circuitSelect">Circuito guardado</label>
         <select id="circuitSelect"><option value="">Aún no hay circuitos</option></select>
-        <div class="action-row"><button id="loadCircuit" class="btn outline" type="button">Ver circuito</button><button id="exportCircuit" class="btn outline" type="button">Exportar JSON</button></div>
+        <p id="circuitState" class="help circuit-state"></p>
+        <button id="publishCircuit" class="btn primary full" type="button" hidden>Publicar en la competición</button>
+        <div class="action-row cloud-spaced"><button id="loadCircuit" class="btn outline" type="button">Ver circuito</button><button id="exportCircuit" class="btn outline" type="button">Exportar JSON</button></div>
         <label for="importCircuit" class="mini-upload">+ Importar circuito JSON</label><input id="importCircuit" type="file" accept=".json,application/json" hidden>
         <button id="deleteCircuit" class="text-btn cloud-spaced" type="button">Borrar circuito seleccionado</button>
       </div>

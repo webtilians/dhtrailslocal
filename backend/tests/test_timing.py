@@ -49,11 +49,20 @@ def test_distant_activity_is_not_a_run():
     far = [Fix(p.lat + 0.05, p.lon, p.ele, p.time) for p in route()]
     assert detect_attempts(far, circuit()) == []
 
-def test_data_gap_needs_review():
+def test_losing_gps_for_15_s_at_a_believable_speed_keeps_the_run():
     broken = [Fix(p.lat, p.lon, p.ele, p.time + 15000 if i >= 48 else p.time) for i, p in enumerate(route())]
     result = detect_attempts(broken, circuit())
-    assert len(result) == 1 and result[0].status == "revisar"
-    assert any("intervalo" in issue for issue in result[0].issues)
+    assert len(result) == 1 and result[0].status == "compatible"
+    assert abs(result[0].seconds - 169) < 1.1
+    assert any(note.startswith("GPS perdido o desviado 17 s") for note in result[0].notes)
+
+def test_a_shortcut_while_the_gps_is_lost_is_flagged_by_its_speed():
+    r = route()
+    # Points 51-69 never recorded and point 70 reached 6 s after point 50: 136 m at 82 km/h.
+    cut = r[:51] + [Fix(p.lat, p.lon, p.ele, p.time - 32000) for p in r[70:]]
+    run = detect_attempts(cut, circuit())[0]
+    assert run.status == "revisar"
+    assert any("¿atajo o fallo del GPS?" in issue for issue in run.issues)
 
 def test_gpx_round_trip_keeps_times():
     fixes = parse_gps(gpx(route()), "gpx")
@@ -85,13 +94,13 @@ def test_rejects_invalid_files(data, ext):
 def east_degrees(metres):
     return metres / (111195 * math.cos(math.radians(36.74)))
 
-def test_gate_passed_35_m_to_one_side_is_still_timed():
+def test_gate_passed_with_gps_35_m_aside_is_timed_at_the_stretch_speed():
     shifted = [Fix(p.lat, p.lon + east_degrees(35), p.ele, p.time) if 55 <= i <= 69 else p for i, p in enumerate(route())]
     run = detect_attempts(shifted, circuit())[0]
     assert abs(run.seconds - 154) < 1.1
-    assert run.missing == 0 and all(s > 0 for s in run.splits)
-    assert run.status == "revisar"
-    assert any(issue.startswith("te separas hasta 35 m") for issue in run.issues)
+    assert run.missing == 0 and abs(run.splits[1] - 68) < 1.5
+    assert run.status == "compatible"
+    assert any("parciales estimados" in note for note in run.notes)
 
 def test_waiting_at_the_start_line_is_not_timed():
     r = route()

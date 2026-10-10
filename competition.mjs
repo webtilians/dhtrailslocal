@@ -120,7 +120,8 @@ function entryBox(entry, actions=[]) {
         node('strong',{textContent:formatMs(entry.elapsed_ms)})]),
       node('span',{className:'badge'+(ok?' ok':''),textContent:ok?'Traza compatible':'Revisión GPS'})])
   ]);
-  if(entry.issues)box.append(node('div',{className:'issue',textContent:entry.issues}));
+  // Notes on a compatible run are information (e.g. GPS lost at a believable speed), not a warning.
+  if(entry.issues)box.append(node('div',{className:ok?'note':'issue',textContent:entry.issues}));
   const labels=entry.sector_splits_ms.map((_,i)=>'S'+(i+1));
   box.append(node('div',{className:'splits'},entry.sector_splits_ms.map((ms,i)=>
     node('div',{className:'split'},[node('span',{textContent:labels[i]}),node('b',{textContent:formatMs(ms)})]))));
@@ -163,9 +164,21 @@ async function refreshOrganizer() {
     return entryBox(entry,[note,button('Aprobar','primary',decide('approved')),button('Rechazar','outline',decide('rejected')),
       button('GPX','outline',()=>downloadEntry(entry).catch(err=>status(err.message,'error')))]);
   }):[placeholder('No hay bajadas pendientes.')]));
-  const own=(await api.listCircuits()).filter(c=>!c.published);
-  $('publishSelect').replaceChildren(...(own.length?own.map(c=>node('option',{value:c.id,textContent:c.name})):
-    [node('option',{value:'',textContent:'Sin circuitos por publicar: guárdalos antes desde el editor'})]));
+  const own=await api.listCircuits();
+  $('ownCircuits').replaceChildren(...(own.length?own.map(c=>{
+    const row=node('div',{className:'item'},[node('span',{textContent:c.name+(c.published?' · publicado':' · sin publicar')})]);
+    if(!c.published){
+      const publish=node('button',{type:'button',className:'publish-btn',textContent:'Publicar'});
+      publish.addEventListener('click',()=>publishCircuit(c));
+      row.append(publish);
+    }
+    return row;
+  }):[placeholder('Todavía no has guardado circuitos en el servidor: créalos en el editor.')]));
+}
+async function publishCircuit(c) {
+  if(!window.confirm('¿Publicar «'+c.name+'» en la competición?\nLos pilotos podrán subir sus bajadas. Su trazado y sus puertas quedarán fijos.'))return;
+  try{await api.publishCircuit(c.id);await Promise.all([loadCircuits(),refreshOrganizer()]);status('«'+c.name+'» ya está en la competición.','success');}
+  catch(err){status('No se pudo publicar: '+err.message,'error')}
 }
 
 function reflectUser() {
@@ -224,14 +237,6 @@ $('submitEntry').addEventListener('click',async()=>{
   }catch(err){account('No se ha aceptado la bajada: '+err.message,'error')}
   finally{btn.disabled=false}
 });
-$('publishCircuit').addEventListener('click',async()=>{
-  const select=$('publishSelect'),id=select.value;
-  if(!id)return status('No hay ningún circuito guardado sin publicar.','error');
-  const name=select.selectedOptions[0].textContent;
-  if(!window.confirm('¿Publicar «'+name+'» en la competición?\nSu trazado y sus sectores quedarán fijos: no podrás cambiarlos ni borrarlo.'))return;
-  try{await api.publishCircuit(id);await Promise.all([loadCircuits(),refreshOrganizer()]);status('«'+name+'» ya está en la competición.','success');}
-  catch(err){status('No se pudo publicar: '+err.message,'error')}
-});
 
 async function start() {
   const config=await discoverApi();
@@ -241,6 +246,7 @@ async function start() {
   }
   api=createCloudApi(config);
   const health=await api.health();
+  $('inviteField').hidden=!health.invite_required;
   me=health.local_mode?await api.localSession():await api.user();
   reflectUser();
   if(me)await signedIn(me,me.local?'Modo local: eres la organización de esta competición en tu PC.':'Sesión iniciada como '+(me.display_name||me.email)+'.');

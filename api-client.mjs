@@ -115,7 +115,7 @@ export function createCloudApi(config) {
         sector_splits_ms:(attempt.splits||[]).map(v=>Number.isFinite(v)?Math.round(v*1000):null),
         confidence:Number.isFinite(attempt.confidence)?attempt.confidence:null,
         gps_status:attempt.status==='compatible'?'compatible':'review',
-        notes:(attempt.issues||[]).join(' · ').slice(0,500)
+        notes:[...(attempt.issues||[]),...(attempt.notes||[])].join(' · ').slice(0,500)
       }});
       return saved.id;
     },

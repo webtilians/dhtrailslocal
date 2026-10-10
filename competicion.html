@@ -42,8 +42,10 @@
           <input id="email" type="email" autocomplete="email" placeholder="correo@ejemplo.com">
           <label for="password" class="field-title">Contraseña (mínimo 8 caracteres)</label>
           <input id="password" type="password" autocomplete="current-password" minlength="8">
-          <label for="invite" class="field-title">Código de invitación <small class="help">· solo para crear cuenta</small></label>
-          <input id="invite" autocomplete="off" placeholder="Te lo da la organización">
+          <div id="inviteField" hidden>
+            <label for="invite" class="field-title">Código de invitación <small class="help">· solo para crear cuenta</small></label>
+            <input id="invite" autocomplete="off" placeholder="Te lo da la organización">
+          </div>
           <div class="action-row" style="margin-top:12px">
             <button id="login" class="btn primary" type="button">Entrar</button>
             <button id="signup" class="btn outline" type="button">Crear cuenta</button>
@@ -68,10 +70,10 @@
       <div class="panel-content">
         <div class="box-heading" style="border-top:0;padding-top:0">Bajadas por revisar <span id="pendingCount">0</span></div>
         <div id="reviewList" class="results"><p class="placeholder">No hay bajadas pendientes.</p></div>
-        <div class="box-heading">Publicar circuito</div>
-        <p class="help">Crea el circuito en el editor y guárdalo en la base de datos. Al publicarlo entra en la competición y su trazado y sus sectores quedan fijos para que todos los tiempos sean comparables.</p>
-        <select id="publishSelect"><option value="">Sin circuitos por publicar</option></select>
-        <button id="publishCircuit" class="btn outline full cloud-spaced" type="button">Publicar en la competición</button>
+        <div class="box-heading">Circuitos del campeonato</div>
+        <p class="help">El circuito del mes: créalo en el editor con tu GPX (marca salida, puertas y meta y pulsa Guardar) y publícalo aquí o en el propio editor. Al publicarlo, su trazado y sus puertas quedan fijos para que todos los tiempos sean comparables.</p>
+        <div id="ownCircuits" class="items"><p class="placeholder">Todavía no has guardado circuitos en el servidor.</p></div>
+        <a class="btn primary full editor-link" href="./editor.html">Crear el circuito del mes en el editor</a>
       </div>
     </section>
   </aside>
