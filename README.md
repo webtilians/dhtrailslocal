@@ -9,7 +9,7 @@ Time trials de descenso MTB en circuitos locales: la organización crea los circ
 | Pestaña | Para quién | Qué hace |
 |---|---|---|
 | **Time trial** (`index.html`) | Todos | Eliges un torneo y ves su clasificación. Con tu cuenta subes el GPX de tu bajada: si sigue el circuito y la velocidad es creíble, entra al momento. |
-| **Entrenamiento** (`entrenamiento.html`) | Cualquier piloto con cuenta | Subes cualquier ruta; se buscan en ella todos los circuitos guardados y cada bajada encontrada se guarda en privado. Superpones hasta 4 bajadas de un circuito: mapa, velocidad y diferencia de tiempo a lo largo del recorrido, tiempos por segmento y las frenadas de una bajada pintadas en el mapa. |
+| **Entrenamiento** (`entrenamiento.html`) | Cualquier piloto con cuenta | Subes cualquier ruta; se buscan en ella todos los circuitos guardados y cada bajada encontrada se guarda en privado. Superpones hasta 4 bajadas de un circuito: mapa, velocidad y diferencia de tiempo a lo largo del recorrido, tiempos por segmento y las frenadas de una o dos bajadas solapadas en el mapa, curva a curva. |
 | **Circuitos** (`circuitos.html`) | Organización | Importar archivo → salida, meta y segmentos sobre el mapa → **Guardar ruta**. Las paradas de la bajada de referencia se quitan solas del trazado. También acepta un circuito exportado (`.json`). |
 | **Torneos** (`torneos.html`) | Organización | Eliges un circuito guardado, las fechas y el porcentaje mínimo de coincidencia y creas el torneo. Ves todas sus bajadas y puedes aceptar o rechazar cualquiera a mano. |
 
@@ -37,7 +37,7 @@ Los senderos son de un metro: un punto GPS lejos del trazado es un fallo del GPS
 
 El motor del navegador (`gps-engine.mjs`) y el del servidor dan exactamente los mismos tiempos. Cada bajada guarda además su **perfil** (posición en el circuito y hora de cada punto fiable), que usa Entrenamiento para comparar velocidades (`telemetry.mjs`, `charts.mjs`).
 
-Las **frenadas** salen de ese perfil: van de un pico de velocidad al punto más lento que le sigue, si se pierden al menos 5 km/h a 0,2 m/s² o más de media. Con un punto por segundo marcan dónde y cuánto se frena, no la fuerza de la frenada. Junto a un hueco de más de 3 s sin GPS fiable o un salto imposible (más de 22 m/s) la velocidad es solo una media, así que ahí no se marca ninguna.
+Las **frenadas** salen de ese perfil: van de un pico de velocidad al punto más lento que le sigue, si se pierden al menos 5 km/h a 0,2 m/s² o más de media. Con un punto por segundo marcan dónde y cuánto se frena, no la fuerza de la frenada. Junto a un hueco de más de 3 s sin GPS fiable o un salto imposible (más de 22 m/s) la velocidad es solo una media, así que ahí no se marca ninguna. Con dos bajadas, las frenadas que acaban a menos de 35 m son la misma curva: para cada una se dice cuál pasa más rápido (de 20 m antes a 20 m después) y si frena más tarde o sale más rápido.
 
 ## Iniciar servidor local
 

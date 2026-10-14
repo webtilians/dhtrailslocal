@@ -61,9 +61,10 @@
     <section class="panel">
       <div class="panel-title"><h2><span>Frenadas</span></h2><span class="caps">DÓNDE PIERDES VELOCIDAD</span></div>
       <div class="panel-content">
-        <label class="braking-run"><span>Ver las frenadas de</span><select id="brakingRun" disabled></select></label>
+        <p class="help braking-intro">Marca una o dos de las bajadas que comparas para solapar sus frenadas.</p>
+        <div id="brakingRuns" class="run-list braking-runs" role="group" aria-label="Bajadas cuyas frenadas se pintan"></div>
         <div id="brakingList" class="zone-list"><p class="placeholder">Elige una bajada para ver dónde frena.</p></div>
-        <p class="help">En rosa en el mapa y sombreadas en la gráfica de velocidad. Pulsa una para verla de cerca. Salen del GPS, que da un punto por segundo: dicen dónde y cuánto bajas la velocidad, no la fuerza exacta de la frenada. Donde el GPS pierde la señal no se calculan.</p>
+        <p class="help">Cada bajada en su color: en el mapa, con dos, la primera por fuera y la segunda por dentro; bajo la gráfica de velocidad, una barra por bajada. Pulsa una frenada para verla de cerca. Salen del GPS, que da un punto por segundo: dicen dónde y cuánto bajas la velocidad, no la fuerza exacta de la frenada. Donde el GPS pierde la señal no se calculan.</p>
       </div>
     </section>
     <section class="panel">

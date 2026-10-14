@@ -128,17 +128,22 @@ input[type=date],input[type=number]{color-scheme:dark}
 .chart-tip i{width:10px;height:10px;border-radius:2px;display:inline-block}
 .chart-legend{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px;font-size:12px;color:#cfe6f8}
 .legend-item{display:flex;align-items:center;gap:6px}
-.chart-band{fill:#ff5c8a;opacity:.24}
-.brake-pin{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#ff5c8a;color:#071423;border:2px solid #071423;font:800 12px/1 Inter,system-ui,sans-serif;box-sizing:border-box;flex:none}
-.braking-run{display:flex;align-items:center;gap:10px;font-size:12px;color:#b3cadc;margin-bottom:12px;flex-wrap:wrap}
-.braking-run select{flex:1;min-width:200px}
+.chart-band{fill:#cfe6f8;opacity:.07}
+.chart-lane{fill:#1a3247}
+.brake-pin{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#f0f6ff;color:#071423;border:2px solid #071423;font:800 12px/1 Inter,system-ui,sans-serif;box-sizing:border-box;flex:none}
+.braking-intro{margin:0 0 10px}
+.braking-runs{margin-bottom:12px}
 .zone-list{display:flex;flex-direction:column;gap:6px}
-.zone-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;font-size:12px;color:#e6f1fb;background:#112b40;border:1px solid #264c6c;border-radius:5px;padding:7px 10px;min-height:40px;cursor:pointer}
+.zone-item{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;font:inherit;font-size:12px;color:#e6f1fb;background:#112b40;border:1px solid #264c6c;border-radius:5px;padding:7px 10px;min-height:40px;cursor:pointer}
 .zone-item:hover{background:#153b5a}
 .zone-item:focus-visible{outline:2px solid #ffe066;outline-offset:1px}
 .zone-item[aria-pressed=true]{border-color:#ffe066;background:#3a3418}
-.zone-item span{flex:1;min-width:0}
-.zone-item small{display:block;color:#8faac4;margin-top:2px}
+.zone-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.zone-item small{display:block;color:#8faac4}
+.zone-row{display:flex;align-items:flex-start;gap:7px;line-height:1.45}
+.zone-row .chip{margin-top:3px}
+.zone-row>span{flex:1;min-width:0}
+.zone-verdict{color:#ffe7a3;font-weight:600;line-height:1.45}
 @media(max-width:700px){.account{margin-left:0}.tool-grid.three{grid-template-columns:1fr 1fr 1fr}.two-cols{grid-template-columns:1fr}}
 .run-option input{width:auto;flex:none;margin:0}
 .run-option span{flex:1;min-width:0}

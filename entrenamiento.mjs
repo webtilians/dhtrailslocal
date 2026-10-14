@@ -1,6 +1,6 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
-import {resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingZones} from './telemetry.mjs';
+import {resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingPoints} from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
@@ -17,12 +17,15 @@ const when = iso => iso ? new Date(iso).toLocaleString('es-ES', {day: 'numeric',
 const runLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at) + ' · ' + formatMs(r.elapsed_ms);
 const circuitOf = id => catalog.find(c => c.id === id);
 const HIGHLIGHT = '#ffe066';
-// Braking zones: one run at a time, thick and outlined so they never read as another run's line.
-const BRAKE = '#ff5c8a';
 let mapSelection = null, selectionLayer = null, charts = [], comparisonVersion = 0;
-let current = null, brakingRunId = null, brakingLayer = null;
+// Braking of up to two of the compared runs at once (null: the reference and the next one).
+const BRAKING_MAX = 2;
+let current = null, brakingIds = null, brakingLayer = null;
 const kmh = v => Math.round(v) + ' km/h';
+const seconds = ms => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
 const zoneText = z => 'de ' + Math.round(z.fromKmh) + ' a ' + kmh(z.toKmh) + ' en ' + Math.round(z.to - z.from) + ' m';
+const whose = r => r.mine === false ? 'la de ' + r.pilot + ' (' + when(r.started_at) + ')' : 'la tuya (' + when(r.started_at) + ')';
+const capital = text => text[0].toUpperCase() + text.slice(1);
 
 function showSelection(circuit, {reveal = false} = {}) {
   if (selectionLayer) view.map.removeLayer(selectionLayer);
@@ -142,8 +145,7 @@ async function compare() {
   if (brakingLayer) view.map.removeLayer(brakingLayer);
   selectionLayer = brakingLayer = null;
   view.clear();
-  ['legend', 'speedChart', 'gapChart', 'segments', 'brakingRun', 'brakingList'].forEach(id => $(id).replaceChildren());
-  $('brakingRun').disabled = true;
+  ['legend', 'speedChart', 'gapChart', 'segments', 'brakingRuns', 'brakingList'].forEach(id => $(id).replaceChildren());
   showSelection(circuit);
   if (!circuit) {$('compareTag').textContent = '—'; return;}
   $('compareTag').textContent = circuit.name.toUpperCase();
@@ -175,11 +177,10 @@ async function compare() {
     yFormat: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' s', zero: true,
     onSelect: (x, options) => selectPoint(circuit, x, options)}));
   renderSegments(circuit, data, reference);
-  if (!data.some(d => d.run.id === brakingRunId) && brakingRunId !== 'none') brakingRunId = reference.run.id;
-  $('brakingRun').replaceChildren(...data.map(d => node('option', {value: d.run.id, textContent: d.label + (d === reference ? ' · referencia' : '')})),
-    node('option', {value: 'none', textContent: 'No pintar frenadas'}));
-  $('brakingRun').value = brakingRunId;
-  $('brakingRun').disabled = false;
+  const present = brakingIds?.filter(id => data.some(d => d.run.id === id));
+  // Keep the runs chosen for braking while they are compared; start again with the default if none is left.
+  brakingIds = !present || (brakingIds.length && !present.length) ?
+    [reference, ...data.filter(d => d !== reference)].slice(0, BRAKING_MAX).map(d => d.run.id) : present;
   renderBraking();
   const gates = gatesOf(circuit), referenceTimes = segmentTimes(reference.profile, gates);
   const worst = data.filter(d => d !== reference).map(d => {
@@ -189,46 +190,98 @@ async function compare() {
   });
   status(worst.length ? worst.join(' · ') + '.' : 'Elige otra bajada para compararla con esta.', 'success');
 }
-// The chosen run's braking: painted on the circuit, shaded on the speed chart and listed in order.
+// Braking of one or two runs, corner by corner: on the circuit in each run's colour (with two, the
+// first outside and the second inside), as strips under the speed chart and as a list that says
+// which run gets through each corner faster and why.
 function renderBraking() {
   if (!current) return;
-  const {circuit, data} = current;
+  const {circuit, data, reference} = current;
   if (brakingLayer) view.map.removeLayer(brakingLayer);
   brakingLayer = null;
-  const run = data.find(d => d.run.id === brakingRunId);
-  const zones = run ? brakingZones(run.profile) : [];
-  if (mapSelection?.kind === 'zone' && (mapSelection.runId !== brakingRunId || !zones[mapSelection.index])) mapSelection = null;
+  const chosen = data.filter(d => brakingIds.includes(d.run.id)), key = chosen.map(d => d.run.id).join();
+  const points = chosen.length ? brakingPoints(chosen.map(d => d.profile)) : [];
+  if (mapSelection?.kind === 'zone' && (mapSelection.key !== key || !points[mapSelection.index])) mapSelection = null;
+  $('brakingRuns').replaceChildren(...data.map(d => {
+    const on = chosen.includes(d);
+    const box = node('input', {type: 'checkbox', checked: on});
+    box.addEventListener('change', () => {
+      if (box.checked && chosen.length >= BRAKING_MAX) {box.checked = false; return status('Puedes solapar las frenadas de 2 bajadas a la vez.', 'error');}
+      brakingIds = box.checked ? [...brakingIds, d.run.id] : brakingIds.filter(id => id !== d.run.id);
+      renderBraking();
+    });
+    const chip = node('i', {className: 'chip'});
+    chip.style.background = d.color;
+    return node('label', {className: 'run-option' + (on ? ' on' : '')}, [box, chip,
+      node('span', {textContent: d.label + (d === reference ? ' · referencia' : '')})]);
+  }));
+  const span = p => {
+    const found = p.zones.filter(Boolean);
+    return {from: Math.min(...found.map(z => z.from)), to: Math.max(...found.map(z => z.to))};
+  };
   charts[0] = lineChart($('speedChart'), {series: data.map(d => ({label: d.label, color: d.color,
     points: speedSeries(d.samples).map(p => ({x: p.s / 1000, y: p.kmh === null ? null : Math.round(p.kmh * 10) / 10}))})),
-    bands: zones.map(z => ({from: z.from / 1000, to: z.to / 1000})),
+    bands: points.map(p => ({from: span(p).from / 1000, to: span(p).to / 1000})),
+    lanes: chosen.map((d, k) => ({color: d.color, spans: points.filter(p => p.zones[k]).map(p => ({from: p.zones[k].from / 1000, to: p.zones[k].to / 1000}))})),
     yFormat: kmh, onSelect: (x, options) => selectPoint(circuit, x, options)});
-  if (!run) {
-    $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: 'Elige una bajada para ver dónde frena.'}));
+  if (!chosen.length) {
+    $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: 'Marca una o dos bajadas para ver sus frenadas.'}));
     return showSelection(circuit);
   }
   const distances = distanceSeries(circuit.points);
-  const strongest = zones.reduce((best, z) => !best || z.fromKmh - z.toKmh > best.fromKmh - best.toKmh ? z : best, null);
-  brakingLayer = L.layerGroup(zones.flatMap((z, i) => {
-    const points = circuitStretch(circuit.points, distances, z.from, z.to);
-    const tip = 'Frenada ' + (i + 1) + ' · ' + zoneText(z);
+  const two = chosen.length === 2;
+  const styles = two ? [{casing: 22, line: 15}, {casing: 9, line: 5}] : [{casing: 12, line: 6}];
+  const layers = [];
+  // Outside lines first, so the second run's lines stay on top of them.
+  chosen.forEach((d, k) => points.forEach((p, i) => {
+    const z = p.zones[k];
+    if (!z) return;
+    const stretch = circuitStretch(circuit.points, distances, z.from, z.to);
+    layers.push(L.polyline(stretch, {color: '#071423', weight: styles[k].casing, opacity: .95}),
+      L.polyline(stretch, {color: d.color, weight: styles[k].line, opacity: 1})
+        .bindTooltip('Frenada ' + (i + 1) + ' · ' + capital(whose(d.run)) + ': ' + zoneText(z), {sticky: true}));
+  }));
+  points.forEach((p, i) => {
     const number = L.divIcon({html: '<div class="brake-pin">' + (i + 1) + '</div>', className: '', iconSize: [22, 22], iconAnchor: [11, 11]});
-    return [L.polyline(points, {color: '#071423', weight: 12, opacity: .9}),
-      L.polyline(points, {color: BRAKE, weight: 6, opacity: 1}).bindTooltip(tip, {sticky: true}),
-      L.marker(points[0], {icon: number, keyboard: false}).bindTooltip(tip, {direction: 'top', offset: [0, -10]})];
-  })).addTo(view.map);
-  $('brakingList').replaceChildren(...(zones.length ? zones.map((z, i) => {
+    layers.push(L.marker(circuitPosition(circuit.points, distances, span(p).from), {icon: number, keyboard: false})
+      .bindTooltip('Frenada ' + (i + 1) + ' · ' + Math.round(span(p).from) + '–' + Math.round(span(p).to) + ' m', {direction: 'top', offset: [0, -10]}));
+  });
+  brakingLayer = L.layerGroup(layers).addTo(view.map);
+  $('brakingList').replaceChildren(...(points.length ? points.map((p, i) => {
+    const rows = chosen.map((d, k) => {
+      const z = p.zones[k], chip = node('i', {className: 'chip'});
+      chip.style.background = d.color;
+      return node('span', {className: 'zone-row'}, [chip, node('span', {textContent:
+        (d.run.mine === false ? d.run.pilot + ' · ' : '') + when(d.run.started_at) + ': ' +
+        (z ? 'frena desde ' + Math.round(z.from) + ' m, ' + zoneText(z) : 'no frena aquí') + ' · pasa en ' + seconds(p.ms[k])})]);
+    });
+    const summary = two ? brakingVerdict(p, chosen) : zoneText(p.zones[0]);
     const button = node('button', {type: 'button', className: 'zone-item', title: 'Ver la frenada ' + (i + 1) + ' en el mapa'}, [
       node('b', {className: 'brake-pin', textContent: i + 1}),
-      node('span', {}, [zoneText(z), node('small', {textContent: Math.round(z.from) + '–' + Math.round(z.to) + ' m desde la salida' +
-        (z === strongest && zones.length > 1 ? ' · la que más velocidad pierde' : '')})])]);
+      node('span', {className: 'zone-body'}, [
+        node('small', {textContent: Math.round(p.from) + '–' + Math.round(p.to) + ' m desde la salida'}), ...rows,
+        ...(two ? [node('span', {className: 'zone-verdict', textContent: summary})] : [])])]);
     button.dataset.zone = i;
     button.addEventListener('click', () => {
-      mapSelection = {kind: 'zone', circuitId: circuit.id, runId: brakingRunId, index: i, from: z.from, to: z.to, text: zoneText(z)};
+      mapSelection = {kind: 'zone', circuitId: circuit.id, key, index: i, from: p.from, to: p.to, text: summary};
       showSelection(circuit, {reveal: true});
     });
     return button;
-  }) : [node('p', {className: 'placeholder', textContent: 'No hay frenadas claras en esta bajada, o el GPS no fue fiable donde frena.'})]));
+  }) : [node('p', {className: 'placeholder', textContent: 'No hay frenadas claras, o el GPS no fue fiable donde se frena.'})]));
   showSelection(circuit);
+}
+// Which of two runs gets through a braking point faster, and what it does differently.
+function brakingVerdict(p, [a, b]) {
+  const lost = p.ms[1] - p.ms[0];
+  if (Math.abs(lost) < 100) return 'Las dos pasan en el mismo tiempo.';
+  const [fast, quick, slow] = lost > 0 ? [a, p.zones[0], p.zones[1]] : [b, p.zones[1], p.zones[0]];
+  const why = [];
+  if (quick && slow) {
+    // Rounded like the figures on screen, so the difference matches them.
+    const later = Math.round(quick.from - slow.from), exit = Math.round(quick.toKmh) - Math.round(slow.toKmh);
+    if (Math.abs(later) >= 10) why.push('frena ' + Math.abs(later) + ' m ' + (later > 0 ? 'más tarde' : 'antes'));
+    if (Math.abs(exit) >= 2) why.push('sale ' + Math.abs(exit) + ' km/h más ' + (exit > 0 ? 'rápida' : 'despacio'));
+  } else why.push(quick ? 'frena aquí y la otra no' : 'pasa sin frenar');
+  return capital(whose(fast.run)) + ' es ' + seconds(Math.abs(lost)) + ' más rápida aquí' + (why.length ? ': ' + why.join(' y ') : '') + '.';
 }
 function gatesOf(circuit) {
   const d = distanceSeries(circuit.points);
@@ -355,7 +408,6 @@ $('analyze').addEventListener('click', async () => {
   finally {btn.disabled = false;}
 });
 $('circuitSelect').addEventListener('change', pickDefault);
-$('brakingRun').addEventListener('change', e => {brakingRunId = e.target.value; renderBraking();});
 $('loginButton').addEventListener('click', () => shell.askLogin('Entra o crea tu cuenta para guardar tus rutas.'));
 let resizeTimer;
 window.addEventListener('resize', () => {clearTimeout(resizeTimer); resizeTimer = setTimeout(() => compare().catch(() => {}), 250);});
