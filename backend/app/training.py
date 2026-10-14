@@ -6,6 +6,7 @@ runs of the same circuit and compare speeds. Training runs never enter any stand
 The rider's own time trial entries are listed too, so they can be compared with training,
 and so are the runs of accepted friends (only runs on circuits, never their whole routes).
 """
+import math
 import uuid
 from datetime import datetime, timezone
 
@@ -13,13 +14,14 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
+from . import config
 from .competition import public_circuit, read_gps_upload, remove_file, run_attempt, store_activity
-from .database import get_db
+from .database import SessionLocal, get_db
 from .friends import friend_ids
 from .models import Activity, Attempt, Circuit, Pilot, Tournament
 from .ratelimit import RateLimit
 from .security import current_pilot
-from .timing import detect_attempts, haversine
+from .timing import GpsError, detect_attempts, haversine, parse_gps
 
 router=APIRouter(prefix="/api/training")
 route_limit=RateLimit(60,3600)
@@ -64,14 +66,55 @@ def near_route(fixes,circuit:dict)->bool:
         return False
     return any(haversine(f,start)<=NEAR_ROUTE_M for f in fixes)
 
+def nearest_circuit(fixes,circuits:list[dict])->dict|None:
+    """The circuit whose line the route comes closest to, for a route where no run was found."""
+    sample=fixes[::3] or fixes
+    best=None
+    for c in circuits:
+        ref=c["points"]
+        kx,ky=111195*math.cos(math.radians(ref[0][0])),111195
+        metres=min(math.hypot((f.lon-p[1])*kx,(f.lat-p[0])*ky) for f in sample for p in ref)
+        if best is None or metres<best["distance_m"]:best={"circuit_name":c["name"],"distance_m":round(metres)}
+    if best:best["passes"]=best["distance_m"]<=30  # rides on it, but not from start to finish
+    return best
+
+def scan_routes_for_circuit(circuit_id:uuid.UUID)->int:
+    """Look for a saved or changed circuit in every training route already uploaded.
+
+    Runs earlier on a circuit's old line are dropped first; time trial entries are never touched.
+    Runs after the response, in its own database session.
+    """
+    with SessionLocal() as db:
+        c=db.scalar(select(Circuit).options(selectinload(Circuit.sectors),selectinload(Circuit.weak_zones))
+                    .where(Circuit.id==circuit_id))
+        if not c:return 0
+        circuit=public_circuit(c)
+        db.execute(delete(Attempt).where(Attempt.circuit_id==c.id,Attempt.tournament_id.is_(None),
+                                         Attempt.timed_by=="server",Attempt.review_status.is_(None)))
+        found=0
+        for a in db.scalars(select(Activity).where(Activity.id.not_in(tournament_evidence()))).all():
+            try:fixes=parse_gps((config.GPS_STORAGE_DIR/str(a.owner_id)/a.storage_name).read_bytes(),a.format)
+            except (OSError,GpsError):continue
+            if not near_route(fixes,circuit):continue
+            owner=db.get(Pilot,a.owner_id)
+            for run in detect_attempts(fixes,circuit):
+                if run.seconds is None:continue
+                db.add(run_attempt(owner,c.id,run,a.filename,a.id))
+                found+=1
+        db.commit()
+        return found
+
 @router.post("/routes",status_code=201)
 async def upload_route(file:UploadFile=File(...),db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     route_limit.hit(str(p.id))
     filename,ext,data,fixes,digest=await read_gps_upload(file)
     # A file sent to a time trial is welcome here: only earlier training uploads are repeats.
-    if db.scalar(select(Activity.id).where(Activity.owner_id==p.id,Activity.sha256==digest,
-                                           Activity.id.not_in(tournament_evidence())).limit(1)):
-        raise HTTPException(409,"Ya habías subido esta ruta a entrenamiento")
+    repeated=db.execute(select(Activity.filename,func.to_char(func.timezone(config.COMPETITION_TIMEZONE,Activity.recorded_at),
+                                                              "DD/MM/YYYY HH24:MI"))
+        .where(Activity.owner_id==p.id,Activity.sha256==digest,Activity.id.not_in(tournament_evidence())).limit(1)).first()
+    if repeated:
+        when=f", salida del {repeated[1]}" if repeated[1] else ""
+        raise HTTPException(409,f"Ya habías subido esta ruta a entrenamiento: «{repeated[0]}»{when}")
     circuits=db.scalars(select(Circuit).options(selectinload(Circuit.sectors),selectinload(Circuit.weak_zones))).all()
     found=[]
     for c in circuits:
@@ -95,6 +138,7 @@ async def upload_route(file:UploadFile=File(...),db:Session=Depends(get_db),p:Pi
         raise
     return {"activity":{"id":str(activity.id),"filename":activity.filename,"distance_m":activity.distance_m},
             "found":[{"circuit_id":str(c.id),"circuit_name":c.name,"runs":len(runs)} for c,runs in found],
+            "nearest":None if found else nearest_circuit(fixes,[public_circuit(c) for c in circuits]),
             "runs":[run_payload(a,name) for a,name in attempts]}
 
 @router.get("/routes")

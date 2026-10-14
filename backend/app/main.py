@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from defusedxml.ElementTree import fromstring as safe_xml
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import delete, func, select, text
@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from . import config
 from .competition import router as competition_router
-from .training import router as training_router
+from .training import router as training_router, scan_routes_for_circuit
 from .friends import router as friends_router
 from .config import CORS_ORIGINS, GPS_STORAGE_DIR, MAX_UPLOAD_BYTES, REPO_ROOT, require_secret, LOCAL_SINGLE_USER, LOCAL_PILOT_ID
 from .database import get_db
@@ -144,7 +144,7 @@ def list_circuits(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     return [circuit_payload(c) for c in circuits]
 
 @app.post("/api/circuits",status_code=201)
-def create_circuit(payload:CircuitIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+def create_circuit(payload:CircuitIn,background:BackgroundTasks,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     # Circuits are the organizers' job; riders only upload their GPS runs.
     require_organizer(p)
     c=Circuit(owner_id=p.id,name=payload.name.strip(),reference_points=[])
@@ -152,6 +152,8 @@ def create_circuit(payload:CircuitIn,db:Session=Depends(get_db),p:Pilot=Depends(
     db.add(c)
     db.commit()
     db.refresh(c)
+    # Routes uploaded before this circuit existed may contain runs on it.
+    background.add_task(scan_routes_for_circuit,c.id)
     return circuit_payload(c)
 
 @app.get("/api/circuits/{circuit_id}")
@@ -159,7 +161,7 @@ def get_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(
     return circuit_payload(circuit_for_user(db,circuit_id,p.id))
 
 @app.put("/api/circuits/{circuit_id}")
-def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,background:BackgroundTasks,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     require_organizer(p)
     c=circuit_for_user(db,circuit_id,p.id)
     refuse_if_published(c)
@@ -170,6 +172,7 @@ def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,db:Session=Depends(get
     db.flush()
     assign_circuit(c,payload)
     db.commit()
+    background.add_task(scan_routes_for_circuit,c.id)
     return circuit_payload(circuit_for_user(db,circuit_id,p.id))
 
 @app.delete("/api/circuits/{circuit_id}",status_code=204)
