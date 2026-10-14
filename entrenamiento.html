@@ -59,6 +59,14 @@
       <div class="map-footer"><span id="mapSelection" role="status" aria-live="polite">Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.</span><button id="clearMapSelection" class="text-btn" type="button" hidden>Quitar selección</button></div>
     </section>
     <section class="panel">
+      <div class="panel-title"><h2><span>Frenadas</span></h2><span class="caps">DÓNDE PIERDES VELOCIDAD</span></div>
+      <div class="panel-content">
+        <label class="braking-run"><span>Ver las frenadas de</span><select id="brakingRun" disabled></select></label>
+        <div id="brakingList" class="zone-list"><p class="placeholder">Elige una bajada para ver dónde frena.</p></div>
+        <p class="help">En rosa en el mapa y sombreadas en la gráfica de velocidad. Pulsa una para verla de cerca. Salen del GPS, que da un punto por segundo: dicen dónde y cuánto bajas la velocidad, no la fuerza exacta de la frenada. Donde el GPS pierde la señal no se calculan.</p>
+      </div>
+    </section>
+    <section class="panel">
       <div class="panel-title"><h2><span>Velocidad</span></h2><span class="caps">KM/H A LO LARGO DEL CIRCUITO</span></div>
       <div class="panel-content"><div id="legend" class="chart-legend"></div><div id="speedChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa.</p></div>
     </section>

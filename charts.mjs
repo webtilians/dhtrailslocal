@@ -15,8 +15,8 @@ function niceTicks(min, max, count = 5) {
   return {ticks, min: Math.min(min, ticks[0]), max: Math.max(max, ticks.at(-1))};
 }
 
-// series: [{label, color, points: [{x, y}]}]; x is km along the circuit.
-export function lineChart(host, {series, yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220, onSelect}) {
+// series: [{label, color, points: [{x, y}]}]; x is km along the circuit. bands: [{from, to}] shaded behind the lines.
+export function lineChart(host, {series, bands = [], yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220, onSelect}) {
   host.replaceChildren();
   const width = Math.max(280, host.clientWidth || 600);
   const m = {top: 12, right: 14, bottom: 26, left: 52};
@@ -37,6 +37,8 @@ export function lineChart(host, {series, yFormat = v => String(v), xFormat = v =
     label.textContent = xFormat(t);
     root.append(label);
   }
+  for (const b of bands)
+    root.append(svg('rect', {x: sx(b.from), y: m.top, width: Math.max(2, sx(b.to) - sx(b.from)), height: height - m.top - m.bottom, class: 'chart-band'}));
   for (const s of series) {
     let d = '', pen = 'M';
     for (const p of s.points) {
