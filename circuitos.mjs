@@ -167,7 +167,8 @@ $('saveRoute').addEventListener('click', async () => {
     $('saveRoute').disabled = true;
     await shell.api.saveCircuit(circuit);
     feedback('Ruta «' + circuit.name + '» guardada.' + (c.seconds >= 30 ? ' Se ha quitado del trazado una parada de ' +
-      (c.seconds / 60).toFixed(1).replace('.', ',') + ' min.' : '') + ' Ya puedes usarla en un torneo.', 'success');
+      (c.seconds / 60).toFixed(1).replace('.', ',') + ' min.' : '') + ' Ya puedes usarla en un torneo. Además se está buscando en todas' +
+      ' las rutas de entrenamiento ya subidas: sus bajadas aparecerán en Entrenamiento.', 'success');
     source = null; draft = blank(); history = []; setTool('');
     $('circuitName').value = ''; $('sourceName').textContent = 'La ruta de una bajada que pase por todo el circuito';
     await loadSaved();

@@ -237,6 +237,13 @@ $('clearMapSelection').addEventListener('click', () => {
   if (circuit) view.fit(circuit.points.map(p => p.slice(0, 2)));
 });
 
+// Why a route gave no run: it rides part of a circuit, or the nearest circuit is somewhere else.
+function noCircuitMessage(nearest) {
+  if (!nearest) return 'Todavía no hay circuitos en la aplicación.';
+  if (nearest.passes) return 'Pasas por «' + nearest.circuit_name + '», pero no hay una bajada completa de su salida a su meta.';
+  return 'No contiene ningún circuito. El más cercano, «' + nearest.circuit_name + '», queda a ' +
+    (nearest.distance_m >= 1000 ? km(nearest.distance_m) : nearest.distance_m + ' m') + ' de tu ruta.';
+}
 async function loadRoutes() {
   const routes = await shell.api.trainingRoutes();
   $('routesCount').textContent = routes.length ? routes.length + ' RUTA(S)' : '';
@@ -270,9 +277,9 @@ $('analyze').addEventListener('click', async () => {
       see.addEventListener('click', () => loadRuns(f.circuit_id).catch(err => status(err.message, 'error')));
       return node('div', {className: 'item'}, [node('span', {}, [node('b', {textContent: f.circuit_name}),
         node('small', {textContent: ' · ' + f.runs + ' bajada(s)'})]), see]);
-    }) : [node('p', {className: 'placeholder', textContent: 'En esta ruta no hay ninguna bajada completa de los circuitos de la aplicación.'})]));
+    }) : [node('p', {className: 'placeholder', textContent: noCircuitMessage(result.nearest)})]));
     status(result.found.length ? 'Encontrado: ' + result.found.map(f => f.circuit_name + ' (' + f.runs + ')').join(', ') + '.' :
-      'Ruta guardada, sin circuitos de la aplicación.', result.found.length ? 'success' : '');
+      'Ruta guardada. ' + noCircuitMessage(result.nearest), result.found.length ? 'success' : '');
     $('routeFile').value = ''; $('routeName').textContent = 'Una salida completa: encontraremos las bajadas';
     await Promise.all([loadRoutes(), loadRuns(result.found[0]?.circuit_id)]);
   } catch (err) {status('No se pudo analizar la ruta: ' + err.message, 'error');}

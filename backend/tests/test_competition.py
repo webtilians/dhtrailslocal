@@ -188,6 +188,30 @@ def test_training_lists_my_time_trial_runs_and_takes_their_files(organizer):
         assert client.delete(f"/api/training/routes/{routes[0]['id']}", headers=rider).status_code == 204
         assert len(client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()) == 1
 
+def test_a_saved_circuit_is_found_in_routes_uploaded_before(organizer):
+    with TestClient(app) as client:
+        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003  # an area where no other test has a circuit
+        org = account(client, email=organizer)
+        rider = account(client)
+        route = gpx(fixes(recent(90), 2000, shift) + fixes(recent(60), 1700, shift))
+        before = upload(client, rider, "/api/training/routes", route, "antes.gpx").json()
+        assert before["found"] == [] and before["nearest"]["passes"] is False and before["nearest"]["distance_m"] > 1000
+        repeated = upload(client, rider, "/api/training/routes", route)
+        assert repeated.status_code == 409 and "«antes.gpx», salida del " in repeated.json()["detail"]
+
+        # Saving the circuit searches the routes already uploaded (in the background).
+        cid = client.post("/api/circuits", headers=org, json=circuit_body("Nuevo", shift)).json()["id"]
+        runs = client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()
+        assert len(runs) == 2 and {r["source_filename"] for r in runs} == {"antes.gpx"}
+        # Changing it searches again without leaving the old runs behind.
+        assert client.put(f"/api/circuits/{cid}", headers=org, json=circuit_body("Nuevo v2", shift)).status_code == 200
+        assert len(client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()) == 2
+
+        # Riding part of a circuit is told apart from riding somewhere else.
+        partial = upload(client, rider, "/api/training/routes", gpx(fixes(recent(30), 2000, shift)[40:]), "trozo.gpx").json()
+        assert partial["found"] == []
+        assert partial["nearest"] == {"circuit_name": "Nuevo v2", "distance_m": 0, "passes": True}
+
 def test_sign_up_takes_the_rider_name():
     with TestClient(app) as client:
         name = "Nombre " + uuid.uuid4().hex[:6]
