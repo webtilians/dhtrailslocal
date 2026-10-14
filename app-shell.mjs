@@ -118,9 +118,25 @@ function authDialog(shell) {
 }
 
 // ---- Map helpers shared by every page
+// Base maps: OpenStreetMap with the trails, or Esri satellite imagery with place names on top.
+// The last choice is remembered on this device.
+const BASE_MAP_KEY = 'dhtrailslocal:map:base';
+const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 export function createMap(id) {
   const map = L.map(id, {zoomControl: true}).setView([36.76, -4.46], 12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+  const bases = {
+    'Mapa': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'}),
+    'Satélite': L.layerGroup([
+      L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, maxNativeZoom: 18,
+        attribution: 'Imágenes &copy; Esri, Maxar, Earthstar Geographics'}),
+      L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, maxNativeZoom: 18}),
+    ]),
+  };
+  let base = 'Mapa';
+  try {if (bases[localStorage.getItem(BASE_MAP_KEY)]) base = localStorage.getItem(BASE_MAP_KEY);} catch {}
+  bases[base].addTo(map);
+  L.control.layers(bases, null, {position: 'topright', collapsed: false}).addTo(map);
+  map.on('baselayerchange', e => {try {localStorage.setItem(BASE_MAP_KEY, e.name);} catch {}});
   const layers = [];
   return {
     map,

@@ -162,6 +162,32 @@ def test_training_finds_saved_circuits_in_any_route(organizer):
         assert client.delete(f"/api/training/routes/{routes[0]['id']}", headers=rider).status_code == 204
         assert client.get("/api/training/runs", headers=rider).json() == []
 
+def test_training_lists_my_time_trial_runs_and_takes_their_files(organizer):
+    with TestClient(app) as client:
+        tag = uuid.uuid4().hex[:6]
+        org = account(client, "Org " + tag, organizer)
+        cid = new_circuit(client, org, "Trabuco " + tag)
+        tid = new_tournament(client, org, cid)
+        rider = account(client, "Seis " + tag)
+        data = gpx(fixes(recent(90), 2000) + fixes(recent(60), 1700))
+        entry = upload(client, rider, f"/api/tournaments/{tid}/entries", data)
+        assert entry.status_code == 201, entry.text
+        # The time trial entry is one of my runs in training, tagged with its tournament.
+        runs = client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()
+        assert [(r["tournament_name"], r["elapsed_ms"]) for r in runs] == [("Torneo de prueba", entry.json()["elapsed_ms"])]
+        assert client.get(f"/api/training/runs/{runs[0]['id']}", headers=rider).json()["profile"]
+        assert client.get(f"/api/training/runs?circuit_id={cid}", headers=account(client)).json() == []
+        # The same file is welcome in training: its other run appears and the entry is not listed twice.
+        assert upload(client, rider, "/api/training/routes", data).status_code == 201
+        runs = client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()
+        assert len(runs) == 2 and [r["tournament_name"] for r in runs].count("Torneo de prueba") == 1
+        assert upload(client, rider, "/api/training/routes", data).status_code == 409
+        # Deleting the training route keeps the entry.
+        routes = client.get("/api/training/routes", headers=rider).json()
+        assert len(routes) == 1
+        assert client.delete(f"/api/training/routes/{routes[0]['id']}", headers=rider).status_code == 204
+        assert len(client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()) == 1
+
 def test_sign_up_takes_the_rider_name():
     with TestClient(app) as client:
         name = "Nombre " + uuid.uuid4().hex[:6]
