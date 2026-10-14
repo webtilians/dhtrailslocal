@@ -1,6 +1,7 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
-import {resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingPoints} from './telemetry.mjs';
+import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints}
+  from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
@@ -20,11 +21,12 @@ const HIGHLIGHT = '#ffe066';
 let mapSelection = null, selectionLayer = null, charts = [], comparisonVersion = 0;
 // Braking of up to two of the compared runs at once (null: the reference and the next one).
 const BRAKING_MAX = 2;
-let current = null, brakingIds = null, brakingLayer = null;
+let current = null, brakingIds = null, brakingByHand = false, brakingLayer = null;
 const kmh = v => Math.round(v) + ' km/h';
 const seconds = ms => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
 const zoneText = z => 'de ' + Math.round(z.fromKmh) + ' a ' + kmh(z.toKmh) + ' en ' + Math.round(z.to - z.from) + ' m';
 const whose = r => r.mine === false ? 'la de ' + r.pilot + ' (' + when(r.started_at) + ')' : 'la tuya (' + when(r.started_at) + ')';
+const owner = r => (r.mine === false ? r.pilot : 'tu bajada') + ' (' + when(r.started_at) + ')';
 const capital = text => text[0].toUpperCase() + text.slice(1);
 
 function showSelection(circuit, {reveal = false} = {}) {
@@ -158,9 +160,12 @@ async function compare() {
     $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: 'Elige una bajada para ver dónde frena.'}));
     return;
   }
+  const distances = distanceSeries(circuit.points);
   const data = await Promise.all(chosen.map(async (r, i) => {
     const profile = await profileOf(r.id);
-    return {run: r, color: COLORS[i], label: runLabel(r), profile, samples: resample(profile, 10)};
+    // Speed without the GPS spikes: fixes far off the trail or out of reach are left out.
+    const speed = steadySpeed(profile, trailOffsets(profile, circuit.points, distances));
+    return {run: r, color: COLORS[i], label: runLabel(r), profile, samples: resample(profile, 10), speed};
   }));
   if (version !== comparisonVersion) return;
   // Each run's own GPS line, in its colour.
@@ -177,10 +182,12 @@ async function compare() {
     yFormat: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' s', zero: true,
     onSelect: (x, options) => selectPoint(circuit, x, options)}));
   renderSegments(circuit, data, reference);
-  const present = brakingIds?.filter(id => data.some(d => d.run.id === id));
-  // Keep the runs chosen for braking while they are compared; start again with the default if none is left.
-  brakingIds = !present || (brakingIds.length && !present.length) ?
-    [reference, ...data.filter(d => d !== reference)].slice(0, BRAKING_MAX).map(d => d.run.id) : present;
+  // Braking shows the reference and the next run, unless you picked the runs yourself: that choice
+  // stays while those runs are compared (an empty one too).
+  const present = (brakingIds || []).filter(id => data.some(d => d.run.id === id));
+  brakingByHand &&= present.length > 0 || !brakingIds.length;
+  const byDefault = [reference, ...data.filter(d => d !== reference)].map(d => d.run.id);
+  brakingIds = brakingByHand ? present : byDefault.slice(0, BRAKING_MAX);
   renderBraking();
   const gates = gatesOf(circuit), referenceTimes = segmentTimes(reference.profile, gates);
   const worst = data.filter(d => d !== reference).map(d => {
@@ -199,7 +206,7 @@ function renderBraking() {
   if (brakingLayer) view.map.removeLayer(brakingLayer);
   brakingLayer = null;
   const chosen = data.filter(d => brakingIds.includes(d.run.id)), key = chosen.map(d => d.run.id).join();
-  const points = chosen.length ? brakingPoints(chosen.map(d => d.profile)) : [];
+  const points = chosen.length ? brakingPoints(chosen.map(d => ({profile: d.profile, speed: d.speed}))) : [];
   if (mapSelection?.kind === 'zone' && (mapSelection.key !== key || !points[mapSelection.index])) mapSelection = null;
   $('brakingRuns').replaceChildren(...data.map(d => {
     const on = chosen.includes(d);
@@ -207,6 +214,7 @@ function renderBraking() {
     box.addEventListener('change', () => {
       if (box.checked && chosen.length >= BRAKING_MAX) {box.checked = false; return status('Puedes solapar las frenadas de 2 bajadas a la vez.', 'error');}
       brakingIds = box.checked ? [...brakingIds, d.run.id] : brakingIds.filter(id => id !== d.run.id);
+      brakingByHand = true;
       renderBraking();
     });
     const chip = node('i', {className: 'chip'});
@@ -219,9 +227,11 @@ function renderBraking() {
     return {from: Math.min(...found.map(z => z.from)), to: Math.max(...found.map(z => z.to))};
   };
   charts[0] = lineChart($('speedChart'), {series: data.map(d => ({label: d.label, color: d.color,
-    points: speedSeries(d.samples).map(p => ({x: p.s / 1000, y: p.kmh === null ? null : Math.round(p.kmh * 10) / 10}))})),
+    points: d.speed.samples.map((p, i) => ({x: p.s / 1000, y: d.speed.kmh[i] === null ? null : Math.round(d.speed.kmh[i] * 10) / 10,
+      est: inBlind(d.speed.blind, p.s)}))})),
     bands: points.map(p => ({from: span(p).from / 1000, to: span(p).to / 1000})),
-    lanes: chosen.map((d, k) => ({color: d.color, spans: points.filter(p => p.zones[k]).map(p => ({from: p.zones[k].from / 1000, to: p.zones[k].to / 1000}))})),
+    lanes: chosen.map((d, k) => ({color: d.color, spans: points.filter(p => p.zones[k]).map(p => ({from: p.zones[k].from / 1000, to: p.zones[k].to / 1000})),
+      unknown: d.speed.blind.map(([a, b]) => ({from: Math.min(a, b) / 1000, to: Math.max(a, b) / 1000}))})),
     yFormat: kmh, onSelect: (x, options) => selectPoint(circuit, x, options)});
   if (!chosen.length) {
     $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: 'Marca una o dos bajadas para ver sus frenadas.'}));
@@ -252,7 +262,7 @@ function renderBraking() {
       chip.style.background = d.color;
       return node('span', {className: 'zone-row'}, [chip, node('span', {textContent:
         (d.run.mine === false ? d.run.pilot + ' · ' : '') + when(d.run.started_at) + ': ' +
-        (z ? 'frena desde ' + Math.round(z.from) + ' m, ' + zoneText(z) : 'no frena aquí') + ' · pasa en ' + seconds(p.ms[k])})]);
+        (z ? 'frena desde ' + Math.round(z.from) + ' m, ' + zoneText(z) : withoutBraking(p.speed[k])) + ' · pasa en ' + seconds(p.ms[k])})]);
     });
     const summary = two ? brakingVerdict(p, chosen) : zoneText(p.zones[0]);
     const button = node('button', {type: 'button', className: 'zone-item', title: 'Ver la frenada ' + (i + 1) + ' en el mapa'}, [
@@ -269,19 +279,36 @@ function renderBraking() {
   }) : [node('p', {className: 'placeholder', textContent: 'No hay frenadas claras, o el GPS no fue fiable donde se frena.'})]));
   showSelection(circuit);
 }
-// Which of two runs gets through a braking point faster, and what it does differently.
-function brakingVerdict(p, [a, b]) {
+// What a run does at a braking point where it has no clear braking of its own.
+function withoutBraking({topKmh, lowKmh, unsure}) {
+  if (unsure) return 'aquí su GPS no es fiable y no se puede medir cómo frena';
+  if (topKmh === null) return 'sin datos';
+  const top = Math.round(topKmh), low = Math.round(lowKmh);
+  if (top - low >= 5) return 'baja de ' + top + ' a ' + low + ' km/h poco a poco, sin una frenada clara';
+  if (top - low >= 2) return 'apenas frena: de ' + top + ' a ' + low + ' km/h';
+  return 'no frena: va a unos ' + low + ' km/h';
+}
+// Which of two runs gets through a braking point faster, and what it does differently. The figures
+// are compared rounded like on screen, so the differences match them.
+function brakingVerdict(p, runs) {
   const lost = p.ms[1] - p.ms[0];
-  if (Math.abs(lost) < 100) return 'Las dos pasan en el mismo tiempo.';
-  const [fast, quick, slow] = lost > 0 ? [a, p.zones[0], p.zones[1]] : [b, p.zones[1], p.zones[0]];
+  const doubtful = runs.filter((_, k) => p.speed[k].unsure).map(d => owner(d.run));
+  const note = doubtful.length ? ' Ojo: aquí el GPS de ' + doubtful.join(' y de ') + ' no es fiable, así que su frenada no se puede comparar.' : '';
+  if (Math.abs(lost) < 100) return 'Las dos pasan en el mismo tiempo.' + note;
+  const f = lost > 0 ? 0 : 1, o = 1 - f, quick = p.zones[f], slow = p.zones[o];
   const why = [];
-  if (quick && slow) {
-    // Rounded like the figures on screen, so the difference matches them.
+  let despite = '';
+  if (!doubtful.length && quick && slow) {
     const later = Math.round(quick.from - slow.from), exit = Math.round(quick.toKmh) - Math.round(slow.toKmh);
     if (Math.abs(later) >= 10) why.push('frena ' + Math.abs(later) + ' m ' + (later > 0 ? 'más tarde' : 'antes'));
     if (Math.abs(exit) >= 2) why.push('sale ' + Math.abs(exit) + ' km/h más ' + (exit > 0 ? 'rápida' : 'despacio'));
-  } else why.push(quick ? 'frena aquí y la otra no' : 'pasa sin frenar');
-  return capital(whose(fast.run)) + ' es ' + seconds(Math.abs(lost)) + ' más rápida aquí' + (why.length ? ': ' + why.join(' y ') : '') + '.';
+  } else if (!doubtful.length && p.speed[f].lowKmh !== null && p.speed[o].lowKmh !== null) {
+    const kept = Math.round(p.speed[f].lowKmh), other = Math.round(p.speed[o].lowKmh);
+    if (kept - other >= 2) why.push('no baja de ' + kept + ' km/h y la otra baja a ' + other);
+    else if (other - kept >= 2) despite = ', aunque baja más (a ' + kept + ' km/h; la otra a ' + other + ')';
+  }
+  return capital(whose(runs[f].run)) + ' es ' + seconds(Math.abs(lost)) + ' más rápida aquí' + (why.length ? ': ' + why.join(' y ') : '') +
+    despite + '.' + note;
 }
 function gatesOf(circuit) {
   const d = distanceSeries(circuit.points);

@@ -37,7 +37,12 @@ Los senderos son de un metro: un punto GPS lejos del trazado es un fallo del GPS
 
 El motor del navegador (`gps-engine.mjs`) y el del servidor dan exactamente los mismos tiempos. Cada bajada guarda además su **perfil** (posición en el circuito y hora de cada punto fiable), que usa Entrenamiento para comparar velocidades (`telemetry.mjs`, `charts.mjs`).
 
-Las **frenadas** salen de ese perfil: van de un pico de velocidad al punto más lento que le sigue, si se pierden al menos 5 km/h a 0,2 m/s² o más de media. Con un punto por segundo marcan dónde y cuánto se frena, no la fuerza de la frenada. Junto a un hueco de más de 3 s sin GPS fiable o un salto imposible (más de 22 m/s) la velocidad es solo una media, así que ahí no se marca ninguna. Con dos bajadas, las frenadas que acaban a menos de 35 m son la misma curva: para cada una se dice cuál pasa más rápido (de 20 m antes a 20 m después) y si frena más tarde o sale más rápido.
+La **velocidad** de Entrenamiento no hace caso de los saltos del GPS, que antes daban picos de 50 a 98 km/h donde todos iban a 30:
+- Se quitan los puntos que están más de 15 m más lejos del sendero de lo que suele ir esa bajada (el GPS se ha ido de lado) y aquellos a los que no se llega a 1,6 veces el ritmo del piloto más 1 m/s, con 8 m de margen por el error del GPS (ha saltado). Es la misma regla que usa el cronometraje para los tramos sin GPS.
+- En cada punto la velocidad es la mediana de las velocidades entre todos los pares de puntos de ±3 s (pendiente de Theil–Sen): un punto fuera de sitio cambia unos pocos pares, no la mediana.
+- Donde se han quitado puntos o hay más de 3 s sin GPS, la gráfica muestra en discontinua la velocidad media entre los puntos buenos. Los tiempos y las diferencias no cambian: siguen saliendo del perfil completo.
+
+Las **frenadas** salen de esa velocidad: van de un pico al punto más lento que le sigue, si se pierden al menos 5 km/h a 0,2 m/s² o más de media. Con un punto por segundo marcan dónde y cuánto se frena, no la fuerza de la frenada. Junto a un tramo sin GPS fiable no se marca ninguna. Con dos bajadas, las frenadas que acaban a menos de 35 m son la misma curva: para cada una se dice cuál pasa más rápido (de 20 m antes a 20 m después) y si frena más tarde o sale más rápido. Si una de las dos no frena claro, se dice qué hace (si baja poco a poco y cuánto, o si su GPS no es fiable ahí) en vez de «no frena».
 
 ## Iniciar servidor local
 

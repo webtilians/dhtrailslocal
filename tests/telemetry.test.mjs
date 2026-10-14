@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {timeAt, resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingZones, brakingPoints} from '../telemetry.mjs';
+import {distanceSeries} from '../gps-engine.mjs';
+import {timeAt, resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingZones, brakingPoints,
+  trailOffsets, steadyProfile, steadySpeed} from '../telemetry.mjs';
 
 // 100 m at a steady 10 m/s, one fix per second, with a GPS step back at 50 m.
 const steady = [[0, 0, 0, 0], [10, 1000, 0, 0], [20, 2000, 0, 0], [30, 3000, 0, 0], [40, 4000, 0, 0],
@@ -92,7 +94,7 @@ test('braking: no zone next to a stretch without reliable GPS', () => {
 test('braking of two runs pairs the zones of the same corner', () => {
   // The second run brakes a second later (10 m further on) for the same corner.
   const late = ride(t => corner(t - 1));
-  const points = brakingPoints([ride(corner), late]);
+  const points = brakingPoints([{profile: ride(corner)}, {profile: late}]);
   assert.equal(points.length, 1);
   const [{zones: [a, b], ms, from, to}] = points;
   assert.ok(a && b);
@@ -101,13 +103,66 @@ test('braking of two runs pairs the zones of the same corner', () => {
   assert.ok(ms[1] < ms[0], 'braking later is faster here: ' + ms);
 });
 test('braking of two runs: a corner only one run brakes for stays on its own', () => {
-  const [point] = brakingPoints([ride(corner), ride(() => 8)]);
+  const [point] = brakingPoints([{profile: ride(corner)}, {profile: ride(() => 8)}]);
   assert.ok(point.zones[0] && point.zones[1] === null);
-  assert.equal(brakingPoints([ride(corner), ride(() => 8)]).length, 1);
+  // What the other run does there: no braking at all, steady at 8 m/s.
+  assert.equal(Math.round(point.speed[1].topKmh), 29);
+  assert.equal(Math.round(point.speed[1].lowKmh), 29);
+  assert.equal(point.speed[1].unsure, false);
   // Corners 100 m apart are different corners.
-  const further = brakingPoints([ride(corner), ride(t => corner(t - 10))]);
+  const further = brakingPoints([{profile: ride(corner)}, {profile: ride(t => corner(t - 10))}]);
   assert.equal(further.length, 2);
   assert.deepEqual(further.map(p => p.zones.map(z => z !== null)), [[true, false], [false, true]]);
   // One run: every zone is a point.
-  assert.deepEqual(brakingPoints([ride(corner)]).map(p => p.zones.length), [1]);
+  assert.deepEqual(brakingPoints([{profile: ride(corner)}]).map(p => p.zones.length), [1]);
+});
+test('braking of two runs: a slow, gradual slowdown is told, not hidden', () => {
+  // Losing 0.18 m/s every second for 30 s: too gradual to count as braking, but through the
+  // corner it still loses more than 5 km/h.
+  const gradual = t => t <= 10 ? 10 : t <= 40 ? 10 - (t - 10) * 0.18 : 4.6;
+  const [point] = brakingPoints([{profile: ride(corner)}, {profile: ride(gradual)}]);
+  assert.equal(point.zones[1], null);
+  assert.ok(point.speed[1].topKmh - point.speed[1].lowKmh >= 5, JSON.stringify(point.speed[1]));
+});
+
+// A circuit due south along one meridian, and GPS fixes along it every second at 8 m/s.
+const meridian = Array.from({length: 51}, (_, i) => [36 - i * 10 / 111195, -4]);
+const meridianAt = distanceSeries(meridian);
+function onTrail(profile, sideways = () => 0) {
+  return profile.map(([s, t], i) => {
+    const [lat, lon] = circuitPosition(meridian, meridianAt, s);
+    return [s, t, lat, lon + sideways(i) / (111195 * Math.cos(lat * Math.PI / 180))];
+  });
+}
+test('how far each fix is from the trail', () => {
+  const offsets = trailOffsets(onTrail(ride(() => 8), i => i === 10 ? 25 : 0), meridian, meridianAt);
+  assert.ok(offsets[3] < 0.5 && Math.abs(offsets[10] - 25) < 0.5, offsets.slice(8, 12).join());
+});
+test('steady speed: a GPS jump does not show as a peak', () => {
+  // 8 m/s, but the GPS puts the rider 40 m ahead for one second, then 30 and 20 m. The first two are
+  // out of reach; 20 m over three seconds is within the GPS error allowed, so that fix stays.
+  const jump = ride(() => 8).map(([s, t, ...rest]) => [s + ({20000: 40, 21000: 30, 22000: 20}[t] || 0), t, ...rest]);
+  const {profile, doubtful} = steadyProfile(jump);
+  assert.equal(profile.length, jump.length - 2);
+  assert.deepEqual(doubtful, [[152, 196]]);
+  const old = Math.max(...speedSeries(resample(jump, 10), 2).map(p => p.kmh));
+  const now = steadySpeed(jump);
+  assert.ok(old > 45, 'the plain speed peaks: ' + old);
+  assert.ok(Math.max(...now.kmh) < 40, 'steady speed stays near 28.8 km/h: ' + Math.max(...now.kmh));
+  assert.deepEqual(now.blind, [[152, 196]]);
+});
+test('steady speed: one fix out of place changes nothing, a long drift off the trail is left out', () => {
+  // 12 m ahead for one second is within GPS error: kept, and the median of the slopes ignores it.
+  const nudge = ride(() => 8).map(([s, t, ...rest]) => [t === 20000 ? s + 12 : s, t, ...rest]);
+  assert.equal(steadyProfile(nudge).profile.length, nudge.length);
+  assert.ok(Math.max(...steadySpeed(nudge).kmh) < 31, Math.max(...steadySpeed(nudge).kmh));
+  // Five fixes 30 m off a trail the run otherwise follows within a metre.
+  const drift = onTrail(ride(() => 8), i => i >= 20 && i < 25 ? 30 : 0);
+  const offsets = trailOffsets(drift, meridian, meridianAt);
+  const {profile, doubtful} = steadyProfile(drift, offsets);
+  assert.equal(profile.length, drift.length - 5);
+  assert.deepEqual(doubtful, [[152, 200]]);
+  // A run that is always 20 m off (the circuit drawn a bit to one side) keeps every fix.
+  const aside = onTrail(ride(() => 8), () => 20);
+  assert.equal(steadyProfile(aside, trailOffsets(aside, meridian, meridianAt)).profile.length, aside.length);
 });

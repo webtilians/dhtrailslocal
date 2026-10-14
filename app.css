@@ -130,6 +130,7 @@ input[type=date],input[type=number]{color-scheme:dark}
 .legend-item{display:flex;align-items:center;gap:6px}
 .chart-band{fill:#cfe6f8;opacity:.07}
 .chart-lane{fill:#1a3247}
+.chart-lane-unknown{fill:#55687c}
 .brake-pin{display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#f0f6ff;color:#071423;border:2px solid #071423;font:800 12px/1 Inter,system-ui,sans-serif;box-sizing:border-box;flex:none}
 .braking-intro{margin:0 0 10px}
 .braking-runs{margin-bottom:12px}

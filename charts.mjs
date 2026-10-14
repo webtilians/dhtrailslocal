@@ -15,8 +15,10 @@ function niceTicks(min, max, count = 5) {
   return {ticks, min: Math.min(min, ticks[0]), max: Math.max(max, ticks.at(-1))};
 }
 
-// series: [{label, color, points: [{x, y}]}]; x is km along the circuit. bands: [{from, to}] shaded behind the lines.
-// lanes: [{color, spans: [{from, to}]}], one strip each under the plot (like where each run brakes).
+// series: [{label, color, points: [{x, y, est}]}]; x is km along the circuit; a point with `est` is only an
+// estimate (drawn dashed). bands: [{from, to}] shaded behind the lines.
+// lanes: [{color, spans: [{from, to}], unknown: [{from, to}]}], one strip each under the plot (like where each
+// run brakes, and where its GPS was not reliable).
 export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220, onSelect}) {
   host.replaceChildren();
   const width = Math.max(280, host.clientWidth || 600);
@@ -45,17 +47,24 @@ export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => 
   lanes.forEach((lane, i) => {
     const y = height - m.bottom + 4 + i * 9;
     root.append(svg('rect', {x: m.left, y, width: width - m.left - m.right, height: 6, rx: 2, class: 'chart-lane'}));
+    for (const span of lane.unknown || [])
+      root.append(svg('rect', {x: sx(span.from), y, width: Math.max(2, sx(span.to) - sx(span.from)), height: 6, class: 'chart-lane-unknown'}));
     for (const span of lane.spans)
       root.append(svg('rect', {x: sx(span.from), y, width: Math.max(3, sx(span.to) - sx(span.from)), height: 6, rx: 2, fill: lane.color}));
   });
   for (const s of series) {
-    let d = '', pen = 'M';
+    // Solid where the values are measured, dashed where a point at either end is an estimate.
+    let solid = '', dashed = '', prev = null, open = false;
     for (const p of s.points) {
-      if (p.y === null) {pen = 'M'; continue;}
-      d += pen + sx(p.x).toFixed(1) + ' ' + sy(p.y).toFixed(1) + ' ';
-      pen = 'L';
+      if (p.y === null) {prev = null; open = false; continue;}
+      const xy = sx(p.x).toFixed(1) + ' ' + sy(p.y).toFixed(1);
+      if (prev && (p.est || prev.est)) {dashed += 'M' + prev.xy + ' L' + xy + ' '; open = false;}
+      else if (prev) {solid += (open ? 'L' : 'M' + prev.xy + ' L') + xy + ' '; open = true;}
+      prev = {xy, est: p.est};
     }
-    root.append(svg('path', {d, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'}));
+    const line = {fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'};
+    root.append(svg('path', {...line, d: solid}));
+    if (dashed) root.append(svg('path', {...line, d: dashed, 'stroke-dasharray': '3 4', opacity: .8}));
   }
   // Crosshair: the nearest sample of every run at the pointer's distance.
   const cross = svg('line', {y1: m.top, y2: height - m.bottom, class: 'chart-cross', visibility: 'hidden'});
@@ -88,7 +97,7 @@ export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => 
       const row = document.createElement('div');
       const chip = document.createElement('i');
       chip.style.background = s.color;
-      row.append(chip, s.label + ': ' + (visible ? yFormat(p.y) : '—'));
+      row.append(chip, s.label + ': ' + (visible ? yFormat(p.y) + (p.est ? ' (media, GPS no fiable)' : '') : '—'));
       tip.append(row);
     });
     tip.hidden = false;
