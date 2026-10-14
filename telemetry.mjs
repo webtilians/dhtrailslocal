@@ -58,24 +58,93 @@ export function segmentTimes(profile, gatesAt) {
   const marks = [0, ...gatesAt, profile.at(-1)[0]].map(s => timeAt(profile, s));
   return marks.slice(1).map((t, i) => t - marks[i]);
 }
+// Metres between two [lat, lon] a few hundred metres apart (flat-earth approximation).
+function metres(a, b) {
+  const rad = Math.PI / 180;
+  return 6371000 * Math.hypot((b[1] - a[1]) * rad * Math.cos((a[0] + b[0]) / 2 * rad), (b[0] - a[0]) * rad);
+}
+function median(values) {
+  const v = values.filter(x => x !== null && Number.isFinite(x)).sort((a, b) => a - b);
+  if (!v.length) return null;
+  return v.length % 2 ? v[v.length >> 1] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
+}
+// How far each GPS fix sits from the trail: from the fix to the circuit at the fix's own distance.
+export function trailOffsets(profile, points, distances) {
+  return profile.map(p => metres([p[2], p[3]], circuitPosition(points, distances, p[0])));
+}
+
+// The fixes to trust for speed. A watch's GPS can jump, or drift off the trail for several seconds;
+// either way it moves the rider along the trail by tens of metres at once (a run at 30 km/h then
+// shows 98 km/h). A fix is left out when it sits `offTrailM` further from the trail than the run
+// usually does, or when getting to it from the last fix kept needs more than `paceFactor` times the
+// rider's pace around it plus 1 m/s (the timing engine's rule for stretches without GPS), allowing
+// `errorM` metres of GPS error. The fixes kept keep their exact times, so a stretch left out shows the
+// average speed between the fixes around it. Start and finish always stay. `doubtful` are the
+// stretches left out, from the fix kept before to the fix kept after.
+export function steadyProfile(profile, offsets = null, {offTrailM = 15, paceFactor = 1.6, paceWindowMs = 10000,
+                                                      minPace = 3, errorM = 8} = {}) {
+  const usual = offsets ? median(offsets) : 0;
+  const steps = profile.slice(1).map((p, i) => ({t: p[1],
+    v: p[1] > profile[i][1] ? (p[0] - profile[i][0]) * 1000 / (p[1] - profile[i][1]) : null}));
+  const pace = t => Math.max(minPace, median(steps.filter(x => Math.abs(x.t - t) <= paceWindowMs).map(x => x.v)) ?? 0);
+  const kept = [], doubtful = [];
+  let leftOut = null;
+  profile.forEach((p, i) => {
+    const last = kept.at(-1), seconds = last ? (p[1] - last[1]) / 1000 : 0;
+    const offTrail = offsets && offsets[i] > usual + offTrailM;
+    const jump = last && p[0] - last[0] > (paceFactor * pace(p[1]) + 1) * seconds + errorM;
+    if ((offTrail || jump) && i > 0 && i < profile.length - 1) {
+      leftOut ??= last[0];
+      return;
+    }
+    if (leftOut !== null) doubtful.push([leftOut, p[0]]);
+    leftOut = null;
+    kept.push(p);
+  });
+  return {profile: kept, doubtful};
+}
+
+// Speed along a run every `step` metres, robust to GPS that jumps. At each point the speed is the
+// median of the speeds between every pair of fixes within ±`halfMs` (the Theil–Sen slope of
+// position over time): one fix out of place changes a few of those pairs, not the median, so it
+// cannot show as a peak, while a real change of pace moves them all. `blind` are the stretches
+// without reliable GPS (fixes left out, or more than `maxGapMs` between fixes): there the speed is
+// only what the fixes around them say.
+export function steadySpeed(profile, offsets = null, {step = 10, halfMs = 3000, maxGapMs = 3000} = {}) {
+  const steady = steadyProfile(profile, offsets), fixes = steady.profile;
+  const samples = resample(fixes, step);
+  let first = 0;
+  const kmh = samples.map(p => {
+    while (first < fixes.length && fixes[first][1] < p.t - halfMs) first++;
+    const near = [];
+    for (let i = first; i < fixes.length && fixes[i][1] <= p.t + halfMs; i++) near.push(fixes[i]);
+    const slopes = [];
+    for (let i = 0; i < near.length; i++)
+      for (let j = i + 1; j < near.length; j++)
+        if (near[j][1] > near[i][1]) slopes.push((near[j][0] - near[i][0]) / (near[j][1] - near[i][1]) * 3600);
+    return near.length >= 3 ? median(slopes) : null;
+  });
+  const blind = [...steady.doubtful];
+  fixes.forEach((p, i) => {
+    if (i && p[1] - fixes[i - 1][1] > maxGapMs && !blind.some(([a, b]) => a === fixes[i - 1][0] && b === p[0]))
+      blind.push([fixes[i - 1][0], p[0]]);
+  });
+  return {samples, kmh, blind: blind.sort((a, b) => a[0] - b[0])};
+}
+// Whether a distance falls in a stretch without reliable GPS, give or take `margin` metres.
+export function inBlind(blind, s, margin = 0) {
+  return blind.some(([a, b]) => s >= Math.min(a, b) - margin && s <= Math.max(a, b) + margin);
+}
+
 // Where a run slows down (braking). One GPS fix per second shows where and how much the speed
 // drops over tens of metres, not the bite of the brakes: a zone goes from a speed peak to the next
 // low point when the speed falls at least `minDropKmh` at `minDecel` m/s² or more on average.
-// The speed is unknown where GPS is not reliable: a gap of more than `maxGapMs` between fixes or a
-// jump no bike makes (faster than `maxSpeed` m/s). Such a stretch shows an average speed, not
-// the real one, so a zone never starts or ends next to it.
-export function brakingZones(profile, {step = 10, minDropKmh = 5, minDecel = 0.2, resumeKmh = 3,
-                                      maxGapMs = 3000, maxSpeed = 22} = {}) {
-  const samples = resample(profile, step), window = 2;
-  const blind = [];
-  for (let i = 1; i < profile.length; i++) {
-    const [s0, t0] = profile[i - 1], [s1, t1] = profile[i];
-    if (t1 - t0 > maxGapMs || (s1 - s0) * 1000 > maxSpeed * (t1 - t0)) blind.push([s0, s1]);
-  }
-  const reach = window * step;
-  const kmh = speedSeries(samples, window).map(p =>
-    blind.some(([a, b]) => p.s >= a - reach && p.s <= b + reach) ? null : p.kmh);
-
+// Next to a stretch without reliable GPS the speed is only an average, so a zone never starts or
+// ends there. `speed` is the run's steadySpeed when already worked out.
+export function brakingZones(profile, {offsets = null, speed = null, step = 10, minDropKmh = 5, minDecel = 0.2,
+                                      resumeKmh = 3} = {}) {
+  const {samples, kmh: all, blind} = speed ?? steadySpeed(profile, offsets, {step});
+  const kmh = all.map((v, i) => inBlind(blind, samples[i].s, 2 * step) ? null : v);
   const zones = [];
   const finish = (peak, low) => {
     if (peak === null || low === null || kmh[peak - 1] === null || kmh[low + 1] === null) return;
@@ -101,12 +170,15 @@ export function brakingZones(profile, {step = 10, minDropKmh = 5, minDecel = 0.2
   return zones;
 }
 
-// The braking of one or two runs, corner by corner. Two zones that end within `joinM` metres are
-// the same corner (closest ends pair first); where only one run brakes, the other's zone is null.
-// Each point also has the time every run takes through it, from `marginM` before the first zone
-// to `marginM` after the last, so the faster way through a corner shows.
-export function brakingPoints(profiles, {joinM = 35, marginM = 20} = {}) {
-  const zones = profiles.map(p => brakingZones(p));
+// The braking of one or two runs ([{profile, offsets}]), corner by corner. Two zones that end within
+// `joinM` metres are the same corner (closest ends pair first); where only one run brakes, the
+// other's zone is null. Each point has, for every run, the time it takes through it (from `marginM`
+// before the first zone to `marginM` after the last), its top speed before the slowest point and
+// that lowest speed, and whether its GPS is unreliable there; so a run that slows down without a
+// clear braking still shows what it does.
+export function brakingPoints(runs, {joinM = 35, marginM = 20} = {}) {
+  const speeds = runs.map(r => r.speed ?? steadySpeed(r.profile, r.offsets));
+  const zones = runs.map((r, k) => brakingZones(r.profile, {speed: speeds[k]}));
   const points = [];
   if (zones.length === 2) {
     const [a, b] = zones, usedA = new Set(), usedB = new Set();
@@ -115,12 +187,19 @@ export function brakingPoints(profiles, {joinM = 35, marginM = 20} = {}) {
       if (!usedA.has(i) && !usedB.has(j)) {usedA.add(i); usedB.add(j); points.push([a[i], b[j]]);}
     a.forEach((x, i) => usedA.has(i) || points.push([x, null]));
     b.forEach((y, j) => usedB.has(j) || points.push([null, y]));
-  } else points.push(...zones.flatMap((list, k) => list.map(z => profiles.map((_, n) => n === k ? z : null))));
-  const end = Math.min(...profiles.map(p => p.at(-1)[0]));
+  } else points.push(...zones.flatMap((list, k) => list.map(z => runs.map((_, n) => n === k ? z : null))));
+  const end = Math.min(...runs.map(r => r.profile.at(-1)[0]));
   return points.map(pair => {
     const found = pair.filter(Boolean);
     const from = Math.max(0, Math.min(...found.map(z => z.from)) - marginM);
     const to = Math.min(end, Math.max(...found.map(z => z.to)) + marginM);
-    return {from, to, zones: pair, ms: profiles.map(p => timeAt(p, to) - timeAt(p, from))};
+    const speed = speeds.map(({samples, kmh, blind}) => {
+      const inside = samples.map((p, i) => [p.s, kmh[i]]).filter(([s, v]) => s >= from && s <= to && v !== null);
+      const slowest = inside.reduce((best, x) => !best || x[1] < best[1] ? x : best, null);
+      const before = inside.filter(([s]) => s <= (slowest?.[0] ?? to)).map(([, v]) => v);
+      return {topKmh: before.length ? Math.max(...before) : null, lowKmh: slowest?.[1] ?? null,
+        unsure: blind.some(([a, b]) => Math.max(a, b) > from && Math.min(a, b) < to)};
+    });
+    return {from, to, zones: pair, speed, ms: runs.map(r => timeAt(r.profile, to) - timeAt(r.profile, from))};
   }).sort((p, q) => p.from - q.from);
 }
