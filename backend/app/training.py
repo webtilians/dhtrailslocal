@@ -3,7 +3,8 @@
 Each run found is timed like a time trial entry and kept privately with its profile
 (position along the circuit and time of every reliable fix), so the rider can overlay
 runs of the same circuit and compare speeds. Training runs never enter any standings.
-The rider's own time trial entries are listed too, so they can be compared with training.
+The rider's own time trial entries are listed too, so they can be compared with training,
+and so are the runs of accepted friends (only runs on circuits, never their whole routes).
 """
 import uuid
 from datetime import datetime, timezone
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .competition import public_circuit, read_gps_upload, remove_file, run_attempt, store_activity
 from .database import get_db
+from .friends import friend_ids
 from .models import Activity, Attempt, Circuit, Pilot, Tournament
 from .ratelimit import RateLimit
 from .security import current_pilot
@@ -30,18 +32,23 @@ def tournament_evidence():
     """Files that prove a time trial entry."""
     return select(Attempt.activity_id).where(Attempt.tournament_id.is_not(None),Attempt.activity_id.is_not(None))
 
-def comparable_runs(pilot_id):
-    """The rider's training runs and time trial entries, with circuit and tournament names."""
-    mine=(Attempt.timed_by=="server")&(((Attempt.tournament_id.is_(None))&(Attempt.review_status.is_(None)))
-                                        |(Attempt.tournament_id.is_not(None)))
-    return (select(Attempt,Circuit.name,Tournament.name).join(Circuit,Circuit.id==Attempt.circuit_id)
+def comparable_runs(pilot_ids):
+    """Training runs and time trial entries of these riders, with circuit, tournament and rider names."""
+    kinds=(Attempt.timed_by=="server")&(((Attempt.tournament_id.is_(None))&(Attempt.review_status.is_(None)))
+                                         |(Attempt.tournament_id.is_not(None)))
+    return (select(Attempt,Circuit.name,Tournament.name,Pilot.display_name).join(Circuit,Circuit.id==Attempt.circuit_id)
+            .join(Pilot,Pilot.id==Attempt.pilot_id)
             .outerjoin(Tournament,Tournament.id==Attempt.tournament_id).options(selectinload(Attempt.splits))
-            .where(Attempt.pilot_id==pilot_id,mine))
+            .where(Attempt.pilot_id.in_(list(pilot_ids)),kinds))
 
-def run_payload(a:Attempt,circuit_name:str,with_profile=False,tournament_name:str|None=None)->dict:
+def run_payload(a:Attempt,circuit_name:str,with_profile=False,tournament_name:str|None=None,
+                pilot_name:str|None=None,mine:bool=True)->dict:
     payload={"id":str(a.id),"circuit_id":str(a.circuit_id),"circuit_name":circuit_name,
              "tournament_name":tournament_name,"review_status":a.review_status,
-             "activity_id":str(a.activity_id) if a.activity_id else None,"source_filename":a.source_filename,
+             "pilot":pilot_name or "Piloto","mine":mine,
+             # A friend sees the run, not which file or route it came from.
+             "activity_id":str(a.activity_id) if a.activity_id and mine else None,
+             "source_filename":a.source_filename if mine else None,
              "started_at":a.started_at.isoformat() if a.started_at else None,"elapsed_ms":a.elapsed_ms,
              "sector_splits_ms":[s.elapsed_ms for s in a.splits],"match":a.confidence,
              "gps_status":a.gps_status,"notes":a.notes}
@@ -114,17 +121,20 @@ def delete_route(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depend
     remove_file(p.id,storage)
 
 @router.get("/runs")
-def my_runs(circuit_id:uuid.UUID|None=None,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
-    q=comparable_runs(p.id)
+def my_runs(circuit_id:uuid.UUID|None=None,friends:bool=False,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    owners=[p.id,*(friend_ids(db,p.id) if friends else [])]
+    q=comparable_runs(owners)
     if circuit_id:q=q.where(Attempt.circuit_id==circuit_id)
-    rows=db.execute(q.order_by(Attempt.started_at.desc()).limit(500)).all()
+    rows=db.execute(q.order_by(Attempt.started_at.desc()).limit(1000)).all()
     # The same run uploaded both to a time trial and to training is listed once, as the entry.
-    entered={(a.circuit_id,round(a.started_at.timestamp())) for a,_,t in rows if t and a.started_at}
-    return [run_payload(a,name,tournament_name=t) for a,name,t in rows
-            if t or not a.started_at or (a.circuit_id,round(a.started_at.timestamp())) not in entered]
+    key=lambda a:(a.pilot_id,a.circuit_id,round(a.started_at.timestamp()))
+    entered={key(a) for a,_,t,_ in rows if t and a.started_at}
+    return [run_payload(a,name,tournament_name=t,pilot_name=pilot,mine=a.pilot_id==p.id) for a,name,t,pilot in rows
+            if t or not a.started_at or key(a) not in entered]
 
 @router.get("/runs/{run_id}")
 def one_run(run_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
-    row=db.execute(comparable_runs(p.id).where(Attempt.id==run_id)).first()
+    row=db.execute(comparable_runs([p.id,*friend_ids(db,p.id)]).where(Attempt.id==run_id)).first()
     if not row:raise HTTPException(404,"Bajada no encontrada")
-    return run_payload(row[0],row[1],with_profile=True,tournament_name=row[2])
+    a,name,tournament,pilot=row
+    return run_payload(a,name,with_profile=True,tournament_name=tournament,pilot_name=pilot,mine=a.pilot_id==p.id)

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session, selectinload
 from . import config
 from .competition import router as competition_router
 from .training import router as training_router
+from .friends import router as friends_router
 from .config import CORS_ORIGINS, GPS_STORAGE_DIR, MAX_UPLOAD_BYTES, REPO_ROOT, require_secret, LOCAL_SINGLE_USER, LOCAL_PILOT_ID
 from .database import get_db
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone
@@ -30,6 +31,7 @@ app=FastAPI(title="DH Trails Local API",version="0.6.0",description="GPS trainin
 app.add_middleware(CORSMiddleware,allow_origins=CORS_ORIGINS,allow_methods=["GET","POST","PUT","DELETE"],allow_headers=["Authorization","Content-Type"])
 app.include_router(competition_router)
 app.include_router(training_router)
+app.include_router(friends_router)
 
 # Per client address: slows password guessing and mass sign-up on a public server.
 login_limit=RateLimit(10,300)

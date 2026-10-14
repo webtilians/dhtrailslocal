@@ -137,3 +137,8 @@ input[type=date],input[type=number]{color-scheme:dark}
 .leaflet-control-layers-expanded{padding:6px 10px}
 .leaflet-control-layers-base label{display:flex;align-items:center;gap:6px;font:700 12px Inter,system-ui,sans-serif;margin:3px 0;cursor:pointer}
 .leaflet-control-layers-base input{width:auto;margin:0;accent-color:#24a9ff}
+
+/* Training: friends */
+.run-group{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#8faac4;margin:8px 0 2px}
+.help.error{color:#ffa3a3}
+.help.success{color:#84e6bc}

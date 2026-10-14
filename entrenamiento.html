@@ -34,6 +34,15 @@
       </div>
     </section>
     <section class="panel">
+      <div class="panel-title"><h2><span>Amigos</span></h2><span class="caps" id="friendsCount"></span></div>
+      <div class="panel-content">
+        <p class="help" style="margin-top:0">Tus amigos y tú os veis las bajadas en los circuitos (nunca las rutas completas) para compararlas.</p>
+        <div class="action-row"><input id="friendName" maxlength="30" placeholder="Nombre de piloto de tu amigo" autocomplete="off" aria-label="Nombre de piloto de tu amigo"><button id="addFriend" class="btn outline" type="button">Invitar</button></div>
+        <p id="friendFeedback" class="help" role="status" aria-live="polite"></p>
+        <div id="friendsList" class="items"></div>
+      </div>
+    </section>
+    <section class="panel">
       <div class="panel-title"><h2><span>Tus rutas</span></h2><span class="caps" id="routesCount"></span></div>
       <div class="panel-content"><div id="routes" class="items"><p class="placeholder">Cargando…</p></div></div>
     </section>
@@ -44,7 +53,7 @@
       <div class="panel-content compare-controls">
         <select id="circuitSelect" aria-label="Circuito"><option value="">Sin bajadas todavía</option></select>
         <div id="runList" class="run-list"></div>
-        <p class="help">Elige hasta 4 bajadas. La referencia es la más rápida de las elegidas.</p>
+        <p class="help">Elige hasta 4 bajadas, tuyas o de tus amigos. La referencia es la más rápida de las elegidas.</p>
       </div>
       <div id="map" aria-label="Mapa con las bajadas superpuestas"></div>
       <div class="map-footer"><span id="mapSelection" role="status" aria-live="polite">Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.</span><button id="clearMapSelection" class="text-btn" type="button" hidden>Quitar selección</button></div>

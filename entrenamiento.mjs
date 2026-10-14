@@ -13,7 +13,8 @@ const profiles = new Map();
 const status = (message, type = '') => say($('status'), message, type);
 // Day and hour tell apart several runs of the same outing.
 const when = iso => iso ? new Date(iso).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : '—';
-const runLabel = r => when(r.started_at) + ' · ' + formatMs(r.elapsed_ms);
+// A friend's run carries their name; yours do not.
+const runLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at) + ' · ' + formatMs(r.elapsed_ms);
 const circuitOf = id => catalog.find(c => c.id === id);
 const HIGHLIGHT = '#ffe066';
 let mapSelection = null, selectionLayer = null, charts = [], comparisonVersion = 0;
@@ -60,29 +61,39 @@ function selectPoint(circuit, kilometres, {reveal = true} = {}) {
 }
 
 async function loadRuns(keepCircuit) {
-  runs = await shell.api.trainingRuns();
+  runs = await shell.api.trainingRuns(null, {friends: true});
   const counts = new Map();
-  for (const r of runs) counts.set(r.circuit_id, (counts.get(r.circuit_id) || 0) + 1);
+  for (const r of runs) {
+    const c = counts.get(r.circuit_id) || {mine: 0, friends: 0};
+    c[r.mine === false ? 'friends' : 'mine']++;
+    counts.set(r.circuit_id, c);
+  }
   const select = $('circuitSelect');
   const previous = keepCircuit || select.value;
   select.replaceChildren(...(counts.size ? [...counts].map(([id, n]) => node('option', {value: id,
-    textContent: (circuitOf(id)?.name || runs.find(r => r.circuit_id === id).circuit_name) + ' · ' + n + ' bajada(s)'})) :
+    textContent: (circuitOf(id)?.name || runs.find(r => r.circuit_id === id).circuit_name) + ' · ' + n.mine + ' tuya(s)' +
+      (n.friends ? ' · ' + n.friends + ' de amigos' : '')})) :
     [node('option', {value: '', textContent: 'Sin bajadas todavía: sube una ruta'})]));
   if (counts.has(previous)) select.value = previous;
   pickDefault();
 }
 
-// By default compare the fastest run with the latest one (or the next latest if they are the same).
+// By default compare your best run with your friends' best, or else with your latest one.
 function pickDefault() {
-  const mine = runs.filter(r => r.circuit_id === $('circuitSelect').value);
-  const fastest = [...mine].sort((a, b) => a.elapsed_ms - b.elapsed_ms)[0];
-  picked = [...new Set([fastest, ...mine].filter(Boolean).map(r => r.id))].slice(0, 2);
+  const here = runs.filter(r => r.circuit_id === $('circuitSelect').value);
+  const mine = here.filter(r => r.mine !== false), theirs = here.filter(r => r.mine === false);
+  const fastest = list => [...list].sort((a, b) => a.elapsed_ms - b.elapsed_ms)[0];
+  picked = [...new Set([fastest(mine), fastest(theirs), ...mine, ...theirs].filter(Boolean).map(r => r.id))].slice(0, 2);
   renderRunList();
   compare().catch(err => status(err.message, 'error'));
 }
 function renderRunList() {
-  const mine = runs.filter(r => r.circuit_id === $('circuitSelect').value);
-  $('runList').replaceChildren(...mine.map(r => {
+  const here = runs.filter(r => r.circuit_id === $('circuitSelect').value);
+  // Yours first, then each friend's, newest first within each rider.
+  const ordered = [...here.filter(r => r.mine !== false),
+    ...here.filter(r => r.mine === false).sort((a, b) => a.pilot.localeCompare(b.pilot) || b.started_at.localeCompare(a.started_at))];
+  const firstFriend = ordered.find(r => r.mine === false);
+  $('runList').replaceChildren(...ordered.flatMap(r => {
     const slot = picked.indexOf(r.id);
     const box = node('input', {type: 'checkbox', checked: slot >= 0});
     box.addEventListener('change', () => {
@@ -93,8 +104,9 @@ function renderRunList() {
     });
     const chip = node('i', {className: 'chip'});
     if (slot >= 0) chip.style.background = COLORS[slot];
-    return node('label', {className: 'run-option' + (slot >= 0 ? ' on' : '')}, [box, chip,
+    const option = node('label', {className: 'run-option' + (slot >= 0 ? ' on' : '')}, [box, chip,
       node('span', {textContent: runLabel(r)}), node('small', {textContent: r.tournament_name ? 'Torneo · ' + r.tournament_name : r.source_filename || ''})]);
+    return r === firstFriend ? [node('div', {className: 'run-group', textContent: 'De tus amigos'}), option] : [option];
   }));
 }
 
@@ -170,12 +182,53 @@ function renderSegments(circuit, data, reference) {
   const head = node('tr', {}, [node('th', {textContent: 'Bajada'}), node('th', {textContent: 'Total'}),
     ...times[0].map((_, i) => node('th', {}, [sectorButton('S' + (i + 1), i)]))]);
   const rows = data.map((d, n) => node('tr', {}, [
-    node('td', {}, [Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color}), node('span', {textContent: ' ' + when(d.run.started_at)})]),
+    node('td', {}, [Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color}), node('span', {textContent: ' ' + (d.run.mine === false ? d.run.pilot + ' · ' : '') + when(d.run.started_at)})]),
     node('td', {className: 'time', textContent: formatMs(d.run.elapsed_ms) + (d === reference ? '' : ' (' + formatDelta(d.run.elapsed_ms - reference.run.elapsed_ms) + ')')}),
     ...times[n].map((t, i) => node('td', {className: t === best[i] ? 'best' : ''}, [sectorButton(formatMs(t), i)]))]));
   $('segments').replaceChildren(node('table', {className: 'standings'}, [node('thead', {}, [head]), node('tbody', {}, rows)]),
     node('p', {className: 'help', textContent: 'Pulsa un sector o su tiempo para verlo en amarillo en el mapa. En morado, el mejor tiempo de cada segmento.'}));
 }
+
+async function loadFriends() {
+  const {friends, incoming, outgoing} = await shell.api.friends();
+  $('friendsCount').textContent = friends.length ? friends.length + ' AMIGO(S)' : '';
+  const button = (text, className, action) => {
+    const b = node('button', {type: 'button', className, textContent: text});
+    b.addEventListener('click', () => action().catch(err => say($('friendFeedback'), err.message, 'error')));
+    return b;
+  };
+  const row = (name, note, actions) => node('div', {className: 'item'}, [
+    node('span', {}, [node('b', {textContent: name}), ...(note ? [node('small', {textContent: ' · ' + note})] : [])]),
+    node('span', {className: 'row-actions'}, actions)]);
+  const refresh = async message => {
+    await Promise.all([loadFriends(), loadRuns()]);
+    if (message) say($('friendFeedback'), message, 'success');
+  };
+  const items = [
+    ...incoming.map(f => row(f.name, 'quiere ser tu amigo', [
+      button('Aceptar', 'btn outline small', async () => {await shell.api.acceptFriend(f.id); await refresh('Ahora ' + f.name + ' y tú veis vuestras bajadas.');}),
+      button('Rechazar', 'text-btn danger', async () => {await shell.api.removeFriend(f.id); await refresh();})])),
+    ...friends.map(f => row(f.name, '', [button('Quitar', 'text-btn danger', async () => {
+      if (!window.confirm('¿Dejar de compartir bajadas con ' + f.name + '?')) return;
+      await shell.api.removeFriend(f.id); await refresh('Ya no compartís bajadas.');})])),
+    ...outgoing.map(f => row(f.name, 'solicitud enviada', [
+      button('Cancelar', 'text-btn danger', async () => {await shell.api.removeFriend(f.id); await refresh();})])),
+  ];
+  $('friendsList').replaceChildren(...(items.length ? items : [node('p', {className: 'placeholder', textContent: 'Todavía no tienes amigos en la app.'})]));
+}
+async function inviteFriend() {
+  const name = $('friendName').value.trim();
+  if (!name) return say($('friendFeedback'), 'Escribe el nombre de piloto de tu amigo.', 'error');
+  try {
+    const result = await shell.api.addFriend(name);
+    $('friendName').value = '';
+    say($('friendFeedback'), result.status === 'accepted' ? 'Ya sois amigos con ' + result.name + '.' :
+      'Solicitud enviada a ' + result.name + '. Cuando la acepte, veréis vuestras bajadas.', 'success');
+    await Promise.all([loadFriends(), loadRuns()]);
+  } catch (err) {say($('friendFeedback'), err.message, 'error');}
+}
+$('addFriend').addEventListener('click', inviteFriend);
+$('friendName').addEventListener('keydown', e => {if (e.key === 'Enter') {e.preventDefault(); inviteFriend();}});
 
 $('clearMapSelection').addEventListener('click', () => {
   mapSelection = null;
@@ -239,7 +292,7 @@ async function start() {
     if (!shell.me) return;
     view.map.invalidateSize();
     catalog = await shell.api.circuitCatalog();
-    await Promise.all([loadRoutes(), loadRuns()]);
+    await Promise.all([loadRoutes(), loadRuns(), loadFriends()]);
   };
   shell.onUser(() => show().catch(err => status(err.message, 'error')));
   await show();
