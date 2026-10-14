@@ -15,6 +15,12 @@ export function circuitPosition(points, distances, metres) {
   return points.at(-1).slice(0, 2);
 }
 
+// The circuit line between two distances, to paint a stretch of it on the map.
+export function circuitStretch(points, distances, from, to) {
+  const inside = points.filter((_, i) => distances[i] > from && distances[i] < to).map(p => p.slice(0, 2));
+  return [circuitPosition(points, distances, from), ...inside, circuitPosition(points, distances, to)];
+}
+
 // Time when the rider first reached position s. GPS jitter can step back a little:
 // a position only counts once it goes beyond everything reached before.
 export function timeAt(profile, s) {
@@ -51,4 +57,46 @@ export function gapSeries(samples, reference) {
 export function segmentTimes(profile, gatesAt) {
   const marks = [0, ...gatesAt, profile.at(-1)[0]].map(s => timeAt(profile, s));
   return marks.slice(1).map((t, i) => t - marks[i]);
+}
+// Where a run slows down (braking). One GPS fix per second shows where and how much the speed
+// drops over tens of metres, not the bite of the brakes: a zone goes from a speed peak to the next
+// low point when the speed falls at least `minDropKmh` at `minDecel` m/s² or more on average.
+// The speed is unknown where GPS is not reliable: a gap of more than `maxGapMs` between fixes or a
+// jump no bike makes (faster than `maxSpeed` m/s). Such a stretch shows an average speed, not
+// the real one, so a zone never starts or ends next to it.
+export function brakingZones(profile, {step = 10, minDropKmh = 5, minDecel = 0.2, resumeKmh = 3,
+                                      maxGapMs = 3000, maxSpeed = 22} = {}) {
+  const samples = resample(profile, step), window = 2;
+  const blind = [];
+  for (let i = 1; i < profile.length; i++) {
+    const [s0, t0] = profile[i - 1], [s1, t1] = profile[i];
+    if (t1 - t0 > maxGapMs || (s1 - s0) * 1000 > maxSpeed * (t1 - t0)) blind.push([s0, s1]);
+  }
+  const reach = window * step;
+  const kmh = speedSeries(samples, window).map(p =>
+    blind.some(([a, b]) => p.s >= a - reach && p.s <= b + reach) ? null : p.kmh);
+
+  const zones = [];
+  const finish = (peak, low) => {
+    if (peak === null || low === null || kmh[peak - 1] === null || kmh[low + 1] === null) return;
+    const drop = kmh[peak] - kmh[low];
+    if (drop < minDropKmh) return;
+    // Trim the flat top and bottom: the zone is where the speed actually falls.
+    let a = peak, b;
+    while (a + 1 < low && kmh[a + 1] >= kmh[peak] - drop / 10) a++;
+    for (b = a; b < low && kmh[b] > kmh[low] + drop / 10;) b++;
+    const seconds = (samples[b].t - samples[a].t) / 1000;
+    const decel = (kmh[a] - kmh[b]) / 3.6 / seconds;
+    if (seconds > 0 && decel >= minDecel)
+      zones.push({from: samples[a].s, to: samples[b].s, fromKmh: kmh[a], toKmh: kmh[b], seconds, decel});
+  };
+  let peak = null, low = null;
+  for (let i = 0; i <= kmh.length; i++) {
+    const v = i < kmh.length ? kmh[i] : null;
+    if (v === null) { finish(peak, low); peak = low = null; }
+    else if (peak === null || v >= kmh[peak]) { finish(peak, low); peak = i; low = null; }
+    else if (low === null || v < kmh[low]) low = i;
+    else if (v - kmh[low] >= resumeKmh) { finish(peak, low); peak = i; low = null; }
+  }
+  return zones;
 }

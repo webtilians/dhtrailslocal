@@ -1,6 +1,6 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
-import {resample, speedSeries, gapSeries, segmentTimes, circuitPosition} from './telemetry.mjs';
+import {resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingZones} from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
@@ -17,17 +17,25 @@ const when = iso => iso ? new Date(iso).toLocaleString('es-ES', {day: 'numeric',
 const runLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at) + ' · ' + formatMs(r.elapsed_ms);
 const circuitOf = id => catalog.find(c => c.id === id);
 const HIGHLIGHT = '#ffe066';
+// Braking zones: one run at a time, thick and outlined so they never read as another run's line.
+const BRAKE = '#ff5c8a';
 let mapSelection = null, selectionLayer = null, charts = [], comparisonVersion = 0;
+let current = null, brakingRunId = null, brakingLayer = null;
+const kmh = v => Math.round(v) + ' km/h';
+const zoneText = z => 'de ' + Math.round(z.fromKmh) + ' a ' + kmh(z.toKmh) + ' en ' + Math.round(z.to - z.from) + ' m';
 
 function showSelection(circuit, {reveal = false} = {}) {
   if (selectionLayer) view.map.removeLayer(selectionLayer);
   selectionLayer = null;
-  charts.forEach(chart => chart?.setSelection(mapSelection?.kind === 'point' ? mapSelection.metres / 1000 : null));
+  const chartMark = {point: mapSelection?.metres, zone: mapSelection?.from}[mapSelection?.kind];
+  charts.forEach(chart => chart?.setSelection(chartMark === undefined ? null : chartMark / 1000));
   document.querySelectorAll('#segments [data-segment]').forEach(button => {
     const active = mapSelection?.kind === 'segment' && Number(button.dataset.segment) === mapSelection.index;
     button.setAttribute('aria-pressed', String(active));
     button.closest('td, th').classList.toggle('segment-selected', active);
   });
+  document.querySelectorAll('#brakingList [data-zone]').forEach(button =>
+    button.setAttribute('aria-pressed', String(mapSelection?.kind === 'zone' && Number(button.dataset.zone) === mapSelection.index)));
   $('clearMapSelection').hidden = !mapSelection;
   if (!mapSelection) {
     $('mapSelection').textContent = 'Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.';
@@ -41,6 +49,15 @@ function showSelection(circuit, {reveal = false} = {}) {
       .addTo(view.map).bindTooltip(label, {permanent: true, direction: 'top', offset: [0, -10]});
     $('mapSelection').textContent = 'Punto seleccionado · ' + label;
     if (reveal) view.map.panTo(point);
+  } else if (mapSelection.kind === 'zone') {
+    const points = circuitStretch(circuit.points, distances, mapSelection.from, mapSelection.to);
+    selectionLayer = L.layerGroup([
+      L.polyline(points, {color: '#071423', weight: 14, opacity: 1}),
+      L.polyline(points, {color: HIGHLIGHT, weight: 8, opacity: 1}),
+    ]).addTo(view.map);
+    $('mapSelection').textContent = 'Frenada ' + (mapSelection.index + 1) + ' resaltada · ' + Math.round(mapSelection.from) + '–' +
+      Math.round(mapSelection.to) + ' m desde la salida · ' + mapSelection.text;
+    if (reveal) view.map.fitBounds(L.latLngBounds(points), {padding: [80, 80], maxZoom: 18});
   } else {
     const bounds = [0, ...circuit.sectors.map(s => s.index), circuit.points.length - 1];
     const start = bounds[mapSelection.index], end = bounds[mapSelection.index + 1];
@@ -120,10 +137,13 @@ async function compare() {
   const circuit = circuitOf($('circuitSelect').value);
   if (mapSelection?.circuitId !== circuit?.id) mapSelection = null;
   charts = [];
+  current = null;
   if (selectionLayer) view.map.removeLayer(selectionLayer);
-  selectionLayer = null;
+  if (brakingLayer) view.map.removeLayer(brakingLayer);
+  selectionLayer = brakingLayer = null;
   view.clear();
-  ['legend', 'speedChart', 'gapChart', 'segments'].forEach(id => $(id).replaceChildren());
+  ['legend', 'speedChart', 'gapChart', 'segments', 'brakingRun', 'brakingList'].forEach(id => $(id).replaceChildren());
+  $('brakingRun').disabled = true;
   showSelection(circuit);
   if (!circuit) {$('compareTag').textContent = '—'; return;}
   $('compareTag').textContent = circuit.name.toUpperCase();
@@ -131,7 +151,11 @@ async function compare() {
   view.add(L.polyline(pts, {color: '#5d7c99', weight: 8, opacity: .45}));
   view.fit(pts);
   const chosen = picked.map(id => runs.find(r => r.id === id)).filter(Boolean);
-  if (!chosen.length) {$('segments').replaceChildren(node('p', {className: 'placeholder', textContent: 'Elige bajadas para compararlas.'})); return;}
+  if (!chosen.length) {
+    $('segments').replaceChildren(node('p', {className: 'placeholder', textContent: 'Elige bajadas para compararlas.'}));
+    $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: 'Elige una bajada para ver dónde frena.'}));
+    return;
+  }
   const data = await Promise.all(chosen.map(async (r, i) => {
     const profile = await profileOf(r.id);
     return {run: r, color: COLORS[i], label: runLabel(r), profile, samples: resample(profile, 10)};
@@ -144,15 +168,19 @@ async function compare() {
   $('legend').replaceChildren(...data.map(d => node('span', {className: 'legend-item'}, [
     Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color}),
     node('span', {textContent: d.label + (d === reference ? ' · referencia' : '')})])));
-  charts.push(lineChart($('speedChart'), {series: data.map(d => ({label: d.label, color: d.color,
-    points: speedSeries(d.samples).map(p => ({x: p.s / 1000, y: p.kmh === null ? null : Math.round(p.kmh * 10) / 10}))})),
-    yFormat: v => Math.round(v) + ' km/h', onSelect: (x, options) => selectPoint(circuit, x, options)}));
+  current = {circuit, data, reference};
+  charts.push(null);   // the speed chart, drawn with the braking zones
   charts.push(lineChart($('gapChart'), {series: data.map(d => ({label: d.label, color: d.color,
     points: gapSeries(d.samples, reference.samples).map(p => ({x: p.s / 1000, y: p.ms / 1000}))})),
     yFormat: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' s', zero: true,
     onSelect: (x, options) => selectPoint(circuit, x, options)}));
   renderSegments(circuit, data, reference);
-  showSelection(circuit);
+  if (!data.some(d => d.run.id === brakingRunId) && brakingRunId !== 'none') brakingRunId = reference.run.id;
+  $('brakingRun').replaceChildren(...data.map(d => node('option', {value: d.run.id, textContent: d.label + (d === reference ? ' · referencia' : '')})),
+    node('option', {value: 'none', textContent: 'No pintar frenadas'}));
+  $('brakingRun').value = brakingRunId;
+  $('brakingRun').disabled = false;
+  renderBraking();
   const gates = gatesOf(circuit), referenceTimes = segmentTimes(reference.profile, gates);
   const worst = data.filter(d => d !== reference).map(d => {
     const lost = segmentTimes(d.profile, gates).map((t, i) => t - referenceTimes[i]);
@@ -160,6 +188,47 @@ async function compare() {
     return d.label + ' pierde más en el segmento ' + (i + 1) + ' (' + formatDelta(lost[i]) + ')';
   });
   status(worst.length ? worst.join(' · ') + '.' : 'Elige otra bajada para compararla con esta.', 'success');
+}
+// The chosen run's braking: painted on the circuit, shaded on the speed chart and listed in order.
+function renderBraking() {
+  if (!current) return;
+  const {circuit, data} = current;
+  if (brakingLayer) view.map.removeLayer(brakingLayer);
+  brakingLayer = null;
+  const run = data.find(d => d.run.id === brakingRunId);
+  const zones = run ? brakingZones(run.profile) : [];
+  if (mapSelection?.kind === 'zone' && (mapSelection.runId !== brakingRunId || !zones[mapSelection.index])) mapSelection = null;
+  charts[0] = lineChart($('speedChart'), {series: data.map(d => ({label: d.label, color: d.color,
+    points: speedSeries(d.samples).map(p => ({x: p.s / 1000, y: p.kmh === null ? null : Math.round(p.kmh * 10) / 10}))})),
+    bands: zones.map(z => ({from: z.from / 1000, to: z.to / 1000})),
+    yFormat: kmh, onSelect: (x, options) => selectPoint(circuit, x, options)});
+  if (!run) {
+    $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: 'Elige una bajada para ver dónde frena.'}));
+    return showSelection(circuit);
+  }
+  const distances = distanceSeries(circuit.points);
+  const strongest = zones.reduce((best, z) => !best || z.fromKmh - z.toKmh > best.fromKmh - best.toKmh ? z : best, null);
+  brakingLayer = L.layerGroup(zones.flatMap((z, i) => {
+    const points = circuitStretch(circuit.points, distances, z.from, z.to);
+    const tip = 'Frenada ' + (i + 1) + ' · ' + zoneText(z);
+    const number = L.divIcon({html: '<div class="brake-pin">' + (i + 1) + '</div>', className: '', iconSize: [22, 22], iconAnchor: [11, 11]});
+    return [L.polyline(points, {color: '#071423', weight: 12, opacity: .9}),
+      L.polyline(points, {color: BRAKE, weight: 6, opacity: 1}).bindTooltip(tip, {sticky: true}),
+      L.marker(points[0], {icon: number, keyboard: false}).bindTooltip(tip, {direction: 'top', offset: [0, -10]})];
+  })).addTo(view.map);
+  $('brakingList').replaceChildren(...(zones.length ? zones.map((z, i) => {
+    const button = node('button', {type: 'button', className: 'zone-item', title: 'Ver la frenada ' + (i + 1) + ' en el mapa'}, [
+      node('b', {className: 'brake-pin', textContent: i + 1}),
+      node('span', {}, [zoneText(z), node('small', {textContent: Math.round(z.from) + '–' + Math.round(z.to) + ' m desde la salida' +
+        (z === strongest && zones.length > 1 ? ' · la que más velocidad pierde' : '')})])]);
+    button.dataset.zone = i;
+    button.addEventListener('click', () => {
+      mapSelection = {kind: 'zone', circuitId: circuit.id, runId: brakingRunId, index: i, from: z.from, to: z.to, text: zoneText(z)};
+      showSelection(circuit, {reveal: true});
+    });
+    return button;
+  }) : [node('p', {className: 'placeholder', textContent: 'No hay frenadas claras en esta bajada, o el GPS no fue fiable donde frena.'})]));
+  showSelection(circuit);
 }
 function gatesOf(circuit) {
   const d = distanceSeries(circuit.points);
@@ -286,6 +355,7 @@ $('analyze').addEventListener('click', async () => {
   finally {btn.disabled = false;}
 });
 $('circuitSelect').addEventListener('change', pickDefault);
+$('brakingRun').addEventListener('change', e => {brakingRunId = e.target.value; renderBraking();});
 $('loginButton').addEventListener('click', () => shell.askLogin('Entra o crea tu cuenta para guardar tus rutas.'));
 let resizeTimer;
 window.addEventListener('resize', () => {clearTimeout(resizeTimer); resizeTimer = setTimeout(() => compare().catch(() => {}), 250);});
