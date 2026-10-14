@@ -100,3 +100,27 @@ export function brakingZones(profile, {step = 10, minDropKmh = 5, minDecel = 0.2
   }
   return zones;
 }
+
+// The braking of one or two runs, corner by corner. Two zones that end within `joinM` metres are
+// the same corner (closest ends pair first); where only one run brakes, the other's zone is null.
+// Each point also has the time every run takes through it, from `marginM` before the first zone
+// to `marginM` after the last, so the faster way through a corner shows.
+export function brakingPoints(profiles, {joinM = 35, marginM = 20} = {}) {
+  const zones = profiles.map(p => brakingZones(p));
+  const points = [];
+  if (zones.length === 2) {
+    const [a, b] = zones, usedA = new Set(), usedB = new Set();
+    const close = a.flatMap((x, i) => b.map((y, j) => [Math.abs(x.to - y.to), i, j])).filter(([d]) => d <= joinM);
+    for (const [, i, j] of close.sort((p, q) => p[0] - q[0]))
+      if (!usedA.has(i) && !usedB.has(j)) {usedA.add(i); usedB.add(j); points.push([a[i], b[j]]);}
+    a.forEach((x, i) => usedA.has(i) || points.push([x, null]));
+    b.forEach((y, j) => usedB.has(j) || points.push([null, y]));
+  } else points.push(...zones.flatMap((list, k) => list.map(z => profiles.map((_, n) => n === k ? z : null))));
+  const end = Math.min(...profiles.map(p => p.at(-1)[0]));
+  return points.map(pair => {
+    const found = pair.filter(Boolean);
+    const from = Math.max(0, Math.min(...found.map(z => z.from)) - marginM);
+    const to = Math.min(end, Math.max(...found.map(z => z.to)) + marginM);
+    return {from, to, zones: pair, ms: profiles.map(p => timeAt(p, to) - timeAt(p, from))};
+  }).sort((p, q) => p.from - q.from);
+}

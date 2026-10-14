@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {timeAt, resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingZones} from '../telemetry.mjs';
+import {timeAt, resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingZones, brakingPoints} from '../telemetry.mjs';
 
 // 100 m at a steady 10 m/s, one fix per second, with a GPS step back at 50 m.
 const steady = [[0, 0, 0, 0], [10, 1000, 0, 0], [20, 2000, 0, 0], [30, 3000, 0, 0], [40, 4000, 0, 0],
@@ -88,4 +88,26 @@ test('braking: no zone next to a stretch without reliable GPS', () => {
   const jump = ride(() => 8).map(([s, t, ...rest]) => [t >= 20000 && t < 25000 ? s + 40 - (t - 20000) / 125 : s, t, ...rest]);
   assert.deepEqual(brakingZones(jump), []);
   assert.equal(brakingZones(ride(corner)).length, 1);
+});
+test('braking of two runs pairs the zones of the same corner', () => {
+  // The second run brakes a second later (10 m further on) for the same corner.
+  const late = ride(t => corner(t - 1));
+  const points = brakingPoints([ride(corner), late]);
+  assert.equal(points.length, 1);
+  const [{zones: [a, b], ms, from, to}] = points;
+  assert.ok(a && b);
+  assert.equal(Math.round(b.from - a.from), 10);
+  assert.ok(from < a.from && to > b.to);
+  assert.ok(ms[1] < ms[0], 'braking later is faster here: ' + ms);
+});
+test('braking of two runs: a corner only one run brakes for stays on its own', () => {
+  const [point] = brakingPoints([ride(corner), ride(() => 8)]);
+  assert.ok(point.zones[0] && point.zones[1] === null);
+  assert.equal(brakingPoints([ride(corner), ride(() => 8)]).length, 1);
+  // Corners 100 m apart are different corners.
+  const further = brakingPoints([ride(corner), ride(t => corner(t - 10))]);
+  assert.equal(further.length, 2);
+  assert.deepEqual(further.map(p => p.zones.map(z => z !== null)), [[true, false], [false, true]]);
+  // One run: every zone is a point.
+  assert.deepEqual(brakingPoints([ride(corner)]).map(p => p.zones.length), [1]);
 });

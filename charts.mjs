@@ -16,10 +16,13 @@ function niceTicks(min, max, count = 5) {
 }
 
 // series: [{label, color, points: [{x, y}]}]; x is km along the circuit. bands: [{from, to}] shaded behind the lines.
-export function lineChart(host, {series, bands = [], yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220, onSelect}) {
+// lanes: [{color, spans: [{from, to}]}], one strip each under the plot (like where each run brakes).
+export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220, onSelect}) {
   host.replaceChildren();
   const width = Math.max(280, host.clientWidth || 600);
-  const m = {top: 12, right: 14, bottom: 26, left: 52};
+  const laneSpace = lanes.length ? lanes.length * 9 + 4 : 0;
+  height += laneSpace;
+  const m = {top: 12, right: 14, bottom: 26 + laneSpace, left: 52};
   const xs = series.flatMap(s => s.points.map(p => p.x)), ys = series.flatMap(s => s.points.filter(p => p.y !== null).map(p => p.y));
   if (!xs.length || !ys.length) return;
   const xMax = Math.max(...xs), y = niceTicks(Math.min(...ys, zero ? 0 : Infinity), Math.max(...ys, zero ? 0 : -Infinity));
@@ -39,6 +42,12 @@ export function lineChart(host, {series, bands = [], yFormat = v => String(v), x
   }
   for (const b of bands)
     root.append(svg('rect', {x: sx(b.from), y: m.top, width: Math.max(2, sx(b.to) - sx(b.from)), height: height - m.top - m.bottom, class: 'chart-band'}));
+  lanes.forEach((lane, i) => {
+    const y = height - m.bottom + 4 + i * 9;
+    root.append(svg('rect', {x: m.left, y, width: width - m.left - m.right, height: 6, rx: 2, class: 'chart-lane'}));
+    for (const span of lane.spans)
+      root.append(svg('rect', {x: sx(span.from), y, width: Math.max(3, sx(span.to) - sx(span.from)), height: 6, rx: 2, fill: lane.color}));
+  });
   for (const s of series) {
     let d = '', pen = 'M';
     for (const p of s.points) {
