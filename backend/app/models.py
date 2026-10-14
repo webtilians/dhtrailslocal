@@ -73,6 +73,19 @@ class Activity(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     __table_args__=(CheckConstraint("format IN ('gpx','tcx')", name="activity_format"),)
 
+class Friendship(Base):
+    """A friend request; once accepted, both riders can compare each other's training runs."""
+    __tablename__ = "friendships"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    requester_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False)
+    addressee_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False, index=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # NULL while pending
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__=(
+        UniqueConstraint("requester_id", "addressee_id"),
+        CheckConstraint("requester_id <> addressee_id", name="friendship_not_self"),
+    )
+
 class Tournament(Base):
     """A time trial on one circuit between two dates (local calendar days, both included)."""
     __tablename__ = "tournaments"

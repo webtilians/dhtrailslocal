@@ -130,7 +130,15 @@ export function createCloudApi(config) {
     },
     async trainingRoutes(){return request('/training/routes')},
     async deleteTrainingRoute(id){return request('/training/routes/'+encodeURIComponent(id),{method:'DELETE'})},
-    async trainingRuns(circuitId){return request('/training/runs'+(circuitId?'?circuit_id='+encodeURIComponent(circuitId):''))},
-    async trainingRun(id){return request('/training/runs/'+encodeURIComponent(id))}
+    async trainingRuns(circuitId,{friends=false}={}){
+      const query=[circuitId?'circuit_id='+encodeURIComponent(circuitId):'',friends?'friends=true':''].filter(Boolean).join('&');
+      return request('/training/runs'+(query?'?'+query:''));
+    },
+    async trainingRun(id){return request('/training/runs/'+encodeURIComponent(id))},
+    // Friends share their training runs with each other
+    async friends(){return request('/friends')},
+    async addFriend(name){return request('/friends',{method:'POST',body:{display_name:name}})},
+    async acceptFriend(pilotId){return request('/friends/'+encodeURIComponent(pilotId)+'/accept',{method:'POST'})},
+    async removeFriend(pilotId){return request('/friends/'+encodeURIComponent(pilotId),{method:'DELETE'})}
   };
 }
