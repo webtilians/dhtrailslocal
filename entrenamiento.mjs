@@ -386,6 +386,11 @@ $('clearMapSelection').addEventListener('click', () => {
   if (circuit) view.fit(circuit.points.map(p => p.slice(0, 2)));
 });
 
+// A route that passes a circuit's start and finish without following it in between (like on the
+// way to other trails) is not a run of it, as in a time trial.
+function skippedMessage(s) {
+  return 'Pasas por «' + s.circuit_name + '», pero ' + s.reason + ': no cuenta como bajada.';
+}
 // Why a route gave no run: it rides part of a circuit, or the nearest circuit is somewhere else.
 function noCircuitMessage(nearest) {
   if (!nearest) return 'Todavía no hay circuitos en la aplicación.';
@@ -426,9 +431,11 @@ $('analyze').addEventListener('click', async () => {
       see.addEventListener('click', () => loadRuns(f.circuit_id).catch(err => status(err.message, 'error')));
       return node('div', {className: 'item'}, [node('span', {}, [node('b', {textContent: f.circuit_name}),
         node('small', {textContent: ' · ' + f.runs + ' bajada(s)'})]), see]);
-    }) : [node('p', {className: 'placeholder', textContent: noCircuitMessage(result.nearest)})]));
-    status(result.found.length ? 'Encontrado: ' + result.found.map(f => f.circuit_name + ' (' + f.runs + ')').join(', ') + '.' :
-      'Ruta guardada. ' + noCircuitMessage(result.nearest), result.found.length ? 'success' : '');
+    }) : []), ...(result.skipped || []).map(s => node('p', {className: 'placeholder', textContent: skippedMessage(s)})),
+      ...(result.found.length || result.skipped?.length ? [] : [node('p', {className: 'placeholder', textContent: noCircuitMessage(result.nearest)})]));
+    const notCounted = (result.skipped || []).map(skippedMessage).join(' ');
+    status(result.found.length ? 'Encontrado: ' + result.found.map(f => f.circuit_name + ' (' + f.runs + ')').join(', ') + '.' + (notCounted ? ' ' + notCounted : '') :
+      'Ruta guardada. ' + (notCounted || noCircuitMessage(result.nearest)), result.found.length ? 'success' : '');
     $('routeFile').value = ''; $('routeName').textContent = 'Una salida completa: encontraremos las bajadas';
     await Promise.all([loadRoutes(), loadRuns(result.found[0]?.circuit_id)]);
   } catch (err) {status('No se pudo analizar la ruta: ' + err.message, 'error');}

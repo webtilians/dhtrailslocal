@@ -212,6 +212,31 @@ def test_a_saved_circuit_is_found_in_routes_uploaded_before(organizer):
         assert partial["found"] == []
         assert partial["nearest"] == {"circuit_name": "Nuevo v2", "distance_m": 0, "passes": True}
 
+def test_training_counts_only_runs_that_follow_the_circuit(organizer):
+    with TestClient(app) as client:
+        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003  # an area where no other test has a circuit
+        org = account(client, email=organizer)
+        rider = account(client)
+        # Through the circuit's start and finish, but ~70 m to one side for most of the way in between,
+        # as on the way to other trails.
+        aside = [(lat, lon + (0.0008 if 14 <= i < 70 else 0), ele, t)
+                 for i, (lat, lon, ele, t) in enumerate(fixes(recent(90), 2000, shift))]
+        before = upload(client, rider, "/api/training/routes", gpx(aside), "de-paso.gpx")
+        assert before.status_code == 201, before.text
+        cid = new_circuit(client, org, "Imperial", shift)
+        # Saving the circuit looks for it in the routes uploaded before: this one does not count.
+        assert client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json() == []
+        r = upload(client, rider, "/api/training/routes", gpx([(lat, lon, ele, t + 3600e3) for lat, lon, ele, t in aside]), "otra.gpx")
+        body = r.json()
+        assert all(f["circuit_id"] != cid for f in body["found"])
+        skipped = next(s for s in body["skipped"] if s["circuit_id"] == cid)
+        assert skipped["circuit_name"] == "Imperial" and 0 < skipped["match"] < 85 and "trazado" in skipped["reason"]
+        assert client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json() == []
+        # Riding the circuit itself counts.
+        ridden = upload(client, rider, "/api/training/routes", gpx(fixes(recent(30), 2000, shift)), "imperial.gpx").json()
+        assert any(f["circuit_id"] == cid and f["runs"] == 1 for f in ridden["found"])
+        assert len(client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()) == 1
+
 def test_sign_up_takes_the_rider_name():
     with TestClient(app) as client:
         name = "Nombre " + uuid.uuid4().hex[:6]
