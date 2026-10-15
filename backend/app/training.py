@@ -26,6 +26,21 @@ from .timing import GpsError, detect_attempts, haversine, parse_gps
 router=APIRouter(prefix="/api/training")
 route_limit=RateLimit(60,3600)
 NEAR_ROUTE_M=200  # a circuit is only searched when its start lies this close to the route's area
+# As strict as a time trial (its default share): passing a circuit's start and finish on another
+# path, as on the way to other trails, is not a run of that circuit.
+TRAINING_MIN_MATCH=0.85
+
+def follows_circuit(run)->bool:
+    """A run counts for training only as it would in a time trial: timed from a start in the GPS to the
+    finish, through every gate, without impossible speeds, and on the circuit's line for most of it."""
+    return run.seconds is not None and run.status=="compatible" and run.confidence>=TRAINING_MIN_MATCH
+
+def skipped_reason(run)->str:
+    """Why a run that passes a circuit does not count, in the rider's words."""
+    share=round(run.confidence*100)
+    if run.confidence<TRAINING_MIN_MATCH:
+        return f"solo sigues el {share} % de su trazado (hace falta el {round(TRAINING_MIN_MATCH*100)} %)"
+    return run.issues[0] if run.issues else "no sigues su trazado de la salida a la meta"
 
 def training_runs():
     return select(Attempt).where(Attempt.tournament_id.is_(None),Attempt.timed_by=="server",Attempt.review_status.is_(None))
@@ -98,7 +113,7 @@ def scan_routes_for_circuit(circuit_id:uuid.UUID)->int:
             if not near_route(fixes,circuit):continue
             owner=db.get(Pilot,a.owner_id)
             for run in detect_attempts(fixes,circuit):
-                if run.seconds is None:continue
+                if not follows_circuit(run):continue
                 db.add(run_attempt(owner,c.id,run,a.filename,a.id))
                 found+=1
         db.commit()
@@ -116,12 +131,14 @@ async def upload_route(file:UploadFile=File(...),db:Session=Depends(get_db),p:Pi
         when=f", salida del {repeated[1]}" if repeated[1] else ""
         raise HTTPException(409,f"Ya habías subido esta ruta a entrenamiento: «{repeated[0]}»{when}")
     circuits=db.scalars(select(Circuit).options(selectinload(Circuit.sectors),selectinload(Circuit.weak_zones))).all()
-    found=[]
+    found,skipped=[],[]
     for c in circuits:
         data_c=public_circuit(c)
         if not near_route(fixes,data_c):continue
-        runs=[r for r in detect_attempts(fixes,data_c) if r.seconds is not None]
+        detected=[r for r in detect_attempts(fixes,data_c) if r.seconds is not None]
+        runs=[r for r in detected if follows_circuit(r)]
         if runs:found.append((c,runs))
+        elif detected:skipped.append((c,max(detected,key=lambda r:r.confidence)))
     recorded=next((f.time for f in fixes if f.time is not None),None)
     activity=store_activity(db,p,filename,ext,data,fixes,digest,
                             datetime.fromtimestamp(recorded/1000,timezone.utc) if recorded else None)
@@ -138,7 +155,10 @@ async def upload_route(file:UploadFile=File(...),db:Session=Depends(get_db),p:Pi
         raise
     return {"activity":{"id":str(activity.id),"filename":activity.filename,"distance_m":activity.distance_m},
             "found":[{"circuit_id":str(c.id),"circuit_name":c.name,"runs":len(runs)} for c,runs in found],
-            "nearest":None if found else nearest_circuit(fixes,[public_circuit(c) for c in circuits]),
+            # Circuits whose start and finish the route passes without following them in between.
+            "skipped":[{"circuit_id":str(c.id),"circuit_name":c.name,"match":round(run.confidence*100),
+                        "reason":skipped_reason(run)} for c,run in skipped],
+            "nearest":None if found or skipped else nearest_circuit(fixes,[public_circuit(c) for c in circuits]),
             "runs":[run_payload(a,name) for a,name in attempts]}
 
 @router.get("/routes")
