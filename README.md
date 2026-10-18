@@ -8,10 +8,10 @@ Time trials de descenso MTB en circuitos locales: la organización crea los circ
 
 | Pestaña | Para quién | Qué hace |
 |---|---|---|
-| **Time trial** (`index.html`) | Todos | Eliges un torneo y ves su clasificación. Con tu cuenta subes el GPX de tu bajada: si sigue el circuito y la velocidad es creíble, entra al momento. |
+| **Time trial** (`index.html`) | Todos | Eliges un torneo y ves su clasificación y cuánto falta para que cierre. Con tu cuenta subes el GPX de tu bajada: si sigue el circuito y la velocidad es creíble, entra al momento. Al terminar, el podio (provisional hasta que no se pueda subir más y no quede nada por revisar) y una imagen para compartir. |
 | **Entrenamiento** (`entrenamiento.html`) | Cualquier piloto con cuenta | Subes cualquier ruta; se buscan en ella todos los circuitos guardados y cada bajada encontrada se guarda en privado. Cuenta como bajada igual que en un torneo: de la salida a la meta, por todas las puertas y siguiendo al menos el 85 % del trazado; pasar por la salida y la meta de un circuito camino de otros no cuenta. Superpones hasta 4 bajadas de un circuito: mapa, velocidad y diferencia de tiempo a lo largo del recorrido, tiempos por segmento y las frenadas de una o dos bajadas solapadas en el mapa, curva a curva. |
 | **Circuitos** (`circuitos.html`) | Organización | Importar archivo → salida, meta y segmentos sobre el mapa → **Guardar ruta**. Las paradas de la bajada de referencia se quitan solas del trazado. También acepta un circuito exportado (`.json`). |
-| **Torneos** (`torneos.html`) | Organización | Eliges un circuito guardado, las fechas y el porcentaje mínimo de coincidencia y creas el torneo. Ves todas sus bajadas y puedes aceptar o rechazar cualquiera a mano. |
+| **Torneos** (`torneos.html`) | Organización | Eliges un circuito guardado, las fechas y el porcentaje mínimo de coincidencia y creas el torneo. Ves todas sus bajadas, las que están en revisión y por qué, y puedes aceptar o rechazar cualquiera a mano. «Preparar el siguiente» deja listo el del mes siguiente. |
 
 Al crear la cuenta se pide el nombre de piloto, que es el que sale en la clasificación. La inscripción es abierta (opcionalmente con código: `INVITE_CODE`). Son organizadores las cuentas de `ORGANIZER_EMAILS`, y en tu PC con `LOCAL_SINGLE_USER=true` el perfil local.
 
@@ -23,7 +23,17 @@ El servidor busca la bajada en el GPX y la cronometra con las mismas puertas par
 - coincide con el circuito al menos el porcentaje del torneo (por defecto 85 %: parte de la bajada a menos de 30 m del trazado);
 - no tiene ningún tramo sin GPS con una velocidad imposible (lo que delataría un atajo).
 
-Si no, se guarda como **rechazada** con el motivo, que el piloto ve al momento. La organización puede aceptarla o rechazarla después desde Torneos. Cuenta el mejor tiempo de cada piloto; el mismo archivo no se puede presentar dos veces. Un circuito que usa algún torneo queda fijo: no se puede modificar ni borrar.
+Si no, se guarda como **rechazada** con el motivo, que el piloto ve al momento. La organización puede aceptarla o rechazarla después desde Torneos.
+
+Aunque pase esos filtros, queda **en revisión** (fuera de la clasificación hasta que la organización decida) si el archivo parece editado o copiado (`backend/app/integrity.py`):
+
+- el mismo archivo lo subió otro piloto;
+- la misma ruta, punto por punto (a menos de medio metro en el 80 % de los puntos), que una bajada de otro piloto, o que otra tuya con otro tiempo;
+- más del 20 % de los intervalos entre puntos no son segundos enteros (pasa al retocar las horas);
+- la velocidad casi no cambia en toda la bajada (variación por debajo del 6 %, típica de una ruta generada);
+- el archivo dice que lo hizo un programa para editar rutas (gpx.studio, GPS Visualizer, GOTOES…), o la bajada tiene fecha futura.
+
+Los umbrales salen de 30 bajadas reales en 9 circuitos: todas tenían intervalos de segundos enteros y una variación de velocidad de al menos el 13 %. El piloto solo ve «En revisión»; la organización ve los motivos. En la clasificación, ✓ **verificado** es una bajada sin ninguna de esas señales o aceptada a mano después de revisarla. El resultado es **final** cuando ya no se pueden subir bajadas y no queda ninguna en revisión. Cuenta el mejor tiempo de cada piloto; el mismo archivo no se puede presentar dos veces. Un circuito que usa algún torneo queda fijo: no se puede modificar ni borrar.
 
 ## Cronometraje con GPS que falla (v0.7)
 

@@ -99,6 +99,27 @@ dialog.auth::backdrop{background:#030a12cc}
 .item.selected{border-color:#24a9ff}
 .text-btn.danger{color:#ff929e}
 .badge.muted{background:#1e3346;color:#9eb2c7}
+/* Tournament result: podium and checks */
+.result-note{margin:0 0 14px;font-size:13px;line-height:1.6;color:#cfe6f8}
+.podium{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.podium-step{display:flex;align-items:center;gap:14px;background:#112b40;border:1px solid #264c6c;border-left:6px solid #f0c04b;border-radius:6px;padding:10px 14px}
+.podium-step.place-2{border-left-color:#c9d3dd}
+.podium-step.place-3{border-left-color:#d08a4e}
+.podium-rank{display:flex;align-items:center;justify-content:center;flex:none;width:36px;height:36px;border-radius:50%;background:#f0c04b;color:#071423;font:900 22px 'Barlow Condensed',sans-serif}
+.place-2 .podium-rank{background:#c9d3dd}
+.place-3 .podium-rank{background:#d08a4e}
+.podium-who{flex:1;min-width:0}
+.podium-who strong{display:block;font:800 22px 'Barlow Condensed',sans-serif;overflow-wrap:anywhere}
+.podium-who small,.podium-time small{font-size:11px;color:#8faac4}
+.podium-who small.verified{color:#7df0be}
+.podium-time{text-align:right}
+.podium-time strong{display:block;font:800 22px 'Barlow Condensed',sans-serif;color:#45b8ff}
+.tick{color:#7df0be;font-weight:800}
+.checks{margin:6px 0 0;padding-left:16px;color:#ffce84;font-size:11px;line-height:1.5}
+.standings tr.has-detail td{border-bottom:0}
+.entry-detail td{padding-top:0}
+.entry-detail td>div{position:sticky;left:0;max-width:min(620px,calc(100vw - 90px));white-space:normal}
+.reason.by-hand{color:#9eb2c7}
 .two-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .table-wrap{overflow-x:auto}
 .reason{display:block;color:#ffc28c;font-size:11px;margin-top:4px;white-space:normal;max-width:280px}
