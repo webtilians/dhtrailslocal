@@ -1,10 +1,11 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
-import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints}
+import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints, timeAt}
   from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
+import {readGoproTelemetry, telemetryGpx} from './gopro.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -80,6 +81,7 @@ function showSelection(circuit, {reveal = false} = {}) {
 function selectPoint(circuit, kilometres, {reveal = true} = {}) {
   mapSelection = {kind: 'point', circuitId: circuit.id, metres: kilometres * 1000};
   showSelection(circuit, {reveal});
+  seekVideo(kilometres * 1000);
 }
 
 async function loadRuns(keepCircuit) {
@@ -274,6 +276,7 @@ function renderBraking() {
     button.addEventListener('click', () => {
       mapSelection = {kind: 'zone', circuitId: circuit.id, key, index: i, from: p.from, to: p.to, text: summary};
       showSelection(circuit, {reveal: true});
+      seekVideo(p.from);
     });
     return button;
   }) : [node('p', {className: 'placeholder', textContent: 'No hay frenadas claras, o el GPS no fue fiable donde se frena.'})]));
@@ -325,6 +328,7 @@ function renderSegments(circuit, data, reference) {
     button.addEventListener('click', () => {
       mapSelection = {kind: 'segment', circuitId: circuit.id, index: i};
       showSelection(circuit, {reveal: true});
+      seekVideo(i ? gatesOf(circuit)[i - 1] : 0);
     });
     return button;
   };
@@ -443,6 +447,121 @@ $('analyze').addEventListener('click', async () => {
 });
 $('circuitSelect').addEventListener('change', pickDefault);
 $('loginButton').addEventListener('click', () => shell.askLogin('Entra o crea tu cuenta para guardar tus rutas.'));
+// ---- GoPro video, played from the rider's own device and kept in step with the map and charts ----
+let clip = null, videoMarker = null;
+const clock = s => Math.floor(s / 60) + ':' + (s % 60).toFixed(1).padStart(4, '0').replace('.', ',');
+const madrid = ms => new Date(ms).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+const videoSay = (message, type = '') => say($('videoInfo'), message, type);
+const linked = () => current?.data.find(d => d.run.id === clip?.runId) || null;
+
+// Where a run was this many ms after its start: position along the circuit and its own GPS point.
+function runAt(profile, ms) {
+  let i = profile.findIndex(p => p[1] >= ms);
+  if (i <= 0) i = i < 0 ? profile.length - 1 : 1;
+  const [a, b] = [profile[i - 1], profile[i]], f = b[1] > a[1] ? Math.min(1, Math.max(0, (ms - a[1]) / (b[1] - a[1]))) : 1;
+  return {s: a[0] + f * (b[0] - a[0]), lat: a[2] + f * (b[2] - a[2]), lon: a[3] + f * (b[3] - a[3])};
+}
+// The run whose time the video covers most: yours first, then your friends'.
+function runInVideo(t) {
+  const from = t.lag * 1000, to = (t.lag + t.seconds) * 1000;
+  const overlap = r => Math.min(to, Date.parse(r.started_at) + r.elapsed_ms) - Math.max(from, Date.parse(r.started_at));
+  return runs.filter(r => r.started_at && overlap(r) > 0)
+    .sort((a, b) => (a.mine === false) - (b.mine === false) || overlap(b) - overlap(a))[0] || null;
+}
+async function linkVideo() {
+  const t = clip.telemetry, run = runInVideo(t);
+  $('videoActions').replaceChildren();
+  $('videoActions').hidden = true;
+  if (!run) {
+    clip.runId = null;
+    syncVideo();
+    const upload = node('button', {type: 'button', className: 'btn outline', textContent: 'Usar el GPS de la GoPro'});
+    upload.addEventListener('click', () => uploadGoproGps().catch(err => videoSay('No se pudo subir el GPS de la GoPro: ' + err.message, 'error')));
+    $('videoActions').replaceChildren(upload);
+    $('videoActions').hidden = false;
+    return videoSay('El vídeo es del ' + madrid(t.lag * 1000) + ' (' + clock(t.seconds) + ') y no tienes ninguna bajada de ese momento. ' +
+      'Sube la ruta de tu reloj de ese día, o usa el GPS de la propia GoPro: lo subimos como una ruta de entrenamiento y, si sigue un circuito, aparece la bajada.');
+  }
+  clip.runId = run.id;
+  // Show that run: on its circuit and among the compared ones.
+  if ($('circuitSelect').value !== run.circuit_id) {$('circuitSelect').value = run.circuit_id; picked = [run.id];}
+  else if (!picked.includes(run.id)) picked = [...picked.slice(0, COLORS.length - 1), run.id];
+  renderRunList();
+  await compare();
+  clip.start = Date.parse(run.started_at) / 1000 - t.lag;
+  videoSay('Vídeo de la bajada ' + (run.mine === false ? 'de ' + run.pilot + ' ' : '') + 'del ' + madrid(Date.parse(run.started_at)) +
+    ' en ' + run.circuit_name + ': la salida está en el ' + clock(clip.start) + ' del vídeo y la meta en el ' +
+    clock(clip.start + run.elapsed_ms / 1000) + '.', 'success');
+  if (video().paused && video().currentTime < 0.1) video().currentTime = Math.max(0, clip.start - 2);
+  syncVideo();
+}
+const video = () => $('video');
+// Map point, chart cursor and the line under the video, at the video's current time.
+function syncVideo() {
+  const d = linked(), hud = $('videoHud');
+  if (!clip || !d) {
+    if (videoMarker) {view.map.removeLayer(videoMarker); videoMarker = null;}
+    hud.textContent = clip ? 'Vídeo grabado el ' + madrid(clip.telemetry.lag * 1000) + '.' : '';
+    return;
+  }
+  const ms = (video().currentTime - clip.start) * 1000;
+  if (ms < 0 || ms > d.run.elapsed_ms) {
+    hud.textContent = ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(d.run.elapsed_ms);
+    if (videoMarker) {view.map.removeLayer(videoMarker); videoMarker = null;}
+    return;
+  }
+  const at = runAt(d.profile, ms), i = Math.min(d.speed.kmh.length - 1, Math.max(0, Math.round(at.s / 10)));
+  const speed = d.speed.kmh[i];
+  hud.textContent = formatMs(ms) + ' · ' + (speed === null ? '—' : Math.round(speed) + ' km/h') + ' · ' + Math.round(at.s) + ' m desde la salida';
+  // White with a dark ring: it stands out on any run's line and on the satellite picture.
+  if (!videoMarker) videoMarker = L.circleMarker([at.lat, at.lon], {radius: 9, color: '#071423', weight: 4, fillColor: '#ffffff', fillOpacity: 1,
+    interactive: false}).addTo(view.map);
+  else videoMarker.setLatLng([at.lat, at.lon]);
+  charts.forEach(chart => chart?.setSelection(at.s / 1000));
+}
+// Jump in the video to the moment the run was this many metres down the circuit.
+function seekVideo(metres) {
+  const d = linked();
+  if (!d || !Number.isFinite(metres)) return;
+  video().currentTime = Math.min(video().duration || Infinity, Math.max(0, clip.start + timeAt(d.profile, metres) / 1000));
+  syncVideo();
+}
+async function uploadGoproGps() {
+  const t = clip.telemetry, name = clip.name.replace(/\.(mp4|lrv)$/i, '') + ' (GPS de la GoPro).gpx';
+  videoSay('Subiendo el GPS de la GoPro como ruta…');
+  const result = await shell.api.uploadTrainingRoute(new File([telemetryGpx(t, name)], name, {type: 'application/gpx+xml'}));
+  await Promise.all([loadRoutes(), loadRuns()]);
+  if (result.found.length) return linkVideo();
+  videoSay('Ruta guardada, pero no cuenta como bajada: ' + ((result.skipped || []).map(skippedMessage).join(' ') ||
+    noCircuitMessage(result.nearest)) + ' El GPS de la GoPro suele ser menos preciso que el de un reloj.', 'error');
+}
+$('videoFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('videoName').textContent = file.name + ' · ' + (file.size / 1e9).toFixed(1).replace('.', ',') + ' GB';
+  videoSay('Leyendo la telemetría de ' + file.name + '…');
+  try {
+    const telemetry = await readGoproTelemetry(file);
+    if (!telemetry.good) throw new Error('el vídeo no tiene ningún punto con señal GPS');
+    if (clip?.url) URL.revokeObjectURL(clip.url);
+    clip = {file, name: file.name, telemetry, url: URL.createObjectURL(file), runId: null, start: 0};
+    $('videoTag').textContent = (telemetry.camera || 'GOPRO').toUpperCase();
+    video().src = clip.url;
+    $('videoBox').hidden = false;
+    await linkVideo();
+  } catch (err) {videoSay('No se puede usar este vídeo: ' + err.message, 'error');}
+});
+video().addEventListener('timeupdate', syncVideo);
+video().addEventListener('seeked', syncVideo);
+// Smooth while playing, frame by frame where the browser allows it.
+video().addEventListener('play', () => {
+  const step = () => {if (video().paused) return; syncVideo(); video().requestVideoFrameCallback ? video().requestVideoFrameCallback(step) : requestAnimationFrame(step);};
+  step();
+});
+// GoPro films in H.265: not every browser can show it. The map and the charts still follow the time.
+video().addEventListener('error', () => videoSay('Este navegador no puede mostrar el vídeo (la GoPro graba en H.265). Prueba con Safari, ' +
+  'o con Chrome o Edge al día, o con el archivo .LRV de la tarjeta, más ligero. La telemetría sí se ha leído.', 'error'));
+
 let resizeTimer;
 window.addEventListener('resize', () => {clearTimeout(resizeTimer); resizeTimer = setTimeout(() => compare().catch(() => {}), 250);});
 
