@@ -1,7 +1,7 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
 import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints, timeAt,
-  positionAt, timeLost, lossZones}
+  positionAt, timeLost, lossZones, pairedTime}
   from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
@@ -489,7 +489,9 @@ $('analyze').addEventListener('click', async () => {
 $('circuitSelect').addEventListener('change', pickDefault);
 $('loginButton').addEventListener('click', () => shell.askLogin('Entra o crea tu cuenta para guardar tus rutas.'));
 // ---- GoPro video, played from the rider's own device and kept in step with the map and charts ----
-let clip = null, referenceId = null;
+let clip = null, clipB = null, referenceId = null;
+// How the second video follows the first ('place' or 'time'), and a stretch played over and over.
+const pair = {mode: 'place', loop: null};
 const LOSS = '#ff5c5c', GAIN = '#3fd0c9';
 // The video's dots go above everything else on the map, numbered braking pins included.
 view.map.createPane('videoNow').style.zIndex = 640;
@@ -497,15 +499,17 @@ const clock = s => Math.floor(s / 60) + ':' + (s % 60).toFixed(1).padStart(4, '0
 const madrid = ms => new Date(ms).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 const videoSay = (message, type = '') => say($('videoInfo'), message, type);
 const linked = () => current?.data.find(d => d.run.id === clip?.runId) || null;
+const linkedB = () => current?.data.find(d => d.run.id === clipB?.runId) || null;
+const sayB = (message, type = '') => say($('videoInfoB'), message, type);
 const shortLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at);
 const decimal = (x, n = 1) => x.toFixed(n).replace('.', ',');
 
 const runAt = positionAt;
 // The run whose time the video covers most: yours first, then your friends'.
-function runInVideo(t) {
+function runInVideo(t, accept = () => true) {
   const from = t.lag * 1000, to = (t.lag + t.seconds) * 1000;
   const overlap = r => Math.min(to, Date.parse(r.started_at) + r.elapsed_ms) - Math.max(from, Date.parse(r.started_at));
-  return runs.filter(r => r.started_at && overlap(r) > 0)
+  return runs.filter(r => r.started_at && overlap(r) > 0 && accept(r))
     .sort((a, b) => (a.mine === false) - (b.mine === false) || overlap(b) - overlap(a))[0] || null;
 }
 async function linkVideo() {
@@ -523,6 +527,8 @@ async function linkVideo() {
       'Sube la ruta de tu reloj de ese día, o usa el GPS de la propia GoPro: lo subimos como una ruta de entrenamiento y, si sigue un circuito, aparece la bajada.');
   }
   clip.runId = run.id;
+  // A second video of another circuit no longer makes sense.
+  if (clipB && runs.find(r => r.id === clipB.runId)?.circuit_id !== run.circuit_id) dropSecond();
   // The video's run becomes the reference: the others say where they lost or gained against it.
   referenceId = run.id;
   // Show that run: on its circuit and among the compared ones.
@@ -533,9 +539,12 @@ async function linkVideo() {
     picked = [run.id, ...(best ? [best.id] : [])];
   }
   else if (!picked.includes(run.id)) picked = [...picked.slice(0, COLORS.length - 1), run.id];
+  if (clipB?.runId) picked = [run.id, clipB.runId, ...picked.filter(id => id !== run.id && id !== clipB.runId)].slice(0, COLORS.length);
   renderRunList();
   await compare();
   clip.start = Date.parse(run.started_at) / 1000 - t.lag;
+  $('secondVideo').hidden = false;
+  $('videoTools').hidden = false;
   // The camera's GPS against the run's (the same one when the run came from the camera).
   const d = linked(), started = Date.parse(run.started_at);
   clip.gps = cameraGps(t, clip.start, clip.start + run.elapsed_ms / 1000,
@@ -598,21 +607,160 @@ function syncVideo() {
   // The replay follows the video: every compared run where it was at this moment of the video's run.
   replay.ms = Math.min(replayEnd(), Math.max(0, ms));
   drawReplay();
+  followSecond(ms);
+  repeatStretch(d, ms);
   if (ms < 0 || ms > d.run.elapsed_ms) {
-    hud.textContent = ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(d.run.elapsed_ms);
+    setHud(hud, d, ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(d.run.elapsed_ms));
     return;
   }
-  const at = runAt(d.profile, ms);
-  // The camera's own speed at this frame (measured by its GPS ten times a second) when it can be
-  // trusted, else the run's.
-  const near = clip.gps?.ok === false ? {t: Infinity} :
-    clip.telemetry.points.reduce((best, p) => p.fix >= 2 && Math.abs(p.t - video().currentTime) < Math.abs(best.t - video().currentTime) ? p : best,
-      {t: Infinity});
-  const speed = Math.abs(near.t - video().currentTime) < 0.5 ? near.speed * 3.6 :
-    d.speed.kmh[Math.min(d.speed.kmh.length - 1, Math.max(0, Math.round(at.s / 10)))];
+  const at = runAt(d.profile, ms), speed = speedAt(clip, d, video().currentTime, at.s);
   const ref = current.reference;
   const race = ref !== d ? ' · ' + formatDelta(ms - timeAt(ref.profile, at.s)) + ' frente a ' + shortLabel(ref.run) : '';
-  hud.textContent = formatMs(ms) + ' · ' + (speed === null ? '—' : Math.max(0, Math.round(speed)) + ' km/h') + ' · ' + Math.round(at.s) + ' m' + race;
+  setHud(hud, d, formatMs(ms) + ' · ' + speedText(speed) + ' · ' + Math.round(at.s) + ' m' + race);
+}
+// The camera's own speed at this frame (its GPS measures it ten times a second) when it can be trusted,
+// else the run's.
+function speedAt(c, d, second, metres) {
+  const near = c.gps?.ok === false ? {t: Infinity} :
+    c.telemetry.points.reduce((best, p) => p.fix >= 2 && Math.abs(p.t - second) < Math.abs(best.t - second) ? p : best, {t: Infinity});
+  return Math.abs(near.t - second) < 0.5 ? near.speed * 3.6 : d.speed.kmh[Math.min(d.speed.kmh.length - 1, Math.max(0, Math.round(metres / 10)))];
+}
+const speedText = speed => speed === null || speed === undefined ? '—' : Math.max(0, Math.round(speed)) + ' km/h';
+// The line under a video, with the colour of its run.
+function setHud(hud, d, text) {
+  const chip = node('i', {className: 'chip'});
+  chip.style.background = d.color;
+  hud.replaceChildren(chip, text);
+}
+
+// ---- A second video, kept at the same spot of the circuit as the first, or at the same time ----
+const videoB = () => $('videoB');
+function followSecond(msA) {
+  const a = linked(), b = linkedB(), v = videoB();
+  if (!clipB || !a || !b || !v.currentSrc) return;
+  const runA = {profile: a.profile, elapsed: a.run.elapsed_ms}, runB = {profile: b.profile, elapsed: b.run.elapsed_ms};
+  const msB = pairedTime(msA, runA, runB, pair.mode);
+  const at = Math.max(0, Math.min(v.duration || Infinity, clipB.start + msB / 1000)), A = video();
+  if (A.paused || A.seeking) {
+    if (!v.paused) v.pause();
+    if (Math.abs(v.currentTime - at) > 0.04) v.currentTime = at;
+  } else {
+    // Playing: its speed follows how fast each run went here, nudged to close any gap; a jump only when
+    // far behind or ahead (after a seek).
+    const ratio = (pairedTime(msA + 400, runA, runB, pair.mode) - msB) / 400, error = at - v.currentTime;
+    if (Math.abs(error) > 0.6) v.currentTime = at;
+    v.playbackRate = Math.min(4, Math.max(0.25, A.playbackRate * ratio + error * 1.5));
+    if (v.paused) v.play().catch(() => {});
+  }
+  const hud = $('videoHudB');
+  if (msB < 0 || msB > b.run.elapsed_ms) return setHud(hud, b, msB < 0 ? 'Antes de la salida' : 'Después de la meta · ' + formatMs(b.run.elapsed_ms));
+  const here = runAt(b.profile, msB), apart = here.s - runAt(a.profile, Math.max(0, Math.min(msA, a.run.elapsed_ms))).s;
+  // At the same spot: how much later (+) or sooner (−) it got there. At the same time: how far ahead.
+  const gap = pair.mode === 'place' ? formatDelta(msB - msA) + ' aquí' :
+    Math.abs(apart) < 1 ? 'a la par' : Math.round(Math.abs(apart)) + ' m ' + (apart > 0 ? 'por delante' : 'por detrás');
+  setHud(hud, b, formatMs(msB) + ' · ' + speedText(speedAt(clipB, b, v.currentTime, here.s)) + ' · ' + Math.round(here.s) + ' m · ' + gap);
+}
+async function linkSecond() {
+  const a = linked(), t = clipB.telemetry;
+  if (!a) return sayB('Carga antes el vídeo principal y espera a que encuentre su bajada.', 'error');
+  const run = runInVideo(t, r => r.circuit_id === a.run.circuit_id && r.id !== a.run.id);
+  if (!run) {
+    clipB.runId = null;
+    return sayB('Este vídeo es del ' + madrid(t.lag * 1000) + ' y no hay en él ninguna otra bajada de ' + a.run.circuit_name +
+      ', tuya ni de tus amigos. Sube antes la ruta de ese día.', 'error');
+  }
+  clipB.runId = run.id;
+  picked = [a.run.id, run.id, ...picked.filter(id => id !== a.run.id && id !== run.id)].slice(0, COLORS.length);
+  renderRunList();
+  await compare();
+  clipB.start = Date.parse(run.started_at) / 1000 - t.lag;
+  const b = linkedB(), started = Date.parse(run.started_at);
+  clipB.gps = cameraGps(t, clipB.start, clipB.start + run.elapsed_ms / 1000,
+    ms => ms < started || ms > started + run.elapsed_ms ? null : runAt(b.profile, ms - started));
+  const diff = run.elapsed_ms - a.run.elapsed_ms;
+  sayB('Vídeo 2: la bajada ' + (run.mine === false ? 'de ' + run.pilot + ' ' : '') + 'del ' + madrid(started) + ', ' + formatMs(run.elapsed_ms) +
+    ' (' + formatDelta(diff) + ' frente al vídeo 1). Pulsa ▶ y van a la par; el de debajo del mapa dice cuánto pierde o gana en cada sitio.', 'success');
+  $('videoDockB').append(videoB(), $('videoHudB'));
+  videoB().hidden = false;
+  $('videoDockB').hidden = false;
+  $('pairMode').hidden = false;
+  $('mapDuo').classList.add('two');
+  fitVideo();
+  syncVideo();
+}
+function dropSecond() {
+  videoB().pause();
+  if (clipB?.url) URL.revokeObjectURL(clipB.url);
+  videoB().removeAttribute('src');
+  videoB().load();
+  clipB = null;
+  $('videoDockB').hidden = true;
+  $('pairMode').hidden = true;
+  $('mapDuo').classList.remove('two');
+  $('videoNameB').textContent = 'Otra bajada del mismo circuito: tuya de otro día o de un amigo que te pase su vídeo';
+  fitVideo();
+}
+$('videoFileB').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('videoNameB').textContent = file.name + ' · ' + (file.size / 1e9).toFixed(1).replace('.', ',') + ' GB';
+  sayB('Leyendo la telemetría de ' + file.name + '…');
+  try {
+    const telemetry = await readGoproTelemetry(file);
+    if (!telemetry.good) throw new Error('el vídeo no tiene ningún punto con señal GPS');
+    if (clipB?.url) URL.revokeObjectURL(clipB.url);
+    clipB = {file, name: file.name, telemetry, url: URL.createObjectURL(file), runId: null, start: 0};
+    videoB().src = clipB.url;
+    await linkSecond();
+    $('mapDuo').scrollIntoView({behavior: 'smooth', block: 'start'});
+  } catch (err) {sayB('No se puede usar este vídeo: ' + err.message, 'error');}
+});
+videoB().addEventListener('loadedmetadata', () => {fitVideo(); syncVideo();});
+videoB().addEventListener('error', () => {if (clipB) sayB('Este navegador no puede mostrar el segundo vídeo (H.265). Prueba con Safari, o con Chrome o Edge al día.', 'error');});
+document.querySelectorAll('#pairMode button').forEach(b => b.addEventListener('click', () => {
+  pair.mode = b.dataset.pair;
+  document.querySelectorAll('#pairMode button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  syncVideo();
+}));
+
+// ---- Tools to look closely: a tenth of a second at a time, and one stretch over and over ----
+const toolsHint = (text = '') => {$('toolsHint').textContent = text;};
+function step(seconds) {
+  if (!linked()) return;
+  video().pause();
+  video().currentTime = Math.max(0, Math.min(video().duration || Infinity, video().currentTime + seconds));
+}
+$('stepBack').addEventListener('click', () => step(-0.1));
+$('stepForward').addEventListener('click', () => step(0.1));
+// The stretch chosen on the map: a sector of the table, a braking or a stretch where time is lost.
+function selectedStretch() {
+  if (!current || !mapSelection) return null;
+  if (mapSelection.kind === 'zone') return {from: mapSelection.from, to: mapSelection.to};
+  if (mapSelection.kind !== 'segment') return null;
+  const c = current.circuit, d = distanceSeries(c.points), bounds = [0, ...c.sectors.map(s => s.index), c.points.length - 1];
+  return {from: d[bounds[mapSelection.index]], to: d[bounds[mapSelection.index + 1]]};
+}
+function setLoop(stretch) {
+  pair.loop = stretch;
+  $('loopStretch').setAttribute('aria-pressed', String(!!stretch));
+  toolsHint(stretch ? 'Repitiendo de ' + Math.round(stretch.from) + ' a ' + Math.round(stretch.to) + ' m' : '');
+}
+$('loopStretch').addEventListener('click', () => {
+  const d = linked();
+  if (!d) return toolsHint('Carga antes un vídeo con su bajada.');
+  if (pair.loop) return setLoop(null);
+  const stretch = selectedStretch();
+  if (!stretch) return toolsHint('Elige antes un tramo: un sector de la tabla, una frenada o un tramo donde pierdes.');
+  setLoop(stretch);
+  video().currentTime = Math.max(0, clip.start + timeAt(d.profile, stretch.from) / 1000 - 1.5);
+  video().playbackRate = replay.speed;
+  video().play().catch(() => {});
+});
+// Past the end of the stretch (and a little more), back to a second and a half before it.
+function repeatStretch(d, ms) {
+  if (!pair.loop || video().paused || video().seeking) return;
+  if (ms > d.run.elapsed_ms || runAt(d.profile, ms).s >= pair.loop.to + 5)
+    video().currentTime = Math.max(0, clip.start + timeAt(d.profile, pair.loop.from) / 1000 - 1.5);
 }
 // Jump to the moment the run reached this many metres down the circuit: in the video when there is
 // one, else in the replay (when the reference got there).
@@ -645,10 +793,11 @@ function drawReplay() {
   for (const [id, dot] of replayDots)
     if (!current.data.some(d => d.run.id === id)) {view.map.removeLayer(dot); replayDots.delete(id);}
   const rows = current.data.map(d => {
-    const t = Math.min(ms, d.run.elapsed_ms), at = runAt(d.profile, t), video = clip?.runId === d.run.id;
-    // The video's run with a yellow ring, like the charts' cursor; the others with a white one.
-    const style = {radius: video ? 10 : 8, color: video ? HIGHLIGHT : '#ffffff', weight: video ? 4 : 3, fillColor: d.color, fillOpacity: 1,
-      interactive: false, pane: 'videoNow'};
+    const t = Math.min(ms, d.run.elapsed_ms), at = runAt(d.profile, t), video = clip?.runId === d.run.id, second = clipB?.runId === d.run.id;
+    // The video's run with a yellow ring, like the charts' cursor; the second video's with a blue one;
+    // the others with a white one.
+    const style = {radius: video || second ? 10 : 8, color: video ? HIGHLIGHT : second ? '#5fd4ff' : '#ffffff', weight: video || second ? 4 : 3,
+      fillColor: d.color, fillOpacity: 1, interactive: false, pane: 'videoNow'};
     let dot = replayDots.get(d.run.id);
     if (!dot) replayDots.set(d.run.id, dot = L.circleMarker([at.lat, at.lon], style).addTo(view.map));
     else dot.setLatLng([at.lat, at.lon]).setStyle(style);
@@ -699,9 +848,9 @@ $('replayPlay').addEventListener('click', () => {
   playButton();
   replay.frame = requestAnimationFrame(tick);
 });
-document.querySelectorAll('.replay-speeds button').forEach(b => b.addEventListener('click', () => {
+document.querySelectorAll('.replay-speeds button[data-speed]').forEach(b => b.addEventListener('click', () => {
   replay.speed = Number(b.dataset.speed);
-  document.querySelectorAll('.replay-speeds button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.querySelectorAll('.replay-speeds button[data-speed]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   if (linked()) video().playbackRate = replay.speed;
 }));
 $('replayTime').addEventListener('input', e => {
@@ -755,19 +904,27 @@ function fitVideo() {
   const duo = $('mapDuo'), v = video();
   if (!duo.classList.contains('with-video')) return;
   fittedWidth = window.innerWidth;
-  const ratio = v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 16 / 9, width = duo.clientWidth, hud = 36;
-  const phone = width < 700, height = Math.max(phone ? 260 : 340, Math.min(phone ? 560 : 640, window.innerHeight - 150));
-  const stacked = phone && ratio > 1;
-  let dock, map;
-  if (stacked) {dock = width; map = Math.max(200, height - width / ratio - hud);}
+  const shape = el => el.videoWidth && el.videoHeight ? el.videoWidth / el.videoHeight : 16 / 9;
+  const ratio = shape(v), two = duo.classList.contains('two'), other = two ? shape(videoB()) : 0, width = duo.clientWidth, hud = 36;
+  // Room below for the replay bar and the video tools.
+  const phone = width < 700, height = Math.max(phone ? 260 : 340, Math.min(phone ? 560 : 640, window.innerHeight - 215));
+  // Two videos: beside the map when they are vertical on a wide screen; else both on top, the map below.
+  const stacked = two ? phone || (ratio > 1 && other > 1) : phone && ratio > 1;
+  let dock, dock2 = 0, map;
+  if (two) {
+    const tall = stacked ? Math.min(height * 0.62 - hud, width / (ratio + other)) : Math.min(height - hud, width * 0.66 / (ratio + other));
+    [dock, dock2] = [tall * ratio, tall * other];
+    map = stacked ? Math.max(220, height - tall - hud) : height;
+  } else if (stacked) {dock = width; map = Math.max(200, height - width / ratio - hud);}
   else {
     dock = Math.min((height - hud) * ratio, width * (ratio > 1 ? 0.55 : 0.5));
     // On a phone the map is only as tall as the video beside it, so the replay below still fits.
     map = phone ? Math.max(300, dock / ratio + hud) : height;
   }
   duo.classList.toggle('stacked', stacked);
-  duo.classList.toggle('narrow', !stacked && width - dock < 320);
+  duo.classList.toggle('narrow', !stacked && width - dock - dock2 < 320);
   duo.style.setProperty('--dock-w', Math.round(dock) + 'px');
+  duo.style.setProperty('--dock-w2', Math.round(dock2) + 'px');
   duo.style.setProperty('--map-h', Math.round(map) + 'px');
   view.map.invalidateSize();
 }

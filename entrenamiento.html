@@ -62,15 +62,25 @@
       <div id="mapDuo" class="map-duo">
         <div id="map" aria-label="Mapa con las bajadas superpuestas"></div>
         <div id="videoDock" class="video-dock" hidden></div>
+        <div id="videoDockB" class="video-dock" hidden></div>
       </div>
       <div class="map-footer"><span id="mapSelection" role="status" aria-live="polite">Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.</span><button id="clearMapSelection" class="text-btn" type="button" hidden>Quitar selección</button></div>
       <div class="replay">
         <button id="replayPlay" class="btn outline small" type="button">▶ Reproducir</button>
         <span class="replay-speeds" role="group" aria-label="Velocidad de la repetición">
-          <button type="button" data-speed="1" aria-pressed="true">×1</button><button type="button" data-speed="2" aria-pressed="false">×2</button><button type="button" data-speed="4" aria-pressed="false">×4</button>
+          <button type="button" data-speed="0.25" aria-pressed="false" aria-label="A un cuarto de velocidad">×¼</button><button type="button" data-speed="0.5" aria-pressed="false" aria-label="A media velocidad">×½</button><button type="button" data-speed="1" aria-pressed="true">×1</button><button type="button" data-speed="2" aria-pressed="false">×2</button><button type="button" data-speed="4" aria-pressed="false">×4</button>
         </span>
         <input id="replayTime" type="range" min="0" max="1000" step="100" value="0" aria-label="Momento de la repetición">
         <span id="replayClock" class="replay-clock">00:00.0</span>
+      </div>
+      <div id="videoTools" class="replay video-tools" hidden>
+        <span id="pairMode" class="replay-speeds" role="group" aria-label="Cómo van a la par los dos vídeos" hidden>
+          <button type="button" data-pair="place" aria-pressed="true">Mismo sitio</button><button type="button" data-pair="time" aria-pressed="false">Mismo tiempo</button>
+        </span>
+        <button id="stepBack" class="btn outline small" type="button" aria-label="Retroceder una décima de segundo">◀ 0,1 s</button>
+        <button id="stepForward" class="btn outline small" type="button" aria-label="Avanzar una décima de segundo">0,1 s ▶</button>
+        <button id="loopStretch" class="btn outline small" type="button" aria-pressed="false">↻ Repetir el tramo</button>
+        <span id="toolsHint" class="tools-hint" role="status" aria-live="polite"></span>
       </div>
       <div id="replayBoard" class="replay-board"><p class="placeholder">Pulsa ▶ para ver las bajadas a la vez en el mapa, como si hubieran salido juntas.</p></div>
     </section>
@@ -85,6 +95,13 @@
           <video id="video" controls playsinline preload="metadata"></video>
           <p id="videoHud" class="video-hud" aria-live="off"></p>
           <div id="videoMoments" class="moments"></div>
+        </div>
+        <div id="secondVideo" class="second-video" hidden>
+          <label class="file-input" for="videoFileB"><span class="upload">⧉</span><span><b>Comparar con otro vídeo</b><small id="videoNameB">Otra bajada del mismo circuito: tuya de otro día o de un amigo que te pase su vídeo</small></span></label>
+          <input id="videoFileB" type="file" accept="video/mp4,.mp4,.lrv" hidden>
+          <p id="videoInfoB" class="help" role="status" aria-live="polite">Los dos vídeos van a la par: en el mismo sitio del circuito (ves cuánto tiempo saca uno al otro en cada punto) o en el mismo tiempo desde la salida (ves quién va por delante).</p>
+          <video id="videoB" playsinline muted preload="metadata" hidden></video>
+          <p id="videoHudB" class="video-hud" aria-live="off"></p>
         </div>
       </div>
     </section>
