@@ -581,7 +581,7 @@ function renderMoments() {
       button.addEventListener('click', () => {
         video().currentTime = Math.max(0, m.t - 1.5);
         syncVideo();
-        $('videoBox').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+        $('mapDuo').scrollIntoView({behavior: 'smooth', block: 'nearest'});
       });
       return button;
     }));
@@ -736,9 +736,42 @@ $('videoFile').addEventListener('change', async e => {
     $('videoTag').textContent = (telemetry.camera || 'GOPRO').toUpperCase();
     video().src = clip.url;
     $('videoBox').hidden = false;
+    dockVideo();
     await linkVideo();
+    $('mapDuo').scrollIntoView({behavior: 'smooth', block: 'start'});
   } catch (err) {videoSay('No se puede usar este vídeo: ' + err.message, 'error');}
 });
+// The video goes next to the map, both sized to be seen at once without scrolling: a vertical video
+// beside it as tall as fits on the screen; a horizontal one beside it on a wide screen, and above it
+// on a phone.
+function dockVideo() {
+  $('videoDock').append(video(), $('videoHud'));
+  $('videoDock').hidden = false;
+  $('mapDuo').classList.add('with-video');
+  fitVideo();
+}
+let fittedWidth = 0;
+function fitVideo() {
+  const duo = $('mapDuo'), v = video();
+  if (!duo.classList.contains('with-video')) return;
+  fittedWidth = window.innerWidth;
+  const ratio = v.videoWidth && v.videoHeight ? v.videoWidth / v.videoHeight : 16 / 9, width = duo.clientWidth, hud = 36;
+  const phone = width < 700, height = Math.max(phone ? 260 : 340, Math.min(phone ? 560 : 640, window.innerHeight - 150));
+  const stacked = phone && ratio > 1;
+  let dock, map;
+  if (stacked) {dock = width; map = Math.max(200, height - width / ratio - hud);}
+  else {
+    dock = Math.min((height - hud) * ratio, width * (ratio > 1 ? 0.55 : 0.5));
+    // On a phone the map is only as tall as the video beside it, so the replay below still fits.
+    map = phone ? Math.max(300, dock / ratio + hud) : height;
+  }
+  duo.classList.toggle('stacked', stacked);
+  duo.classList.toggle('narrow', !stacked && width - dock < 320);
+  duo.style.setProperty('--dock-w', Math.round(dock) + 'px');
+  duo.style.setProperty('--map-h', Math.round(map) + 'px');
+  view.map.invalidateSize();
+}
+video().addEventListener('loadedmetadata', fitVideo);
 video().addEventListener('timeupdate', syncVideo);
 video().addEventListener('seeked', syncVideo);
 // Smooth while playing, frame by frame where the browser allows it.
@@ -753,7 +786,14 @@ video().addEventListener('error', () => videoSay('Este navegador no puede mostra
   'o con Chrome o Edge al día, o con el archivo .LRV de la tarjeta, más ligero. La telemetría sí se ha leído.', 'error'));
 
 let resizeTimer;
-window.addEventListener('resize', () => {clearTimeout(resizeTimer); resizeTimer = setTimeout(() => compare().catch(() => {}), 250);});
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    // Only a new width: on a phone, scrolling hides and shows the address bar and changes the height.
+    if (window.innerWidth !== fittedWidth) fitVideo();
+    compare().catch(() => {});
+  }, 250);
+});
 
 async function start() {
   shell = await startShell('entrenamiento');

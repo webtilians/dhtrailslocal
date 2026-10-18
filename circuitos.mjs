@@ -31,8 +31,14 @@ function redraw() {
   list.replaceChildren();
   if (!source) {stats(null); return;}
   const {start, finish, gates} = draft;
-  view.add(L.polyline(source.map(latlon), {color: '#427695', weight: 3, opacity: .6}));
-  if (start !== null && finish !== null) view.add(L.polyline(source.slice(start, finish + 1).map(latlon), {color: '#1aa5ff', weight: 6}));
+  // The imported route in white over a dark edge, to be seen on the map and on the satellite; the
+  // circuit (start to finish) in magenta over it: neither the colour of a pin.
+  const line = (points, color, weight) => {
+    view.add(L.polyline(points, {color: '#06121e', weight: weight + 4, opacity: .85, interactive: false}));
+    view.add(L.polyline(points, {color, weight, opacity: 1, interactive: false}));
+  };
+  line(source.map(latlon), '#ffffff', 4);
+  if (start !== null && finish !== null) line(source.slice(start, finish + 1).map(latlon), '#ff3fd2', 5);
   if (start !== null) pin(view, latlon(source[start]), 'start', 'Salida · arrastra para ajustar', at => move('start', 0, at));
   gates.forEach((g, i) => pin(view, latlon(source[g.index]), 'gate', 'Fin del segmento ' + (i + 1), at => move('gate', i, at)));
   if (finish !== null) pin(view, latlon(source[finish]), 'finish', 'Meta · arrastra para ajustar', at => move('finish', 0, at));
@@ -87,6 +93,21 @@ function move(kind, i, at) {
   } else {const previous = tool; tool = kind; place(snap.index); tool = previous;}
   redraw();
 }
+// While a tool is chosen, a dot shows on the route where a click would land.
+const aim = L.circleMarker([0, 0], {radius: 8, weight: 3, color: '#ffffff', fillOpacity: 1, interactive: false});
+const AIM_COLORS = {start: '#1fd68c', finish: '#f85d74', gate: '#f2c34f'};
+let aimFrame = 0;
+view.map.on('mousemove', event => {
+  cancelAnimationFrame(aimFrame);
+  aimFrame = requestAnimationFrame(() => {
+    const near = source && tool ? nearestTrackIndex(source, event.latlng) : null;
+    if (!near || near.meters > SNAP_M) {aim.remove(); view.map.getContainer().style.cursor = ''; return;}
+    aim.setLatLng(latlon(source[near.index])).setStyle({fillColor: AIM_COLORS[tool]});
+    if (!view.map.hasLayer(aim)) aim.addTo(view.map);
+    view.map.getContainer().style.cursor = 'crosshair';
+  });
+});
+view.map.on('mouseout', () => {cancelAnimationFrame(aimFrame); aim.remove();});
 view.map.on('click', event => {
   if (!source) return;
   const nearest = nearestTrackIndex(source, event.latlng);
@@ -180,7 +201,7 @@ $('saveRoute').addEventListener('click', async () => {
 function show(c) {
   if (!c) return;
   source = null; redraw();
-  drawCircuit(view, c);
+  drawCircuit(view, c, {color: '#ff3fd2'});
   $('mapTag').textContent = c.name.toUpperCase();
   stats(c.points.map(p => ({lat: p[0], lon: p[1], ele: p[2] ?? null})), c.sectors.length + 1);
 }
