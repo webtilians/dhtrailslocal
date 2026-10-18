@@ -6,7 +6,7 @@ import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trai
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
-import {readGoproTelemetry, telemetryGpx, videoMoments} from './gopro.mjs';
+import {cameraGps, readGoproTelemetry, telemetryGpx, videoMoments} from './gopro.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -536,9 +536,16 @@ async function linkVideo() {
   renderRunList();
   await compare();
   clip.start = Date.parse(run.started_at) / 1000 - t.lag;
-  videoSay('Vídeo de la bajada ' + (run.mine === false ? 'de ' + run.pilot + ' ' : '') + 'del ' + madrid(Date.parse(run.started_at)) +
+  // The camera's GPS against the run's (the same one when the run came from the camera).
+  const d = linked(), started = Date.parse(run.started_at);
+  clip.gps = cameraGps(t, clip.start, clip.start + run.elapsed_ms / 1000,
+    ms => ms < started || ms > started + run.elapsed_ms ? null : runAt(d.profile, ms - started));
+  videoSay('Vídeo de la bajada ' + (run.mine === false ? 'de ' + run.pilot + ' ' : '') + 'del ' + madrid(started) +
     ' en ' + run.circuit_name + ': la salida está en el ' + clock(clip.start) + ' del vídeo y la meta en el ' +
-    clock(clip.start + run.elapsed_ms / 1000) + '.', 'success');
+    clock(clip.start + run.elapsed_ms / 1000) + '.' + (clip.gps.ok ? '' : ' El GPS de la cámara iba mal en esta bajada (' +
+    (clip.gps.offM > 20 ? 'a unos ' + Math.round(clip.gps.offM) + ' m de la ruta' : 'precisión ' + decimal(clip.gps.dop)) +
+    '): la velocidad y las frenadas salen de la ruta, y las paradas, de cómo se mueve la cámara. La hora del vídeo sí es exacta.'),
+    clip.gps.ok ? 'success' : 'warning');
   if (video().paused && video().currentTime < 0.1) video().currentTime = Math.max(0, clip.start - 2);
   renderMoments();
   syncVideo();
@@ -547,12 +554,13 @@ async function linkVideo() {
 function renderMoments() {
   const d = linked(), box = $('videoMoments');
   if (!clip || !d) return box.replaceChildren();
-  const all = videoMoments(clip.telemetry, clip.start, clip.start + d.run.elapsed_ms / 1000);
+  const gps = clip.gps?.ok !== false;
+  const all = videoMoments(clip.telemetry, clip.start, clip.start + d.run.elapsed_ms / 1000, {gps});
   const of = kind => all.filter(m => m.kind === kind);
   const still = of('stop').reduce((sum, m) => sum + m.seconds, 0);
   const counts = [
     of('stop').length ? of('stop').length + ' parada(s), ' + decimal(still) + ' s quieto' : 'sin paradas',
-    of('brake').length + ' frenada(s) fuertes', of('shock').length + ' golpe(s) de 4 g o más',
+    ...gps ? [of('brake').length + ' frenada(s) fuertes'] : [], of('shock').length + ' golpe(s) de 4 g o más',
     of('air').length ? of('air').length + ' salto(s)' : 'ningún salto'];
   // Every stop, braking and jump; of the shocks, the five strongest.
   const strongest = of('shock').sort((a, b) => b.g - a.g).slice(0, 5);
@@ -564,7 +572,8 @@ function renderMoments() {
     air: () => 'Salto: ' + decimal(m.seconds, 2) + ' s en el aire'})[m.kind]();
   box.replaceChildren(
     node('p', {className: 'moments-summary', textContent: 'En esta bajada: ' + counts.join(', ') + '.' +
-      (still >= 1 ? ' Sin las paradas habrías tardado unos ' + decimal(d.run.elapsed_ms / 1000 - still) + ' s.' : '')}),
+      (still >= 1 ? ' Sin las paradas habrías tardado unos ' + decimal(d.run.elapsed_ms / 1000 - still) + ' s.' : '') +
+      (gps ? '' : ' Las frenadas, en «Frenadas»: salen de la ruta, porque el GPS de la cámara no era fiable.')}),
     ...shown.map(m => {
       const at = runAt(d.profile, (m.t - clip.start) * 1000);
       const button = node('button', {type: 'button', className: 'moment moment-' + m.kind}, [
@@ -594,9 +603,11 @@ function syncVideo() {
     return;
   }
   const at = runAt(d.profile, ms);
-  // The camera's own speed at this frame (measured by its GPS ten times a second), else the run's.
-  const near = clip.telemetry.points.reduce((best, p) => p.fix >= 2 && Math.abs(p.t - video().currentTime) < Math.abs(best.t - video().currentTime) ? p : best,
-    {t: Infinity});
+  // The camera's own speed at this frame (measured by its GPS ten times a second) when it can be
+  // trusted, else the run's.
+  const near = clip.gps?.ok === false ? {t: Infinity} :
+    clip.telemetry.points.reduce((best, p) => p.fix >= 2 && Math.abs(p.t - video().currentTime) < Math.abs(best.t - video().currentTime) ? p : best,
+      {t: Infinity});
   const speed = Math.abs(near.t - video().currentTime) < 0.5 ? near.speed * 3.6 :
     d.speed.kmh[Math.min(d.speed.kmh.length - 1, Math.max(0, Math.round(at.s / 10)))];
   const ref = current.reference;

@@ -187,19 +187,57 @@ export function telemetryGpx(telemetry, name) {
       '</ele><time>' + new Date(p.utc).toISOString() + '</time></trkpt>').join('') + '</trkseg></trk></gpx>\n';
 }
 
+// Whether the camera's own GPS can be trusted between two seconds of the video: GoPro calls a fix good
+// when its DOP is under 5, and when the run comes from another GPS (a watch) both must agree, within
+// 20 m at the same moments. With the camera badly placed or under trees, its positions fall tens of
+// metres behind and its speed reads several km/h low: on 18/10/2026, 60 m and 5-10 km/h on two runs.
+// place(utc ms) is where the run was at that moment, or null.
+// {ok, dop (median), offM (median metres from the run, or null)}
+export function cameraGps(telemetry, from, to, place = null) {
+  const pts = telemetry.points.filter(p => p.fix >= 2 && p.utc !== null && p.t >= from && p.t <= to);
+  const k = Math.PI / 180;
+  const metres = (a, b) => 6371000 * Math.hypot((b.lon - a.lon) * k * Math.cos(a.lat * k), (b.lat - a.lat) * k);
+  const dop = median(pts.map(p => p.dop).filter(Number.isFinite));
+  const offM = place ? median(pts.filter((_, i) => i % 5 === 0).map(p => {const q = place(p.utc); return q ? metres(p, q) : null;})
+    .filter(x => x !== null)) : null;
+  return {ok: pts.length >= 10 && (dop === null || dop < 5) && (offM === null || offM <= 20), dop, offM};
+}
+
+// Stops from the camera's shaking alone, for when its GPS cannot be trusted: riding a trail always
+// shakes it (a spread of 0.18 g or more over a second in real runs), standing still does not (under
+// 0.15 g). Two seconds at least; on a real run it found the same two stops as the GPS's speed.
+function stillStops(accel, from, to) {
+  const {t, g} = accel, out = [], sum = [0], squares = [0];
+  for (let i = 0; i < t.length; i++) {sum.push(sum[i] + g[i]); squares.push(squares[i] + g[i] * g[i]);}
+  let a = 0, b = 0, still = null;
+  for (let c = from; c <= to + 0.25; c += 0.25) {
+    while (a < t.length && t[a] < c - 0.5) a++;
+    while (b < t.length && t[b] < c + 0.5) b++;
+    const n = b - a, mean = n ? (sum[b] - sum[a]) / n : 0;
+    const spread = n >= 20 ? Math.sqrt(Math.max(0, (squares[b] - squares[a]) / n - mean * mean)) : null;
+    if (c <= to && spread !== null && spread < 0.15) still ??= c;
+    else {
+      if (still !== null && c - still >= 2) out.push({kind: 'stop', t: still, until: Math.min(c, to), seconds: Math.min(c, to) - still});
+      still = null;
+    }
+  }
+  return out;
+}
+
 // What happened between two seconds of the video that is worth a look when training, each with the
 // second it starts at:
 // - stop: under 2 km/h on average over each second, for 1.5 s or more (a foot down, a stall, a wait);
-//   standing still, a GoPro's GPS still reads 0.2-1.5 km/h;
+//   standing still, a GoPro's GPS still reads 0.2-1.5 km/h. Without a trustworthy GPS ({gps: false}),
+//   from the camera's shaking instead, and no braking: that is left to the run's own GPS;
 // - brake: losing speed at 2.5 m/s² or more (a quarter of g) over half a second, from the GPS's own
 //   speed, and at least 5 km/h in all; pauses under 0.7 s do not split a braking;
 // - shock: 4 g or more (a landing, a root, a rock), at most one a second;
 // - air: under 0.35 g for 0.2 s or more (the camera falling with the rider: a jump or a drop).
 // The thresholds come from real GoPro runs: on trails ridden at 20-30 km/h, braking into corners
 // reaches 2.5-5.5 m/s², shocks 4-11 g, and a smooth run never stays under 0.35 g for 0.2 s.
-export function videoMoments(telemetry, from, to) {
-  const out = [];
-  const pts = telemetry.points.filter(p => p.fix >= 2 && p.t >= from && p.t <= to);
+export function videoMoments(telemetry, from, to, {gps = true} = {}) {
+  const out = gps ? [] : stillStops(telemetry.accel || {t: [], g: []}, from, to);
+  const pts = gps ? telemetry.points.filter(p => p.fix >= 2 && p.t >= from && p.t <= to) : [];
   const around = (i, seconds) => {
     const near = pts.filter(q => Math.abs(q.t - pts[i].t) <= seconds / 2);
     return near.reduce((sum, q) => sum + q.speed, 0) / near.length;
@@ -212,7 +250,7 @@ export function videoMoments(telemetry, from, to) {
       still = null;
     }
   });
-  if (still !== null && to - still >= 1.5) out.push({kind: 'stop', t: still, until: to, seconds: to - still});
+  if (gps && still !== null && to - still >= 1.5) out.push({kind: 'stop', t: still, until: to, seconds: to - still});
   const v = pts.map((_, i) => around(i, 0.3));
   const brakes = [];
   for (let i = 5; i < pts.length; i++) {
