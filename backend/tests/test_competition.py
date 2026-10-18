@@ -237,6 +237,18 @@ def test_training_counts_only_runs_that_follow_the_circuit(organizer):
         assert any(f["circuit_id"] == cid and f["runs"] == 1 for f in ridden["found"])
         assert len(client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()) == 1
 
+def test_sessions_last_a_month_and_can_be_renewed():
+    import jwt
+    with TestClient(app) as client:
+        headers = account(client)
+        claims = jwt.decode(headers["Authorization"].split()[1], options={"verify_signature": False})
+        assert 29 * 86400 < claims["exp"] - claims["iat"] <= 30 * 86400
+        r = client.post("/api/auth/refresh", headers=headers)
+        assert r.status_code == 200
+        renewed = {"Authorization": "Bearer " + r.json()["access_token"]}
+        assert client.get("/api/auth/me", headers=renewed).json()["id"] == r.json()["user"]["id"]
+        assert client.post("/api/auth/refresh").status_code == 401
+
 def test_sign_up_takes_the_rider_name():
     with TestClient(app) as client:
         name = "Nombre " + uuid.uuid4().hex[:6]

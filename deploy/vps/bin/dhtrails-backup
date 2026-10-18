@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Copy of the DH Trails database and private GPS files; keeps 14 days.
+# The group dhbackup may read them, to copy them off the server (dhtrails-copias-pc).
 set -euo pipefail
 dir=/var/backups/dhtrails
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
-install -d -o root -g root -m 700 "$dir"
+group=root; getent group dhbackup >/dev/null && group=dhbackup
+install -d -o root -g "$group" -m 750 "$dir"
 cd /
 runuser -u dhtrails -- pg_dump -Fc dhtrails > "$dir/dhtrails-$stamp.dump.part"
 mv "$dir/dhtrails-$stamp.dump.part" "$dir/dhtrails-$stamp.dump"

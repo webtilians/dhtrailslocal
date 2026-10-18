@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Lets a computer keep its own copy of the backups with an SSH key that can do nothing else:
+#   dhtrails-copias-pc "ssh-ed25519 AAAA... nombre"   allow that computer (deploy/pc/instalar-copias.ps1 prints it)
+#   dhtrails-copias-pc                                 list the computers allowed
+#   dhtrails-copias-pc quitar nombre                   stop allowing the computer with that name
+set -euo pipefail
+keys=/var/lib/dhbackup/.ssh/authorized_keys
+id dhbackup >/dev/null 2>&1 || { echo "Falta el usuario dhbackup: ejecuta dhtrails-update" >&2; exit 1; }
+install -d -o dhbackup -g dhbackup -m 700 /var/lib/dhbackup/.ssh
+[ -f "$keys" ] || install -o dhbackup -g dhbackup -m 600 /dev/null "$keys"
+case "${1:-}" in
+  "")
+    awk '{print "- " $NF}' "$keys"
+    [ -s "$keys" ] || echo "(ningún ordenador)"
+    ;;
+  quitar)
+    [ -n "${2:-}" ] || { echo "Uso: dhtrails-copias-pc quitar nombre" >&2; exit 2; }
+    awk -v name="$2" '$NF != name' "$keys" > "$keys.new" && mv "$keys.new" "$keys"
+    chown dhbackup:dhbackup "$keys"; chmod 600 "$keys"
+    echo "Quitado: $2"
+    ;;
+  ssh-ed25519\ *|ssh-rsa\ *|ecdsa-*)
+    # restrict: no shell, no forwarding, no terminal; the key only runs dhtrails-backup-latest.
+    line="restrict,command=\"/usr/local/sbin/dhtrails-backup-latest\" $1"
+    grep -qF "$1" "$keys" || echo "$line" >> "$keys"
+    echo "Este ordenador ya puede bajar las copias: $(awk '{print $NF}' <<< "$1")"
+    ;;
+  *) echo "Uso: dhtrails-copias-pc [\"clave pública\" | quitar nombre]" >&2; exit 2 ;;
+esac

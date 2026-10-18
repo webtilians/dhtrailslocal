@@ -66,10 +66,20 @@ export function createCloudApi(config) {
     token=next;
     try{if(token)localStorage.setItem(tokenKey,token);else localStorage.removeItem(tokenKey)}catch{}
   }
+  // When the session was issued, in ms (0 if unknown): it is renewed once a day while the app is used.
+  function issuedAt() {
+    try{return JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).iat*1000||0}
+    catch{return 0}
+  }
   async function user() {
     if(!token)return null;
-    try{return await request('/auth/me')}
+    let me;
+    try{me=await request('/auth/me')}
     catch{persistToken(null);return null}
+    if(Date.now()-issuedAt()>24*3600*1000){
+      try{persistToken((await request('/auth/refresh',{method:'POST'})).access_token)}catch{}
+    }
+    return me;
   }
   return {
     user,
