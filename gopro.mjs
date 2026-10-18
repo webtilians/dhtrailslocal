@@ -124,8 +124,10 @@ const text = (view, item) => {
 const gpsu = s => Date.UTC(2000 + +s.slice(0, 2), +s.slice(2, 4) - 1, +s.slice(4, 6), +s.slice(6, 8), +s.slice(8, 10), 0) + parseFloat(s.slice(10)) * 1000;
 const median = values => {const v = [...values].sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null;};
 
-// {camera, seconds, points: [{t (video second), utc (ms), lat, lon, ele, speed (m/s), fix, dop}], lag, spread}
+// {camera, seconds, points: [{t (video second), utc (ms), lat, lon, ele, speed (m/s), fix, dop}], lag, spread,
+//  accel: {t: [video seconds], g: [total acceleration in g]}}
 // lag: video second = UTC seconds − lag; spread: how much that gap varies along the video, in seconds.
+// speed is the GPS's own (Doppler) measure, ten times a second: much finer than positions a second apart.
 export async function readGoproTelemetry(file) {
   const moovBox = (await topBoxes(file)).find(b => b.type === 'moov');
   if (!moovBox) throw new Error('No es un vídeo MP4.');
@@ -133,7 +135,7 @@ export async function readGoproTelemetry(file) {
   const tracks = boxes(view, 0, view.byteLength).filter(b => b.type === 'trak').map(b => track(view, b)).filter(Boolean);
   const meta = tracks.find(t => t.format === 'gpmd'), video = tracks.find(t => t.handler === 'vide');
   if (!meta) throw new Error('Este vídeo no lleva la telemetría de GoPro (GPS).');
-  const points = [];
+  const points = [], accel = {t: [], g: []};
   let camera = '';
   for (const sample of samples(view, meta)) {
     const data = await bytes(file, sample.pos, sample.pos + sample.size);
@@ -142,7 +144,7 @@ export async function readGoproTelemetry(file) {
       for (const item of klv(data, devc.start, devc.end)) {
         if (item.key === 'DVNM' && !camera) camera = text(data, item);
         if (item.key !== 'STRM') continue;
-        let scale = [1], typedef = null, utc = null, fix = null, dop = null, gps = null, nine = false;
+        let scale = [1], typedef = null, utc = null, fix = null, dop = null, gps = null, nine = false, accl = null;
         for (const f of klv(data, item.start, item.end)) {
           if (f.key === 'SCAL') scale = numbers(data, f).map(r => r[0]);
           else if (f.key === 'TYPE') typedef = text(data, f);
@@ -150,7 +152,14 @@ export async function readGoproTelemetry(file) {
           else if (f.key === 'GPSF') fix = numbers(data, f)[0][0];
           else if (f.key === 'GPSP') dop = numbers(data, f)[0][0] / 100;
           else if (f.key === 'GPS9' || f.key === 'GPS5') {gps = numbers(data, f, typedef); nine = f.key === 'GPS9';}
+          else if (f.key === 'ACCL') accl = numbers(data, f);
         }
+        // About 200 readings a second (m/s², in the camera's axes): kept as the total, in g.
+        accl?.forEach((r, k) => {
+          const unit = scale[0] || 1;
+          accel.t.push(sample.time + k / accl.length * sample.duration);
+          accel.g.push(Math.hypot(r[0] / unit, r[1] / unit, r[2] / unit) / 9.80665);
+        });
         if (!gps) continue;
         gps.forEach((raw, k) => {
           const v = raw.map((x, i) => x / (scale[i] ?? scale[0] ?? 1));
@@ -164,7 +173,7 @@ export async function readGoproTelemetry(file) {
   }
   const good = points.filter(p => p.fix >= 2 && p.utc !== null);
   const gaps = good.map(p => p.utc / 1000 - p.t);
-  return {camera, seconds: video?.seconds ?? meta.seconds, points, good: good.length,
+  return {camera, seconds: video?.seconds ?? meta.seconds, points, good: good.length, accel,
     lag: median(gaps), spread: gaps.length ? Math.max(...gaps) - Math.min(...gaps) : null};
 }
 
@@ -176,4 +185,57 @@ export function telemetryGpx(telemetry, name) {
     'xmlns="http://www.topografix.com/GPX/1/1"><trk><name>' + esc(name) + '</name><trkseg>' +
     pts.map(p => '<trkpt lat="' + p.lat.toFixed(7) + '" lon="' + p.lon.toFixed(7) + '"><ele>' + p.ele.toFixed(1) +
       '</ele><time>' + new Date(p.utc).toISOString() + '</time></trkpt>').join('') + '</trkseg></trk></gpx>\n';
+}
+
+// What happened between two seconds of the video that is worth a look when training, each with the
+// second it starts at:
+// - stop: under 2 km/h on average over each second, for 1.5 s or more (a foot down, a stall, a wait);
+//   standing still, a GoPro's GPS still reads 0.2-1.5 km/h;
+// - brake: losing speed at 2.5 m/s² or more (a quarter of g) over half a second, from the GPS's own
+//   speed, and at least 5 km/h in all; pauses under 0.7 s do not split a braking;
+// - shock: 4 g or more (a landing, a root, a rock), at most one a second;
+// - air: under 0.35 g for 0.2 s or more (the camera falling with the rider: a jump or a drop).
+// The thresholds come from real GoPro runs: on trails ridden at 20-30 km/h, braking into corners
+// reaches 2.5-5.5 m/s², shocks 4-11 g, and a smooth run never stays under 0.35 g for 0.2 s.
+export function videoMoments(telemetry, from, to) {
+  const out = [];
+  const pts = telemetry.points.filter(p => p.fix >= 2 && p.t >= from && p.t <= to);
+  const around = (i, seconds) => {
+    const near = pts.filter(q => Math.abs(q.t - pts[i].t) <= seconds / 2);
+    return near.reduce((sum, q) => sum + q.speed, 0) / near.length;
+  };
+  let still = null;
+  pts.forEach((p, i) => {
+    if (around(i, 1) < 0.55) still ??= p.t;
+    else {
+      if (still !== null && p.t - still >= 1.5) out.push({kind: 'stop', t: still, until: p.t, seconds: p.t - still});
+      still = null;
+    }
+  });
+  if (still !== null && to - still >= 1.5) out.push({kind: 'stop', t: still, until: to, seconds: to - still});
+  const v = pts.map((_, i) => around(i, 0.3));
+  const brakes = [];
+  for (let i = 5; i < pts.length; i++) {
+    if (pts[i].t <= pts[i - 5].t || (v[i - 5] - v[i]) / (pts[i].t - pts[i - 5].t) < 2.5) continue;
+    const rate = (v[i - 5] - v[i]) / (pts[i].t - pts[i - 5].t), last = brakes.at(-1);
+    if (last && pts[i - 5].t - last.until < 0.7) {
+      last.until = pts[i].t; last.toKmh = Math.min(last.toKmh, v[i] * 3.6); last.peak = Math.max(last.peak, rate);
+    } else brakes.push({kind: 'brake', t: pts[i - 5].t, until: pts[i].t, fromKmh: v[i - 5] * 3.6, toKmh: v[i] * 3.6, peak: rate});
+  }
+  out.push(...brakes.filter(b => b.fromKmh - b.toKmh >= 5));
+  const {t, g} = telemetry.accel || {t: [], g: []};
+  let shock = null, air = null;
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] < from || t[i] > to) continue;
+    if (g[i] >= 4) {
+      if (shock && t[i] - shock.t < 1) shock.g = Math.max(shock.g, g[i]);
+      else out.push(shock = {kind: 'shock', t: t[i], g: g[i]});
+    }
+    if (g[i] < 0.35) air ??= t[i];
+    else {
+      if (air !== null && t[i] - air >= 0.2) out.push({kind: 'air', t: air, seconds: t[i] - air});
+      air = null;
+    }
+  }
+  return out.sort((a, b) => a.t - b.t);
 }

@@ -152,6 +152,18 @@ input[type=date],input[type=number]{color-scheme:dark}
 .video-box{margin-top:12px}
 .video-box video{display:block;width:100%;max-height:70vh;background:#000;border-radius:6px}
 .video-hud{margin:8px 0 0;font:700 13px Inter,system-ui,sans-serif;color:#cfe6f8;font-variant-numeric:tabular-nums}
+.moments{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.moments-summary{margin:0 0 4px;font-size:12px;line-height:1.55;color:#cfe6f8}
+.moment{display:flex;align-items:center;gap:10px;width:100%;text-align:left;font:inherit;font-size:12px;color:#e6f1fb;background:#112b40;border:1px solid #264c6c;border-left:4px solid #8faac4;border-radius:5px;padding:7px 10px;min-height:38px;cursor:pointer}
+.moment:hover{background:#153b5a}
+.moment:focus-visible{outline:2px solid #ffe066;outline-offset:1px}
+.moment b{font-variant-numeric:tabular-nums;color:#cfe6f8;min-width:42px}
+.moment span{flex:1;min-width:0}
+.moment small{color:#8faac4;white-space:nowrap}
+.moment-stop{border-left-color:#ff9a62}
+.moment-brake{border-left-color:#ffe066}
+.moment-shock{border-left-color:#c9a7ff}
+.moment-air{border-left-color:#5fd4ff}
 .chart-band{fill:#cfe6f8;opacity:.07}
 .chart-lane{fill:#1a3247}
 .chart-lane-unknown{fill:#55687c}

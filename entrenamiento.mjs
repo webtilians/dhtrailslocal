@@ -5,7 +5,7 @@ import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trai
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
-import {readGoproTelemetry, telemetryGpx} from './gopro.mjs';
+import {readGoproTelemetry, telemetryGpx, videoMoments} from './gopro.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -191,6 +191,7 @@ async function compare() {
   const byDefault = [reference, ...data.filter(d => d !== reference)].map(d => d.run.id);
   brakingIds = brakingByHand ? present : byDefault.slice(0, BRAKING_MAX);
   renderBraking();
+  if (clip) renderMoments();
   const gates = gatesOf(circuit), referenceTimes = segmentTimes(reference.profile, gates);
   const worst = data.filter(d => d !== reference).map(d => {
     const lost = segmentTimes(d.profile, gates).map((t, i) => t - referenceTimes[i]);
@@ -448,11 +449,17 @@ $('analyze').addEventListener('click', async () => {
 $('circuitSelect').addEventListener('change', pickDefault);
 $('loginButton').addEventListener('click', () => shell.askLogin('Entra o crea tu cuenta para guardar tus rutas.'));
 // ---- GoPro video, played from the rider's own device and kept in step with the map and charts ----
-let clip = null, videoMarker = null;
+let clip = null, videoMarker = null, ghostMarker = null;
+// The video's dots go above everything else on the map, numbered braking pins included.
+view.map.createPane('videoNow').style.zIndex = 640;
 const clock = s => Math.floor(s / 60) + ':' + (s % 60).toFixed(1).padStart(4, '0').replace('.', ',');
 const madrid = ms => new Date(ms).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 const videoSay = (message, type = '') => say($('videoInfo'), message, type);
 const linked = () => current?.data.find(d => d.run.id === clip?.runId) || null;
+// The run to race against while watching: the fastest of the others compared.
+const ghostOf = d => current.data.filter(x => x !== d).sort((a, b) => a.run.elapsed_ms - b.run.elapsed_ms)[0] || null;
+const shortLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at);
+const decimal = (x, n = 1) => x.toFixed(n).replace('.', ',');
 
 // Where a run was this many ms after its start: position along the circuit and its own GPS point.
 function runAt(profile, ms) {
@@ -484,7 +491,12 @@ async function linkVideo() {
   }
   clip.runId = run.id;
   // Show that run: on its circuit and among the compared ones.
-  if ($('circuitSelect').value !== run.circuit_id) {$('circuitSelect').value = run.circuit_id; picked = [run.id];}
+  if ($('circuitSelect').value !== run.circuit_id) {
+    // With the best other run of that circuit, to race against while watching.
+    $('circuitSelect').value = run.circuit_id;
+    const best = runs.filter(r => r.circuit_id === run.circuit_id && r.id !== run.id).sort((a, b) => a.elapsed_ms - b.elapsed_ms)[0];
+    picked = [run.id, ...(best ? [best.id] : [])];
+  }
   else if (!picked.includes(run.id)) picked = [...picked.slice(0, COLORS.length - 1), run.id];
   renderRunList();
   await compare();
@@ -493,12 +505,48 @@ async function linkVideo() {
     ' en ' + run.circuit_name + ': la salida está en el ' + clock(clip.start) + ' del vídeo y la meta en el ' +
     clock(clip.start + run.elapsed_ms / 1000) + '.', 'success');
   if (video().paused && video().currentTime < 0.1) video().currentTime = Math.max(0, clip.start - 2);
+  renderMoments();
   syncVideo();
+}
+// Stops, hard braking, shocks and jumps of the run in the video, from the camera's own sensors.
+function renderMoments() {
+  const d = linked(), box = $('videoMoments');
+  if (!clip || !d) return box.replaceChildren();
+  const all = videoMoments(clip.telemetry, clip.start, clip.start + d.run.elapsed_ms / 1000);
+  const of = kind => all.filter(m => m.kind === kind);
+  const still = of('stop').reduce((sum, m) => sum + m.seconds, 0);
+  const counts = [
+    of('stop').length ? of('stop').length + ' parada(s), ' + decimal(still) + ' s quieto' : 'sin paradas',
+    of('brake').length + ' frenada(s) fuertes', of('shock').length + ' golpe(s) de 4 g o más',
+    of('air').length ? of('air').length + ' salto(s)' : 'ningún salto'];
+  // Every stop, braking and jump; of the shocks, the five strongest.
+  const strongest = of('shock').sort((a, b) => b.g - a.g).slice(0, 5);
+  const shown = all.filter(m => m.kind !== 'shock' || strongest.includes(m));
+  const text = m => ({
+    stop: () => 'Parada de ' + decimal(m.seconds) + ' s',
+    brake: () => 'Frenada de ' + Math.round(m.fromKmh) + ' a ' + Math.round(m.toKmh) + ' km/h en ' + decimal(m.until - m.t) + ' s (hasta ' + decimal(m.peak) + ' m/s²)',
+    shock: () => 'Golpe de ' + decimal(m.g) + ' g',
+    air: () => 'Salto: ' + decimal(m.seconds, 2) + ' s en el aire'})[m.kind]();
+  box.replaceChildren(
+    node('p', {className: 'moments-summary', textContent: 'En esta bajada: ' + counts.join(', ') + '.' +
+      (still >= 1 ? ' Sin las paradas habrías tardado unos ' + decimal(d.run.elapsed_ms / 1000 - still) + ' s.' : '')}),
+    ...shown.map(m => {
+      const at = runAt(d.profile, (m.t - clip.start) * 1000);
+      const button = node('button', {type: 'button', className: 'moment moment-' + m.kind}, [
+        node('b', {textContent: clock(m.t)}), node('span', {textContent: text(m)}), node('small', {textContent: Math.round(at.s) + ' m'})]);
+      button.addEventListener('click', () => {
+        video().currentTime = Math.max(0, m.t - 1.5);
+        syncVideo();
+        $('videoBox').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+      });
+      return button;
+    }));
 }
 const video = () => $('video');
 // Map point, chart cursor and the line under the video, at the video's current time.
 function syncVideo() {
   const d = linked(), hud = $('videoHud');
+  if (ghostMarker && (!clip || !d)) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
   if (!clip || !d) {
     if (videoMarker) {view.map.removeLayer(videoMarker); videoMarker = null;}
     hud.textContent = clip ? 'Vídeo grabado el ' + madrid(clip.telemetry.lag * 1000) + '.' : '';
@@ -508,15 +556,31 @@ function syncVideo() {
   if (ms < 0 || ms > d.run.elapsed_ms) {
     hud.textContent = ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(d.run.elapsed_ms);
     if (videoMarker) {view.map.removeLayer(videoMarker); videoMarker = null;}
+    if (ghostMarker) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
     return;
   }
-  const at = runAt(d.profile, ms), i = Math.min(d.speed.kmh.length - 1, Math.max(0, Math.round(at.s / 10)));
-  const speed = d.speed.kmh[i];
-  hud.textContent = formatMs(ms) + ' · ' + (speed === null ? '—' : Math.round(speed) + ' km/h') + ' · ' + Math.round(at.s) + ' m desde la salida';
-  // White with a dark ring: it stands out on any run's line and on the satellite picture.
-  if (!videoMarker) videoMarker = L.circleMarker([at.lat, at.lon], {radius: 9, color: '#071423', weight: 4, fillColor: '#ffffff', fillOpacity: 1,
-    interactive: false}).addTo(view.map);
+  const at = runAt(d.profile, ms);
+  // The camera's own speed at this frame (measured by its GPS ten times a second), else the run's.
+  const near = clip.telemetry.points.reduce((best, p) => p.fix >= 2 && Math.abs(p.t - video().currentTime) < Math.abs(best.t - video().currentTime) ? p : best,
+    {t: Infinity});
+  const speed = Math.abs(near.t - video().currentTime) < 0.5 ? near.speed * 3.6 :
+    d.speed.kmh[Math.min(d.speed.kmh.length - 1, Math.max(0, Math.round(at.s / 10)))];
+  // Racing the other run: how far ahead or behind at this point, and where it was at this same time.
+  const ghost = ghostOf(d);
+  let race = '';
+  if (ghost) {
+    race = ' · ' + formatDelta(ms - timeAt(ghost.profile, at.s)) + ' frente a ' + shortLabel(ghost.run);
+    const where = runAt(ghost.profile, Math.min(ms, ghost.run.elapsed_ms));
+    if (!ghostMarker) ghostMarker = L.circleMarker([where.lat, where.lon], {radius: 7, color: '#ffffff', weight: 3, fillColor: ghost.color,
+      fillOpacity: 1, interactive: false, pane: 'videoNow'}).addTo(view.map);
+    else ghostMarker.setLatLng([where.lat, where.lon]).setStyle({fillColor: ghost.color});
+  } else if (ghostMarker) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
+  hud.textContent = formatMs(ms) + ' · ' + (speed === null ? '—' : Math.max(0, Math.round(speed)) + ' km/h') + ' · ' + Math.round(at.s) + ' m' + race;
+  // Yellow like the charts' cursor (this moment of the video), with a dark ring for any line or picture below.
+  if (!videoMarker) videoMarker = L.circleMarker([at.lat, at.lon], {radius: 10, color: '#071423', weight: 4, fillColor: HIGHLIGHT, fillOpacity: 1,
+    interactive: false, pane: 'videoNow'}).addTo(view.map);
   else videoMarker.setLatLng([at.lat, at.lon]);
+  videoMarker.bringToFront();
   charts.forEach(chart => chart?.setSelection(at.s / 1000));
 }
 // Jump in the video to the moment the run was this many metres down the circuit.

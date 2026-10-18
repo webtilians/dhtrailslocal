@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readGoproTelemetry, telemetryGpx} from '../gopro.mjs';
+import {readGoproTelemetry, telemetryGpx, videoMoments} from '../gopro.mjs';
 
 // A tiny MP4 like a GoPro's: a telemetry track (gpmd) with one GPMF sample per second, written by hand.
 const u32 = n => [n >>> 24, n >>> 16 & 255, n >>> 8 & 255, n & 255];
@@ -92,4 +92,23 @@ test('GPS5 telemetry: the sample time spread over its points', async () => {
 test('a video without GoPro telemetry, or not an MP4, is told apart', async () => {
   await assert.rejects(readGoproTelemetry(mp4([gps9Sample(0)], {handler: 'vide', format: 'avc1'})), /telemetría/);
   await assert.rejects(readGoproTelemetry(new Blob([new Uint8Array(64)])), /MP4/);
+});
+
+test('moments of a run: a stop despite GPS noise, a hard braking, a shock and a jump', () => {
+  // 10 points a second for 20 s: riding at 8 m/s, braking to 2 m/s between 4 and 5.5 s, standing still from
+  // 8 to 11 s (the GPS still reads up to 0.4 m/s), then riding again.
+  const speed = t => t < 4 ? 8 : t < 5.5 ? 8 - (t - 4) * 4 : t < 7 ? 2 : t < 8 ? 2 - (t - 7) * 2 : t < 11 ? 0.1 + 0.3 * (Math.round(t * 10) % 2) : 6;
+  const points = Array.from({length: 200}, (_, i) => ({t: i / 10, speed: speed(i / 10), fix: 3}));
+  // 200 readings a second at 1 g, with a 5.2 g landing at 14 s after 0.3 s in the air.
+  const t = Array.from({length: 4000}, (_, i) => i / 200);
+  const g = t.map(x => x >= 13.7 && x < 14 ? 0.1 : Math.abs(x - 14) < 0.01 ? 5.2 : 1);
+  const moments = videoMoments({points, accel: {t, g}}, 0, 20);
+  assert.deepEqual(moments.map(m => m.kind), ['brake', 'stop', 'air', 'shock']);
+  const [brake, stop, air, shock] = moments;
+  assert.ok(Math.abs(brake.t - 3.9) < 0.3 && brake.fromKmh > 25 && brake.toKmh < 12 && brake.peak >= 3.5, JSON.stringify(brake));
+  // The average over a second notices the restart half a second early.
+  assert.ok(Math.abs(stop.t - 7.9) < 0.3 && stop.seconds > 2.4 && stop.seconds <= 3.1, JSON.stringify(stop));
+  assert.ok(Math.abs(air.seconds - 0.3) < 0.02 && Math.abs(shock.g - 5.2) < 1e-9);
+  // Outside the run's seconds nothing is counted.
+  assert.deepEqual(videoMoments({points, accel: {t, g}}, 15, 20), []);
 });
