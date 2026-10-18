@@ -2,7 +2,7 @@
 import {compareSectorTimes, formatMs, formatDelta} from './sector-comparison.mjs';
 import {sectorLabels, standingsRows, idealMs, asAttempt} from './competition-core.mjs';
 import {podiumImage} from './podium-image.mjs';
-import {$, node, say, startShell, createMap, drawCircuit, km, dateText} from './app-shell.mjs';
+import {$, node, say, startShell, takeShared, createMap, drawCircuit, km, dateText} from './app-shell.mjs';
 
 const view = createMap('map');
 let shell = null, tournaments = [], board = null;
@@ -214,5 +214,10 @@ async function start() {
   await loadBoard();
   reflectUser();
   view.map.invalidateSize();
+  // A route shared from another app on the phone, sent on here from the training page.
+  const shared = await takeShared($('entryFile'));
+  if (shared?.file) account('Has compartido ' + shared.file.name + '. Comprueba el torneo y pulsa «Enviar al time trial».');
+  else if (shared?.missing) account('No ha llegado ningún archivo: elígelo con «Sube tu bajada».', 'error');
+  if (shared) $('submitEntry').scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 start().catch(err => status('Error: ' + err.message, 'error'));

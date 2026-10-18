@@ -11,7 +11,7 @@ from pathlib import Path
 from defusedxml.ElementTree import fromstring as safe_xml
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -284,9 +284,17 @@ def delete_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Dep
 _PUBLIC_FILES={"index.html","entrenamiento.html","circuitos.html","torneos.html","app.css","app-shell.mjs",
                "timetrial.mjs","entrenamiento.mjs","circuitos.mjs","torneos.mjs","telemetry.mjs","charts.mjs",
                "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs",
-               "editor.html","competicion.html"}  # the last two only redirect old links
+               "editor.html","competicion.html",  # these two only redirect old links
+               "manifest.json","sw.js","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"}
 # Pages and modules change together on every update: browsers must check before reusing a copy.
 _REVALIDATE={"Cache-Control":"no-cache"}
+# Where the installed app receives a shared GPX (manifest.json). Its service worker takes the file
+# first; when it was not running, the file cannot be kept (a plain form carries no session), so back to
+# the training page, which says that nothing arrived.
+@app.post("/compartir",include_in_schema=False)
+def shared_without_worker():
+    return RedirectResponse("./entrenamiento.html?compartido",status_code=303)
+
 @app.get("/",include_in_schema=False)
 def home():
     return FileResponse(REPO_ROOT/"index.html",headers=_REVALIDATE)
