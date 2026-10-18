@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {distanceSeries} from '../gps-engine.mjs';
 import {timeAt, resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingZones, brakingPoints,
-  trailOffsets, steadyProfile, steadySpeed} from '../telemetry.mjs';
+  trailOffsets, steadyProfile, steadySpeed, positionAt, timeLost, lossZones} from '../telemetry.mjs';
 
 // 100 m at a steady 10 m/s, one fix per second, with a GPS step back at 50 m.
 const steady = [[0, 0, 0, 0], [10, 1000, 0, 0], [20, 2000, 0, 0], [30, 3000, 0, 0], [40, 4000, 0, 0],
@@ -165,4 +165,20 @@ test('steady speed: one fix out of place changes nothing, a long drift off the t
   // A run that is always 20 m off (the circuit drawn a bit to one side) keeps every fix.
   const aside = onTrail(ride(() => 8), () => 20);
   assert.equal(steadyProfile(aside, trailOffsets(aside, meridian, meridianAt)).profile.length, aside.length);
+});
+
+test('replay: where a run was at a given time, before the start and after the finish included', () => {
+  const run = [[0, 0, 36, -4], [50, 5000, 36.0005, -4], [100, 15000, 36.001, -4]];
+  assert.deepEqual(positionAt(run, 10000), {s: 75, lat: 36.00075, lon: -4});
+  assert.equal(positionAt(run, -2000).s, 0);
+  assert.equal(positionAt(run, 99000).s, 100);
+});
+test('time lost stretch by stretch, and joined into zones', () => {
+  // The same 100 m: the run is 2 s slower between 25 and 75 m and 0.5 s faster in the last 25 m.
+  const reference = [[0, 0, 0, 0], [25, 2500, 0, 0], [50, 5000, 0, 0], [75, 7500, 0, 0], [100, 10000, 0, 0]];
+  const run = [[0, 0, 0, 0], [25, 2500, 0, 0], [50, 6000, 0, 0], [75, 9500, 0, 0], [100, 11500, 0, 0]];
+  assert.deepEqual(timeLost(run, reference).map(x => x.ms), [0, 1000, 1000, -500]);
+  assert.deepEqual(lossZones(timeLost(run, reference)), [{from: 25, to: 75, ms: 2000}, {from: 75, to: 100, ms: -500}]);
+  // Tiny differences are noise, not zones.
+  assert.deepEqual(lossZones([{from: 0, to: 25, ms: 40}, {from: 25, to: 50, ms: -30}]), []);
 });
