@@ -4,7 +4,9 @@ An organizer creates a tournament from one of the saved circuits; the circuit is
 Any rider uploads the GPX/TCX of a run. The server finds the run on the circuit and times it
 with app.timing. A run that follows the circuit for at least the tournament's match share and
 has no impossible stretch enters the standings at once; otherwise it is stored as rejected
-with the reasons. An organizer can still accept or reject any entry by hand.
+with the reasons. A run that passes but shows signs of an edited or copied file (app.integrity)
+waits for the organizer as pending. An organizer can still accept or reject any entry by hand.
+Once the tournament is over and no entry is pending, its standings are final.
 """
 import hashlib
 import uuid
@@ -19,6 +21,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from . import config
 from .database import get_db
+from .integrity import integrity_checks
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Tournament
 from .ratelimit import RateLimit
 from .schemas import ProfileIn, ReviewIn, TournamentIn
@@ -50,18 +53,46 @@ def load_circuit(db:Session,circuit_id:uuid.UUID)->Circuit|None:
 def tournament_state(t:Tournament,today:date)->str:
     return "proximo" if today<t.starts_on else "terminado" if today>t.ends_on else "activo"
 
-def tournament_payload(t:Tournament,today:date,riders:int=0)->dict:
+def tournament_payload(t:Tournament,today:date,riders:int=0,pending:int=0)->dict:
     return {"id":str(t.id),"name":t.name,"circuit_id":str(t.circuit_id),"circuit_name":t.circuit.name,
             "starts_on":t.starts_on.isoformat(),"ends_on":t.ends_on.isoformat(),"min_match":t.min_match,
-            "state":tournament_state(t,today),"riders":riders}
+            "uploads_until":(t.ends_on+timedelta(days=UPLOAD_GRACE_DAYS)).isoformat(),
+            "state":tournament_state(t,today),"riders":riders,"pending":pending}
 
-def entry_payload(a:Attempt,pilot_name:str|None=None)->dict:
-    return {"id":str(a.id),"tournament_id":str(a.tournament_id) if a.tournament_id else None,"pilot":pilot_name,
-            "elapsed_ms":a.elapsed_ms,"sector_splits_ms":[s.elapsed_ms for s in a.splits],
-            "started_at":a.started_at.isoformat() if a.started_at else None,
-            "match":a.confidence,"gps_status":a.gps_status,"notes":a.notes,
-            "review_status":a.review_status,"review_note":a.review_note,
-            "source_filename":a.source_filename,"created_at":a.created_at.isoformat()}
+def entry_payload(a:Attempt,pilot_name:str|None=None,with_checks:bool=False)->dict:
+    payload={"id":str(a.id),"tournament_id":str(a.tournament_id) if a.tournament_id else None,"pilot":pilot_name,
+             "elapsed_ms":a.elapsed_ms,"sector_splits_ms":[s.elapsed_ms for s in a.splits],
+             "started_at":a.started_at.isoformat() if a.started_at else None,
+             "match":a.confidence,"gps_status":a.gps_status,"notes":a.notes,
+             "review_status":a.review_status,"review_note":a.review_note,
+             "source_filename":a.source_filename,"created_at":a.created_at.isoformat()}
+    # Only the organization sees what looked edited or copied: riders see that it is being reviewed.
+    if with_checks:payload.update(checks=a.checks or [],reviewed_by_hand=a.reviewed_by is not None)
+    return payload
+
+def verified(a:Attempt)->bool:
+    """In the standings without any sign of an edited or copied file, or accepted by hand after looking."""
+    return a.review_status=="approved" and a.checks is not None and (not a.checks or a.reviewed_by is not None)
+
+def ensure_checks(db:Session,attempts:list[Attempt])->None:
+    """Look for edited or copied files in entries stored before these checks existed (once each)."""
+    todo=[a for a in attempts if a.checks is None and a.tournament_id]
+    for a in todo:
+        activity=db.get(Activity,a.activity_id) if a.activity_id else None
+        try:
+            data=(config.GPS_STORAGE_DIR/str(activity.owner_id)/activity.storage_name).read_bytes()
+            fixes=parse_gps(data,activity.format)
+            runs=[r for r in detect_attempts(fixes,public_circuit(load_circuit(db,a.circuit_id))) if r.seconds is not None]
+        except (AttributeError,OSError,GpsError):
+            a.checks=["no se ha podido comprobar: el archivo GPS no está en el servidor"]
+            continue
+        if not runs:
+            a.checks=["no se ha podido comprobar: la bajada ya no aparece en el archivo"]
+            continue
+        started=a.started_at.timestamp()*1000 if a.started_at else 0
+        run=min(runs,key=lambda r:abs((r.started_ms or 0)-started))
+        a.checks=integrity_checks(db,a.pilot_id,data,fixes,run,activity.sha256 or "",a.circuit_id,exclude_id=a.id)
+    if todo:db.commit()
 
 def store_activity(db:Session,p:Pilot,filename:str,ext:str,data:bytes,fixes,digest:str,recorded_at)->Activity:
     """Keep the uploaded GPS file privately; the caller commits."""
@@ -131,13 +162,15 @@ def list_tournaments(db:Session=Depends(get_db)):
     today=local_date(db,func.now())
     counts=dict(db.execute(select(Attempt.tournament_id,func.count(func.distinct(Attempt.pilot_id)))
         .where(Attempt.tournament_id.is_not(None),Attempt.review_status=="approved").group_by(Attempt.tournament_id)).all())
+    pending=dict(db.execute(select(Attempt.tournament_id,func.count(Attempt.id))
+        .where(Attempt.tournament_id.is_not(None),Attempt.review_status=="pending").group_by(Attempt.tournament_id)).all())
     tournaments=db.scalars(select(Tournament).options(selectinload(Tournament.circuit)).limit(200)).all()
     order={"activo":0,"proximo":1,"terminado":2}
     def key(t:Tournament):
         # Running and upcoming by start date, finished ones latest first.
         state=tournament_state(t,today)
         return (order[state],-t.ends_on.toordinal() if state=="terminado" else t.starts_on.toordinal())
-    return [tournament_payload(t,today,counts.get(t.id,0)) for t in sorted(tournaments,key=key)]
+    return [tournament_payload(t,today,counts.get(t.id,0),pending.get(t.id,0)) for t in sorted(tournaments,key=key)]
 
 def get_tournament(db:Session,tournament_id:uuid.UUID)->Tournament:
     t=db.scalar(select(Tournament).options(selectinload(Tournament.circuit).selectinload(Circuit.sectors),
@@ -148,6 +181,8 @@ def get_tournament(db:Session,tournament_id:uuid.UUID)->Tournament:
 @router.get("/public/tournaments/{tournament_id}")
 def tournament_standings(tournament_id:uuid.UUID,db:Session=Depends(get_db)):
     t=get_tournament(db,tournament_id)
+    ensure_checks(db,db.scalars(select(Attempt).where(Attempt.tournament_id==t.id,Attempt.review_status=="approved",
+                                                      Attempt.checks.is_(None))).all())
     best=db.execute(select(Attempt,Pilot.display_name,
             func.to_char(func.timezone(config.COMPETITION_TIMEZONE,Attempt.started_at),"YYYY-MM-DD"))
         .join(Pilot,Pilot.id==Attempt.pilot_id).options(selectinload(Attempt.splits))
@@ -161,12 +196,16 @@ def tournament_standings(tournament_id:uuid.UUID,db:Session=Depends(get_db)):
         rank=1+sum(1 for other,_,_ in best if other.elapsed_ms<a.elapsed_ms)
         rows.append({"rank":rank,"entry_id":str(a.id),"pilot":name or "Piloto","elapsed_ms":a.elapsed_ms,
                      "gap_ms":a.elapsed_ms-leader,"sector_splits_ms":[s.elapsed_ms for s in a.splits],
-                     "day":day,"match":a.confidence,"gps_status":a.gps_status})
+                     "day":day,"match":a.confidence,"gps_status":a.gps_status,"verified":verified(a)})
     sectors=len(t.circuit.sectors)+1
     best_sectors=[min((r["sector_splits_ms"][i] for r in rows if r["sector_splits_ms"][i] is not None),default=None)
                   for i in range(sectors)]
-    return {"tournament":tournament_payload(t,local_date(db,func.now()),len(rows)),"circuit":public_circuit(t.circuit),
-            "rows":rows,"best_sectors_ms":best_sectors}
+    today=local_date(db,func.now())
+    pending=db.scalar(select(func.count(Attempt.id)).where(Attempt.tournament_id==t.id,Attempt.review_status=="pending"))
+    # Final once nobody can upload any more and the organization has reviewed every entry.
+    final=today>t.ends_on+timedelta(days=UPLOAD_GRACE_DAYS) and pending==0
+    return {"tournament":tournament_payload(t,today,len(rows),pending),"circuit":public_circuit(t.circuit),
+            "rows":rows,"best_sectors_ms":best_sectors,"pending":pending,"final":final}
 
 @router.delete("/tournaments/{tournament_id}",status_code=204)
 def delete_tournament(tournament_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
@@ -208,11 +247,18 @@ async def submit_entry(tournament_id:uuid.UUID,file:UploadFile=File(...),db:Sess
     if run.confidence<t.min_match:
         reasons.append(f"coincide un {round(run.confidence*100)} % con el circuito (mínimo {round(t.min_match*100)} %)")
     if run.status!="compatible":reasons.extend(run.issues)
+    # Before storing this file, so it is not compared with itself.
+    checks=integrity_checks(db,p.id,data,fixes,run,digest,t.circuit_id)
     activity=store_activity(db,p,filename,ext,data,fixes,digest,datetime.fromtimestamp(run.started_ms/1000,timezone.utc))
     entry=run_attempt(p,t.circuit_id,run,filename,activity.id,t.id)
-    entry.review_status="approved" if passing else "rejected"
+    entry.checks=checks
+    if passing and checks:
+        # Fine on the circuit, but the file looks edited or copied: the organization decides.
+        entry.review_status,entry.reviewed_at="pending",None
+    else:
+        entry.review_status="approved" if passing else "rejected"
+        entry.reviewed_at=utcnow()
     entry.review_note="; ".join(reasons)[:300] or None
-    entry.reviewed_at=utcnow()
     try:
         db.flush();db.add(entry);db.commit()
     except Exception:
@@ -232,7 +278,8 @@ def all_entries(tournament_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depen
     rows=db.execute(select(Attempt,Pilot.display_name).join(Pilot,Pilot.id==Attempt.pilot_id)
         .options(selectinload(Attempt.splits)).where(Attempt.tournament_id==tournament_id)
         .order_by(Attempt.created_at.desc()).limit(500)).all()
-    return [entry_payload(a,name) for a,name in rows]
+    ensure_checks(db,[a for a,_ in rows])
+    return [entry_payload(a,name,with_checks=True) for a,name in rows]
 
 @router.post("/entries/{entry_id}/review")
 def review_entry(entry_id:uuid.UUID,payload:ReviewIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
@@ -243,6 +290,7 @@ def review_entry(entry_id:uuid.UUID,payload:ReviewIn,db:Session=Depends(get_db),
     a.review_status=payload.decision
     a.review_note=(payload.note or "").strip() or None
     a.reviewed_at=utcnow()
+    a.reviewed_by=p.id
     db.commit()
     return {"id":str(a.id),"review_status":a.review_status}
 

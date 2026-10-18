@@ -124,6 +124,10 @@ class Attempt(Base):
     review_status: Mapped[str | None] = mapped_column(String(8))
     review_note: Mapped[str | None] = mapped_column(String(300))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when an organizer decided by hand (not the automatic filter).
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pilots.id", ondelete="SET NULL"))
+    # Signs of an edited or copied file found on a time trial entry (app.integrity); NULL: not checked yet.
+    checks: Mapped[list | None] = mapped_column(JSONB)
     # [metres along the circuit, ms since the start, lat, lon] per reliable fix (server-timed runs).
     profile: Mapped[list | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

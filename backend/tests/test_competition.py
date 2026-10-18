@@ -1,5 +1,6 @@
 """Time trial tournaments and training against PostgreSQL."""
 import math
+import random
 import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -7,11 +8,17 @@ from datetime import date, datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from app import config
+from app import config, main
 from app.main import app
 
 def fixes(t0_ms, step_ms, lat_shift=0.0):
-    return [(36.74 - i * 0.000061 + lat_shift, -4.45 + math.sin(i / 11) * 0.000094, 430 - i * 1.3, t0_ms + i * step_ms)
+    # Like a real recording: a fix every whole second or two, the rider speeds up and slows down, and the
+    # GPS wanders about a metre, differently on every recording (the anti-cheat checks flag odd intervals,
+    # steady speeds and identical tracks).
+    wander = random.Random(int(t0_ms))
+    return [(36.74 - (i + 2.1 * math.sin(i / 6)) * 0.000061 + lat_shift + wander.uniform(-1, 1) * 0.0000108,
+             -4.45 + math.sin(i / 11) * 0.000094 + wander.uniform(-1, 1) * 0.0000135, 430 - i * 1.3,
+             t0_ms + round(i * step_ms / 1000) * 1000)
             for i in range(100)]
 
 def gpx(points):
@@ -210,7 +217,8 @@ def test_a_saved_circuit_is_found_in_routes_uploaded_before(organizer):
         # Riding part of a circuit is told apart from riding somewhere else.
         partial = upload(client, rider, "/api/training/routes", gpx(fixes(recent(30), 2000, shift)[40:]), "trozo.gpx").json()
         assert partial["found"] == []
-        assert partial["nearest"] == {"circuit_name": "Nuevo v2", "distance_m": 0, "passes": True}
+        assert partial["nearest"]["circuit_name"] == "Nuevo v2" and partial["nearest"]["passes"] is True
+        assert partial["nearest"]["distance_m"] <= 3  # on the line, give or take the GPS wander
 
 def test_training_counts_only_runs_that_follow_the_circuit(organizer):
     with TestClient(app) as client:
@@ -236,6 +244,79 @@ def test_training_counts_only_runs_that_follow_the_circuit(organizer):
         ridden = upload(client, rider, "/api/training/routes", gpx(fixes(recent(30), 2000, shift)), "imperial.gpx").json()
         assert any(f["circuit_id"] == cid and f["runs"] == 1 for f in ridden["found"])
         assert len(client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()) == 1
+
+def test_suspicious_entries_wait_for_the_organizer(organizer):
+    with TestClient(app) as client:
+        tag = uuid.uuid4().hex[:6]
+        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003  # an area where no other test has a circuit
+        org = account(client, "Org " + tag, organizer)
+        tid = new_tournament(client, org, new_circuit(client, org, "Trampas " + tag, shift))
+        entries = f"/api/tournaments/{tid}/entries"
+        honest = account(client, "Limpio " + tag)
+        ride = fixes(recent(30), 2000, shift)
+        first = upload(client, honest, entries, gpx(ride)).json()
+        assert first["review_status"] == "approved" and "checks" not in first
+
+        # Someone else's file as it is (it was in training), or retimed to be 10 % faster.
+        main.register_limit.reset()  # more riders than one address may sign up in an hour
+        theirs = gpx(fixes(recent(90), 2000, shift))
+        assert upload(client, honest, "/api/training/routes", theirs).status_code == 201
+        same_file = upload(client, account(client, "Copia " + tag), entries, theirs).json()
+        faster = [(lat, lon, ele, ride[0][3] - 3600e3 + (t - ride[0][3]) * 0.9) for lat, lon, ele, t in ride]
+        retimed = upload(client, account(client, "Retoca " + tag), entries, gpx(faster)).json()
+        # A route drawn on a map and given a steady speed by a program.
+        drawn = [(36.74 - i * 0.000061 + shift, -4.45 + math.sin(i / 11) * 0.000094, 430 - i * 1.3, recent(20) + i * 2000)
+                 for i in range(100)]
+        generated = upload(client, account(client, "Dibuja " + tag), entries, gpx(drawn)).json()
+        # A file that says which program edited it.
+        edited = gpx(fixes(recent(25), 2000, shift)).replace(b'<gpx version="1.1">', b'<gpx version="1.1" creator="https://gpx.studio">')
+        by_editor = upload(client, account(client, "Editor " + tag), entries, edited).json()
+        for e in (same_file, retimed, generated, by_editor):
+            assert e["review_status"] == "pending", e
+            assert "checks" not in e  # the rider only learns that it is being reviewed
+
+        board = client.get(f"/api/public/tournaments/{tid}").json()
+        assert [(r["pilot"], r["verified"]) for r in board["rows"]] == [("Limpio " + tag, True)]
+        assert board["pending"] == 4 and board["final"] is False
+        listed = {e["pilot"]: " | ".join(e["checks"]) for e in client.get(entries, headers=org).json()}
+        assert listed["Limpio " + tag] == ""
+        assert "mismo archivo" in listed["Copia " + tag]
+        assert "misma ruta" in listed["Retoca " + tag] and "segundos enteros" in listed["Retoca " + tag]
+        assert "casi la misma" in listed["Dibuja " + tag]
+        assert "gpx.studio" in listed["Editor " + tag]
+
+        # The organizer looks and accepts one: it enters the standings, verified by hand.
+        assert client.post(f"/api/entries/{by_editor['id']}/review", headers=org, json={"decision": "approved"}).status_code == 200
+        board = client.get(f"/api/public/tournaments/{tid}").json()
+        assert {r["pilot"]: r["verified"] for r in board["rows"]} == {"Limpio " + tag: True, "Editor " + tag: True}
+        assert board["pending"] == 3
+
+def test_a_finished_tournament_has_a_final_result(organizer):
+    from app.database import SessionLocal
+    from app.models import Tournament
+    with TestClient(app) as client:
+        tag = uuid.uuid4().hex[:6]
+        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003
+        org = account(client, "Org " + tag, organizer)
+        tid = new_tournament(client, org, new_circuit(client, org, "Final " + tag, shift))
+        entries = f"/api/tournaments/{tid}/entries"
+        for n, step in enumerate((2000, 1800, 1900)):
+            entry = upload(client, account(client, f"P{n} {tag}"), entries, gpx(fixes(recent(30 + 3 * n), step, shift)))
+            assert entry.json()["review_status"] == "approved", entry.text
+        board = client.get(f"/api/public/tournaments/{tid}").json()
+        assert board["tournament"]["state"] == "activo" and board["final"] is False
+        # Over, and the two days for late uploads gone too.
+        with SessionLocal() as db:
+            t = db.get(Tournament, uuid.UUID(tid))
+            t.starts_on, t.ends_on = date.today() - timedelta(days=20), date.today() - timedelta(days=3)
+            db.commit()
+        board = client.get(f"/api/public/tournaments/{tid}").json()
+        assert board["tournament"]["state"] == "terminado" and board["pending"] == 0 and board["final"] is True
+        assert board["tournament"]["uploads_until"] == (date.today() - timedelta(days=1)).isoformat()
+        assert [r["pilot"] for r in board["rows"]] == [f"P1 {tag}", f"P2 {tag}", f"P0 {tag}"]
+        assert all(r["verified"] for r in board["rows"])
+        late = upload(client, account(client, "Tarde " + tag), entries, gpx(fixes(recent(5), 1500, shift)))
+        assert late.status_code == 422 and "terminó" in late.text
 
 def test_sessions_last_a_month_and_can_be_renewed():
     import jwt

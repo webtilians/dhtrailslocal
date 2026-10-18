@@ -1,6 +1,7 @@
 // DH Trails v0.8 — Time trial: tournament standings and run upload, for everyone.
 import {compareSectorTimes, formatMs, formatDelta} from './sector-comparison.mjs';
 import {sectorLabels, standingsRows, idealMs, asAttempt} from './competition-core.mjs';
+import {podiumImage} from './podium-image.mjs';
 import {$, node, say, startShell, createMap, drawCircuit, km, dateText} from './app-shell.mjs';
 
 const view = createMap('map');
@@ -9,6 +10,13 @@ const status = (message, type = '') => say($('status'), message, type);
 const account = (message, type = '') => {const el = $('account'); el.hidden = !message; say(el, message, type);};
 const STATE = {activo: 'EN CURSO', proximo: 'PRÓXIMO', terminado: 'TERMINADO'};
 const selected = () => tournaments.find(t => t.id === $('tournamentSelect').value) || null;
+// An entry is in the standings, waiting for the organization (it looked edited or copied) or out.
+const ENTRY = {approved: ['En la clasificación', 'ok', 'Dentro'], pending: ['En revisión', '', 'En revisión'],
+  rejected: ['No entra', 'bad', 'Fuera']};
+const entryState = e => ENTRY[e.review_status] || ENTRY.rejected;
+// Whole days from today to the end of that calendar day (0 on the day itself).
+const daysUntil = iso => Math.round((new Date(iso + 'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
+const VERIFIED = 'Verificado: el archivo no muestra señales de estar editado o copiado, o la organización lo ha revisado.';
 
 function paint(comparison = null) {
   view.clear();
@@ -36,7 +44,7 @@ function renderStandings() {
   for (const row of rows) {
     const tr = node('tr', {tabIndex: 0, title: 'Ver en el mapa dónde gana o pierde tiempo frente al líder'}, [
       node('td', {className: 'pos', textContent: String(row.rank)}),
-      node('td', {textContent: row.pilot}),
+      node('td', {}, [row.pilot, ...(row.verified ? [node('span', {className: 'tick', textContent: ' ✓', title: VERIFIED})] : [])]),
       node('td', {className: 'time', textContent: formatMs(row.elapsed_ms)}),
       node('td', {className: row.gap_ms === 0 ? 'lead' : 'gap', textContent: row.gapText}),
       ...row.sectors.map((s, i) => node('td', {className: s.best ? 'best' : '', textContent: formatMs(s.ms),
@@ -70,17 +78,72 @@ async function loadBoard() {
     'La organización todavía no ha creado ningún torneo.';
   paint();
   renderStandings();
+  renderResult();
   await refreshMine();
 }
 
+// While it runs: how long is left. Once over: the podium, final when nobody can upload any more and
+// the organization has reviewed every entry, with a picture to share.
+function renderResult() {
+  const t = board?.tournament, panel = $('resultPanel');
+  panel.hidden = !t || t.state === 'proximo';
+  if (panel.hidden) return;
+  const rows = standingsRows(board), out = $('result');
+  if (t.state === 'activo') {
+    const left = daysUntil(t.ends_on);
+    $('resultTitle').textContent = 'En curso';
+    $('resultTag').textContent = left === 0 ? 'ÚLTIMO DÍA' : 'QUEDAN ' + left + ' DÍA' + (left === 1 ? '' : 'S');
+    return out.replaceChildren(node('p', {className: 'help result-note', textContent: 'Cierra el ' + dateText(t.ends_on) +
+      '; las bajadas de esos días se pueden subir hasta el ' + dateText(t.uploads_until) + '.' +
+      (rows.length ? ' Va primero ' + rows[0].pilot + ' con ' + formatMs(rows[0].elapsed_ms) + '.' : ' Todavía no hay tiempos.')}));
+  }
+  $('resultTitle').textContent = board.final ? 'Podio final' : 'Resultado provisional';
+  $('resultTag').textContent = 'TERMINÓ EL ' + dateText(t.ends_on).toUpperCase();
+  const why = board.final ? [] : [
+    ...(board.pending ? ['La organización tiene ' + board.pending + ' bajada(s) por revisar.'] : []),
+    ...(daysUntil(t.uploads_until) >= 0 ? ['Aún se pueden subir bajadas de esos días hasta el ' + dateText(t.uploads_until) + '.'] : [])];
+  if (!rows.length) return out.replaceChildren(node('p', {className: 'help result-note', textContent: 'Nadie tiene tiempo en este torneo.'}));
+  const winner = rows[0];
+  const podium = node('div', {className: 'podium'}, rows.slice(0, 3).map((row, i) => node('div', {className: 'podium-step place-' + (i + 1)}, [
+    node('b', {className: 'podium-rank', textContent: String(row.rank)}),
+    node('span', {className: 'podium-who'}, [node('strong', {textContent: row.pilot}),
+      node('small', {className: row.verified ? 'verified' : '', textContent: row.verified ? '✓ Verificado' : 'Sin verificar',
+        title: row.verified ? VERIFIED : 'La organización todavía no ha comprobado esta bajada.'})]),
+    node('span', {className: 'podium-time'}, [node('strong', {textContent: formatMs(row.elapsed_ms)}),
+      node('small', {textContent: i ? row.gapText : 'Mejor tiempo'})])])));
+  const share = node('button', {type: 'button', className: 'btn outline', textContent: 'Imagen para compartir'});
+  share.addEventListener('click', () => sharePodium(rows).catch(err => status('No se pudo crear la imagen: ' + err.message, 'error')));
+  out.replaceChildren(
+    node('p', {className: 'result-note', textContent: (board.final ? 'Gana ' : 'De momento gana ') + winner.pilot + ' con ' +
+      formatMs(winner.elapsed_ms) + (winner.verified ? ', verificado.' : '.') + (why.length ? ' ' + why.join(' ') : '')}),
+    podium, share);
+}
+
+// The podium as a PNG: shared straight away from a phone, downloaded on a computer.
+async function sharePodium(rows) {
+  const blob = await podiumImage({tournament: board.tournament, circuit: board.circuit, rows, final: board.final, site: location.host});
+  const file = new File([blob], 'podio-' + board.tournament.name.toLowerCase().replace(/[^a-z0-9]+/gi, '-') + '.png', {type: 'image/png'});
+  if (navigator.canShare?.({files: [file]})) {
+    try {return await navigator.share({files: [file], title: board.tournament.name});}
+    catch (err) {if (err.name === 'AbortError') return;}
+  }
+  const url = URL.createObjectURL(file);
+  const a = node('a', {href: url, download: file.name});
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  status('Imagen del podio descargada: ' + file.name + '.', 'success');
+}
+
 function entryBox(e) {
-  const inside = e.review_status === 'approved';
+  const [label, tone] = entryState(e);
   const box = node('div', {className: 'attempt'}, [
     node('div', {className: 'attempt-head'}, [
       node('div', {}, [node('div', {className: 'caps', textContent: dateText(e.started_at) + ' · coincide ' + Math.round((e.match || 0) * 100) + ' %'}),
         node('strong', {textContent: formatMs(e.elapsed_ms)})]),
-      node('span', {className: 'badge ' + (inside ? 'ok' : 'bad'), textContent: inside ? 'En la clasificación' : 'No entra'})])]);
-  if (!inside && e.review_note) box.append(node('div', {className: 'issue', textContent: e.review_note}));
+      node('span', {className: 'badge ' + tone, textContent: label})])]);
+  if (e.review_status === 'pending')
+    box.append(node('div', {className: 'issue', textContent: 'La organización la revisará antes de que entre en la clasificación.'}));
+  else if (e.review_status !== 'approved' && e.review_note) box.append(node('div', {className: 'issue', textContent: e.review_note}));
   if (e.notes) box.append(node('div', {className: 'note', textContent: e.notes}));
   box.append(node('div', {className: 'splits'}, e.sector_splits_ms.map((ms, i) =>
     node('div', {className: 'split'}, [node('span', {textContent: 'Segmento ' + (i + 1)}), node('b', {textContent: formatMs(ms)})]))));
@@ -92,8 +155,8 @@ async function refreshMine() {
   if (!t || !shell.me) return;
   const entries = await shell.api.myEntries(t.id);
   $('myEntries').replaceChildren(...(entries.length ? entries.map(e => node('div', {className: 'item'}, [
-    node('span', {textContent: dateText(e.started_at) + ' · ' + formatMs(e.elapsed_ms) + (e.review_note && e.review_status !== 'approved' ? ' · ' + e.review_note : '')}),
-    node('span', {className: 'badge ' + (e.review_status === 'approved' ? 'ok' : 'bad'), textContent: e.review_status === 'approved' ? 'Dentro' : 'Fuera'})])) :
+    node('span', {textContent: dateText(e.started_at) + ' · ' + formatMs(e.elapsed_ms) + (e.review_note && e.review_status === 'rejected' ? ' · ' + e.review_note : '')}),
+    node('span', {className: 'badge ' + entryState(e)[1], textContent: entryState(e)[2]})])) :
     [node('p', {className: 'placeholder', textContent: 'Todavía no has enviado bajadas a este torneo.'})]));
 }
 
@@ -128,7 +191,9 @@ $('submitEntry').addEventListener('click', async () => {
     const entry = await shell.api.submitEntry(t.id, file);
     $('entryResult').replaceChildren(entryBox(entry));
     account(entry.review_status === 'approved' ? 'Bajada aceptada: ' + formatMs(entry.elapsed_ms) + '. Ya estás en la clasificación.' :
-      'La bajada no entra en la clasificación: ' + (entry.review_note || 'no pasa el filtro') + '.', entry.review_status === 'approved' ? 'success' : 'error');
+      entry.review_status === 'pending' ? 'Bajada recibida: ' + formatMs(entry.elapsed_ms) + '. La organización la revisará antes de que entre en la clasificación.' :
+      'La bajada no entra en la clasificación: ' + (entry.review_note || 'no pasa el filtro') + '.',
+      {approved: 'success', pending: '', rejected: 'error'}[entry.review_status]);
     $('entryFile').value = ''; $('entryFileName').textContent = 'GPX / TCX del día de la bajada';
     await loadBoard();
   } catch (err) {account('No se ha aceptado la bajada: ' + err.message, 'error');}
