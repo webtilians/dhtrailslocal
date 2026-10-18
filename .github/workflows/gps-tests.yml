@@ -36,5 +36,5 @@ jobs:
           node --check sw.js
           node --check circuit-checks.mjs
           node --check competition-core.mjs
-      - name: Test geometry, storage and cloud mapping
+      - name: Test the browser modules
         run: node --test tests/*.test.mjs

@@ -84,5 +84,5 @@ def test_no_auth_and_no_sensitive_files():
         assert client.get("/api/health").json()["ok"] is True
         assert client.get("/api/circuits").status_code in (401,403)
         assert client.get("/editor.html").status_code==200
-        for path in ("/backend/.env","/backend/app/models.py","/.git/config","/supabase/schema.sql"):
+        for path in ("/backend/.env","/backend/app/models.py","/.git/config","/deploy/vps/setup.sh"):
             assert client.get(path).status_code==404
