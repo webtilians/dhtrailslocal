@@ -33,6 +33,7 @@ jobs:
           node --check sector-comparison.mjs
           node --check podium-image.mjs
           node --check gopro.mjs
+          node --check sw.js
           node --check competition-core.mjs
       - name: Test geometry, storage and cloud mapping
         run: node --test tests/*.test.mjs

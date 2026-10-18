@@ -5,7 +5,7 @@ import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trai
   from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
-import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
+import {$, node, say, startShell, takeShared, createMap, km, dateText} from './app-shell.mjs';
 import {cameraGps, readGoproTelemetry, telemetryGpx, videoMoments} from './gopro.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
@@ -808,5 +808,22 @@ async function start() {
   };
   shell.onUser(() => show().catch(err => status(err.message, 'error')));
   await show();
+  await receiveShared();
+}
+// A route shared from another app on the phone: ready to upload with one tap, here or to an open
+// time trial.
+async function receiveShared() {
+  const shared = await takeShared($('routeFile'));
+  if (!shared) return;
+  // Under the upload button: the page's own status line is soon taken by the comparison.
+  const box = shell.me ? $('found') : $('needLogin').querySelector('.panel-content');
+  if (shared.missing) return box.prepend(node('p', {className: 'status error', textContent:
+    'No ha llegado ningún archivo. Vuelve a compartirlo, o elígelo con «Importar GPX / TCX».'}));
+  const open = shell.me ? (await shell.api.tournaments().catch(() => [])).filter(t => t.state === 'activo') : [];
+  box.prepend(node('p', {className: 'status success', textContent: 'Has compartido ' + shared.file.name + '. ' + (shell.me ?
+    'Pulsa «Buscar circuitos» para subirla a tus entrenamientos' + (open.length ? ', o envíala al time trial:' : '.') :
+    'Entra con tu cuenta para subirla.')}),
+    ...open.slice(0, 1).map(t => node('a', {className: 'btn outline small', href: './index.html?compartido', textContent: 'Enviar al time trial «' + t.name + '»'})));
+  (shell.me ? $('analyze') : box).scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 start().catch(err => status('Error: ' + err.message, 'error'));

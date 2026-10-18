@@ -12,6 +12,10 @@ export function say(el, message, type = '') {
   el.className = (el.dataset.base || el.className.split(' ')[0]) + (type ? ' ' + type : '');
 }
 
+// iPhone and iPad (an iPad says it is a Mac, but a Mac has no touch screen).
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const INSTALLED = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+
 // Time trial and training are for everyone; circuits and tournaments only for the organization.
 const TABS = [
   {href: './index.html', label: 'Time trial', page: 'timetrial'},
@@ -22,6 +26,18 @@ const TABS = [
 
 export async function startShell(page) {
   const shell = {api: null, me: null, health: null, listeners: []};
+  // Installed on a phone, the app can receive GPX files shared from other apps (sw.js).
+  if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('./sw.js').catch(() => {});
+  // Chrome and Edge can install it: then a button for it, instead of their own banner.
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', event => {event.preventDefault(); installPrompt = event; draw();});
+  window.addEventListener('appinstalled', () => {installPrompt = null; draw();});
+  // On an iPhone it is installed from the browser's Share menu: the button explains how.
+  const iosHelp = IOS && !INSTALLED ? iosInstallDialog() : null;
+  if (iosHelp) document.body.append(iosHelp);
+  // iOS only lets a file be chosen when it knows its type, and a .gpx saved from another app may not be
+  // one of them: there, any file can be chosen (the server checks what it is).
+  if (IOS) document.querySelectorAll('input[type=file]').forEach(input => {if (/\.gpx/.test(input.accept)) input.removeAttribute('accept');});
   const nav = $('appNav');
   const tabs = node('div', {className: 'navlinks'});
   const account = node('div', {className: 'account'});
@@ -37,6 +53,16 @@ export async function startShell(page) {
     tabs.replaceChildren(...TABS.filter(t => !t.admin || shell.me?.organizer).map(t =>
       node('a', {href: t.href, textContent: t.label, className: t.page === page ? 'selected' : ''})));
     account.replaceChildren();
+    if (installPrompt) {
+      const install = node('button', {type: 'button', className: 'btn outline', textContent: 'Instalar app',
+        title: 'Como una app en el móvil o el ordenador; en Android aparece al compartir un GPX desde otra app'});
+      install.addEventListener('click', async () => {const prompt = installPrompt; installPrompt = null; draw(); await prompt.prompt();});
+      account.append(install);
+    } else if (iosHelp) {
+      const install = node('button', {type: 'button', className: 'btn outline', textContent: 'Instalar app'});
+      install.addEventListener('click', () => iosHelp.showModal());
+      account.append(install);
+    }
     if (!shell.api) return;
     if (shell.me) {
       account.append(node('span', {className: 'who', textContent: shell.me.local ? 'Este PC' : shell.me.display_name || shell.me.email}));
@@ -64,6 +90,39 @@ export async function startShell(page) {
   dialog.querySelector('.invite').hidden = !shell.health.invite_required;
   draw();
   return shell;
+}
+
+// A GPX or TCX shared to the installed app from another one: the service worker keeps it, and a page
+// opened with ?compartido puts it in its file input. {file}, {missing: true} when it did not arrive,
+// or null when nothing was shared.
+export async function takeShared(input) {
+  if (!new URLSearchParams(location.search).has('compartido')) return null;
+  history.replaceState(null, '', location.pathname);  // a reload does not take it again
+  try {
+    const kept = await (await caches.open('dh-compartido')).match(new URL('./compartido', location.href).href);
+    if (!kept) return {missing: true};
+    const file = new File([await kept.blob()], decodeURIComponent(kept.headers.get('X-File-Name') || 'ruta.gpx'),
+      {type: kept.headers.get('Content-Type') || ''});
+    const chosen = new DataTransfer();
+    chosen.items.add(file);
+    input.files = chosen.files;
+    input.dispatchEvent(new Event('change'));
+    return {file};
+  } catch {return {missing: true};}
+}
+
+function iosInstallDialog() {
+  const done = node('button', {type: 'button', className: 'btn primary full', textContent: 'Entendido'});
+  const dialog = node('dialog', {className: 'auth'}, [node('div', {className: 'auth-form'}, [
+    node('h2', {className: 'dialog-title', textContent: 'Instalar DH Trails en el iPhone'}),
+    node('ol', {className: 'steps'}, [
+      node('li', {textContent: 'Pulsa Compartir en el navegador: el cuadrado con una flecha hacia arriba (en Safari, abajo).'}),
+      node('li', {textContent: 'Baja y elige «Añadir a pantalla de inicio».'}),
+      node('li', {textContent: 'Pulsa «Añadir». Aparece el icono de DH Trails y la app se abre a pantalla completa.'})]),
+    node('p', {className: 'help', textContent: 'Para subir una ruta desde el iPhone, guarda antes el GPX en Archivos y elígelo con «Importar GPX / TCX».'}),
+    done])]);
+  done.addEventListener('click', () => dialog.close());
+  return dialog;
 }
 
 function authDialog(shell) {

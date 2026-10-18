@@ -15,6 +15,10 @@ Time trials de descenso MTB en circuitos locales: la organización crea los circ
 
 Al crear la cuenta se pide el nombre de piloto, que es el que sale en la clasificación. La inscripción es abierta (opcionalmente con código: `INVITE_CODE`). Son organizadores las cuentas de `ORGANIZER_EMAILS`, y en tu PC con `LOCAL_SINGLE_USER=true` el perfil local.
 
+## En el móvil: instalar la app y compartirle un GPX
+
+La web se instala como una app (`manifest.json`, iconos `icon-*.png`): en Android, con Chrome o Edge, el botón **Instalar app** de la barra o «Instalar aplicación» en el menú; en iPhone, Safari → Compartir → «Añadir a pantalla de inicio». Instalada en Android, aparece entre las apps a las que compartir un archivo: desde Strava, la app del reloj o el gestor de archivos, compartes el GPX o TCX con **DH Trails** y se abre Entrenamiento con el archivo listo para pulsar «Buscar circuitos», o para enviarlo al time trial abierto. Lo recibe `sw.js`, que no hace nada más: no guarda la web para usarla sin conexión, porque la app necesita su servidor. iPhone no deja compartir archivos con apps web: allí se guarda el GPX en Archivos y se elige con «Importar GPX / TCX» (en iOS el selector deja elegir cualquier archivo, porque a veces no reconoce los .gpx); el botón **Instalar app** explica cómo añadirla a la pantalla de inicio.
+
 ## Time trial: cuándo entra una bajada
 
 El servidor busca la bajada en el GPX y la cronometra con las mismas puertas para todos (`backend/app/timing.py`). Entra en la clasificación sola si:
