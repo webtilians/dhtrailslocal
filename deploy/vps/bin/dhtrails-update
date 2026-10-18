@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 # Bring DH Trails up to date from GitHub (branch in /etc/dhtrails/branch) and restart it.
-# Backs the data up first.
+# Backs the data up first. The code is fetched before setup.sh runs, so a change to the
+# installation itself (a new user, folder or command) applies in this same update.
 set -euo pipefail
-exec bash /opt/dhtrails/deploy/vps/setup.sh "$@"
+app=/opt/dhtrails
+branch=${DH_BRANCH:-$(cat /etc/dhtrails/branch 2>/dev/null || echo master)}
+git -C "$app" fetch -q origin "+refs/heads/$branch:refs/remotes/origin/$branch"
+git -C "$app" checkout -q -B "$branch" "origin/$branch"
+git -C "$app" reset -q --hard "origin/$branch"
+exec bash "$app/deploy/vps/setup.sh" "$@"
