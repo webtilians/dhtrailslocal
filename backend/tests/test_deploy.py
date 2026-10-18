@@ -29,3 +29,8 @@ def test_every_setting_written_by_setup_is_read_by_the_app():
     read = set(re.findall(r'os\.getenv\("([A-Z_]+)"', config))
     assert written - {"PYTHONDONTWRITEBYTECODE"} <= read
     assert {"SECRET_KEY", "ORGANIZER_EMAILS", "INVITE_CODE", "DATABASE_URL"} <= written
+
+def test_update_runs_the_setup_it_has_just_fetched():
+    # Otherwise a change to setup.sh (like a new system user) only applies on the update after.
+    update = (VPS / "bin" / "dhtrails-update").read_text(encoding="utf-8")
+    assert update.index("git -C") < update.index("exec bash")
