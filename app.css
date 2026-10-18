@@ -219,3 +219,4 @@ input[type=date],input[type=number]{color-scheme:dark}
 .run-group{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#8faac4;margin:8px 0 2px}
 .help.error{color:#ffa3a3}
 .help.success{color:#84e6bc}
+.help.warning{color:#ffc28c}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readGoproTelemetry, telemetryGpx, videoMoments} from '../gopro.mjs';
+import {cameraGps, readGoproTelemetry, telemetryGpx, videoMoments} from '../gopro.mjs';
 
 // A tiny MP4 like a GoPro's: a telemetry track (gpmd) with one GPMF sample per second, written by hand.
 const u32 = n => [n >>> 24, n >>> 16 & 255, n >>> 8 & 255, n & 255];
@@ -111,4 +111,32 @@ test('moments of a run: a stop despite GPS noise, a hard braking, a shock and a 
   assert.ok(Math.abs(air.seconds - 0.3) < 0.02 && Math.abs(shock.g - 5.2) < 1e-9);
   // Outside the run's seconds nothing is counted.
   assert.deepEqual(videoMoments({points, accel: {t, g}}, 15, 20), []);
+});
+
+test('the GPS of the camera is trusted only with a good fix and close to the run', () => {
+  // 30 s at 10 points a second going north at 5 m/s; the run (a watch) was at the same places.
+  const north = (t, late = 0) => ({lat: 36.75 + (t - late) * 5 / 111195, lon: -4.39});
+  const points = (dop, late = 0) => Array.from({length: 300}, (_, i) => ({t: i / 10, utc: 1e12 + i * 100, fix: 3, dop, ...north(i / 10, late)}));
+  const place = ms => north((ms - 1e12) / 1000);
+  const good = cameraGps({points: points(2.1)}, 0, 30, place);
+  assert.ok(good.ok && good.dop === 2.1 && good.offM < 0.01, JSON.stringify(good));
+  // A poor fix, though it agrees with the watch.
+  assert.equal(cameraGps({points: points(8.5)}, 0, 30, place).ok, false);
+  // A good fix on paper, but 12 s (60 m) behind the watch, as under trees.
+  const behind = cameraGps({points: points(2.7, 12)}, 0, 30, place);
+  assert.ok(!behind.ok && Math.abs(behind.offM - 60) < 0.5, JSON.stringify(behind));
+  // With no other run to compare with (the run came from the camera), the fix decides.
+  assert.ok(cameraGps({points: points(2.7, 12)}, 0, 30).ok);
+});
+
+test('without a trustworthy GPS, stops come from the shaking of the camera and braking is left out', () => {
+  // The GPS reads a braking and nothing else; the camera shakes while riding (±0.4 g) and stands still from 8 to 11 s.
+  const points = Array.from({length: 200}, (_, i) => ({t: i / 10, speed: i < 40 ? 8 : 2, fix: 3}));
+  const t = Array.from({length: 4000}, (_, i) => i / 200);
+  const g = t.map((x, i) => x >= 8 && x < 11 ? 1 + 0.01 * (i % 3) : 1 + 0.4 * Math.sin(i * 1.7) + (Math.abs(x - 14) < 0.01 ? 4.2 : 0));
+  const moments = videoMoments({points, accel: {t, g}}, 0, 20, {gps: false});
+  assert.deepEqual(moments.map(m => m.kind), ['stop', 'shock']);
+  assert.ok(Math.abs(moments[0].t - 8.25) <= 0.25 && Math.abs(moments[0].seconds - 2.5) <= 0.5, JSON.stringify(moments[0]));
+  // The same with the GPS trusted: its braking, and no stop (it never reads under 2 km/h).
+  assert.deepEqual(videoMoments({points, accel: {t, g}}, 0, 20).map(m => m.kind), ['brake', 'shock']);
 });
