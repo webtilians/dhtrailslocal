@@ -56,7 +56,10 @@
         <label class="reference-pick"><span>Referencia</span><select id="referenceSelect" aria-label="Bajada de referencia"></select></label>
         <p class="help">Elige hasta 4 bajadas, tuyas o de tus amigos. Las demás se comparan con la referencia: la más rápida, o la que elijas (con un vídeo, la del vídeo).</p>
       </div>
-      <div id="map" aria-label="Mapa con las bajadas superpuestas"></div>
+      <div id="mapDuo" class="map-duo">
+        <div id="map" aria-label="Mapa con las bajadas superpuestas"></div>
+        <div id="videoDock" class="video-dock" hidden></div>
+      </div>
       <div class="map-footer"><span id="mapSelection" role="status" aria-live="polite">Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.</span><button id="clearMapSelection" class="text-btn" type="button" hidden>Quitar selección</button></div>
       <div class="replay">
         <button id="replayPlay" class="btn outline small" type="button">▶ Reproducir</button>
