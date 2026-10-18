@@ -46,8 +46,9 @@ jobs:
           test -s api-client.mjs
           test -s sector-comparison.mjs
           test -s competition-core.mjs
+          test -s podium-image.mjs
           mkdir -p _site
-          cp index.html entrenamiento.html circuitos.html torneos.html editor.html competicion.html app.css app-shell.mjs timetrial.mjs entrenamiento.mjs circuitos.mjs torneos.mjs telemetry.mjs charts.mjs gps-engine.mjs api-client.mjs sector-comparison.mjs competition-core.mjs _site/
+          cp index.html entrenamiento.html circuitos.html torneos.html editor.html competicion.html app.css app-shell.mjs timetrial.mjs entrenamiento.mjs circuitos.mjs torneos.mjs telemetry.mjs charts.mjs gps-engine.mjs api-client.mjs sector-comparison.mjs competition-core.mjs podium-image.mjs _site/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
