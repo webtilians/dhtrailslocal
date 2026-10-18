@@ -167,6 +167,7 @@ input[type=date],input[type=number]{color-scheme:dark}
 .map-duo.two.stacked #videoDockB{grid-column:3;grid-row:1}
 .map-duo.two.stacked #map{grid-column:1 / -1;grid-row:2}
 .map-duo.two .video-dock{justify-content:flex-start}
+.video-dock.no-footage video{opacity:.35}
 .map-duo.stacked .video-dock{order:-1}
 .video-dock{display:flex;flex-direction:column;justify-content:center;min-width:0;background:#000;border-left:1px solid var(--line)}
 .map-duo.stacked .video-dock{border-left:0;border-bottom:1px solid var(--line)}
@@ -177,7 +178,7 @@ input[type=date],input[type=number]{color-scheme:dark}
 .video-hud .chip{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px}
 .video-tools{border-top:0}
 .tools-hint{font-size:12px;color:#ffe066;flex:1;min-width:140px}
-#loopStretch[aria-pressed=true]{background:#2a5a82;color:#fff;border-color:#4b86b8}
+#loopStretch[aria-pressed=true],#manualSync[aria-pressed=true]{background:#2a5a82;color:#fff;border-color:#4b86b8}
 .second-video{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .video-dock .video-hud{margin:0;padding:9px 10px;min-height:36px;background:#0b2639;font-size:12px;line-height:1.4}
 .video-box video{display:block;width:100%;max-height:70vh;background:#000;border-radius:6px}
