@@ -57,6 +57,15 @@ export function positionAt(profile, ms) {
   const f = b[1] > a[1] ? Math.min(1, Math.max(0, (ms - a[1]) / (b[1] - a[1]))) : 1;
   return {s: a[0] + f * (b[0] - a[0]), lat: a[2] + f * (b[2] - a[2]), lon: a[3] + f * (b[3] - a[3])};
 }
+// Two videos side by side: the moment of run b to show while run a is `ms` after its start.
+// 'place': when b was at the same metre of the circuit, so both show the same spot of the trail;
+// 'time': the same time after the start, as in a race. Before the start and after the finish both
+// simply run on. Each run is {profile, elapsed} (ms).
+export function pairedTime(ms, a, b, mode = 'place') {
+  if (ms <= 0) return ms;
+  if (ms >= a.elapsed) return b.elapsed + ms - a.elapsed;
+  return mode === 'time' ? ms : Math.min(b.elapsed, timeAt(b.profile, positionAt(a.profile, ms).s));
+}
 // Time a run loses (+) or gains (−) against a reference stretch by stretch along the circuit, every
 // `step` metres: where one day went slower than another, not just how far behind it ended up.
 export function timeLost(profile, reference, step = 25) {

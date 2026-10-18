@@ -161,6 +161,12 @@ input[type=date],input[type=number]{color-scheme:dark}
 .map-duo.with-video{display:grid;grid-template-columns:minmax(0,1fr) var(--dock-w,40%);background:#050d16}
 .map-duo.with-video #map{height:var(--map-h,530px)}
 .map-duo.with-video.stacked{grid-template-columns:minmax(0,1fr)}
+.map-duo.with-video.two{grid-template-columns:minmax(0,1fr) var(--dock-w,30%) var(--dock-w2,30%)}
+.map-duo.with-video.two.stacked{grid-template-columns:1fr var(--dock-w,50%) var(--dock-w2,50%) 1fr}
+.map-duo.two.stacked #videoDock{grid-column:2;grid-row:1}
+.map-duo.two.stacked #videoDockB{grid-column:3;grid-row:1}
+.map-duo.two.stacked #map{grid-column:1 / -1;grid-row:2}
+.map-duo.two .video-dock{justify-content:flex-start}
 .map-duo.stacked .video-dock{order:-1}
 .video-dock{display:flex;flex-direction:column;justify-content:center;min-width:0;background:#000;border-left:1px solid var(--line)}
 .map-duo.stacked .video-dock{border-left:0;border-bottom:1px solid var(--line)}
@@ -168,6 +174,11 @@ input[type=date],input[type=number]{color-scheme:dark}
 .map-duo.stacked .video-dock video{max-height:none}
 .map-duo.narrow .leaflet-control-layers-expanded{padding:3px 6px}
 .map-duo.narrow .leaflet-control-layers-base label{font-size:10px;gap:4px;margin:1px 0}
+.video-hud .chip{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:1px}
+.video-tools{border-top:0}
+.tools-hint{font-size:12px;color:#ffe066;flex:1;min-width:140px}
+#loopStretch[aria-pressed=true]{background:#2a5a82;color:#fff;border-color:#4b86b8}
+.second-video{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
 .video-dock .video-hud{margin:0;padding:9px 10px;min-height:36px;background:#0b2639;font-size:12px;line-height:1.4}
 .video-box video{display:block;width:100%;max-height:70vh;background:#000;border-radius:6px}
 .video-hud{margin:8px 0 0;font:700 13px Inter,system-ui,sans-serif;color:#cfe6f8;font-variant-numeric:tabular-nums}
