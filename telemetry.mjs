@@ -48,6 +48,37 @@ export function speedSeries(samples, window = 2) {
     return {s: p.s, kmh: b.t > a.t ? (b.s - a.s) / (b.t - a.t) * 3600 : null};
   });
 }
+// Where a run was this many ms after its start: distance along the circuit and its own GPS point
+// (before the start, at the start; after the finish, at the finish).
+export function positionAt(profile, ms) {
+  let i = profile.findIndex(p => p[1] >= ms);
+  if (i <= 0) i = i < 0 ? profile.length - 1 : 1;
+  const a = profile[i - 1], b = profile[i];
+  const f = b[1] > a[1] ? Math.min(1, Math.max(0, (ms - a[1]) / (b[1] - a[1]))) : 1;
+  return {s: a[0] + f * (b[0] - a[0]), lat: a[2] + f * (b[2] - a[2]), lon: a[3] + f * (b[3] - a[3])};
+}
+// Time a run loses (+) or gains (−) against a reference stretch by stretch along the circuit, every
+// `step` metres: where one day went slower than another, not just how far behind it ended up.
+export function timeLost(profile, reference, step = 25) {
+  const length = Math.min(profile.at(-1)[0], reference.at(-1)[0]), out = [];
+  for (let from = 0; from < length; from += step) {
+    const to = Math.min(length, from + step);
+    out.push({from, to, ms: timeAt(profile, to) - timeAt(profile, from) - (timeAt(reference, to) - timeAt(reference, from))});
+  }
+  return out;
+}
+// Neighbouring stretches that all lose (or all gain) more than `noise` ms, joined into zones; the zones
+// worth at least `min` ms, biggest first.
+export function lossZones(stretches, {noise = 50, min = 300} = {}) {
+  const zones = [];
+  for (const x of stretches) {
+    const sign = x.ms > noise ? 1 : x.ms < -noise ? -1 : 0, last = zones.at(-1);
+    if (!sign) {zones.push(null); continue;}
+    if (last && last.sign === sign && last.to === x.from) {last.to = x.to; last.ms += x.ms;}
+    else zones.push({from: x.from, to: x.to, ms: x.ms, sign});
+  }
+  return zones.filter(z => z && Math.abs(z.ms) >= min).map(({sign, ...z}) => z).sort((a, b) => Math.abs(b.ms) - Math.abs(a.ms));
+}
 // Time lost (+) or gained (−) against a reference run at the same distances, in ms.
 export function gapSeries(samples, reference) {
   const ref = reference.map(r => [r.s, r.t]);

@@ -17,8 +17,8 @@ function niceTicks(min, max, count = 5) {
 
 // series: [{label, color, points: [{x, y, est}]}]; x is km along the circuit; a point with `est` is only an
 // estimate (drawn dashed). bands: [{from, to}] shaded behind the lines.
-// lanes: [{color, spans: [{from, to}], unknown: [{from, to}]}], one strip each under the plot (like where each
-// run brakes, and where its GPS was not reliable).
+// lanes: [{color, chip, spans: [{from, to, color, opacity}], unknown: [{from, to}]}], one strip each under the plot
+// (like where each run brakes, and where its GPS was not reliable); chip: a colour square before the strip.
 export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220, onSelect}) {
   host.replaceChildren();
   const width = Math.max(280, host.clientWidth || 600);
@@ -47,10 +47,12 @@ export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => 
   lanes.forEach((lane, i) => {
     const y = height - m.bottom + 4 + i * 9;
     root.append(svg('rect', {x: m.left, y, width: width - m.left - m.right, height: 6, rx: 2, class: 'chart-lane'}));
+    if (lane.chip) root.append(svg('rect', {x: m.left - 10, y, width: 6, height: 6, rx: 1, fill: lane.chip}));
     for (const span of lane.unknown || [])
       root.append(svg('rect', {x: sx(span.from), y, width: Math.max(2, sx(span.to) - sx(span.from)), height: 6, class: 'chart-lane-unknown'}));
     for (const span of lane.spans)
-      root.append(svg('rect', {x: sx(span.from), y, width: Math.max(3, sx(span.to) - sx(span.from)), height: 6, rx: 2, fill: lane.color}));
+      root.append(svg('rect', {x: sx(span.from), y, width: Math.max(3, sx(span.to) - sx(span.from)), height: 6, rx: 2,
+        fill: span.color || lane.color, 'fill-opacity': span.opacity ?? 1}));
   });
   for (const s of series) {
     // Solid where the values are measured, dashed where a point at either end is an estimate.

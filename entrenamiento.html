@@ -53,10 +53,20 @@
       <div class="panel-content compare-controls">
         <select id="circuitSelect" aria-label="Circuito"><option value="">Sin bajadas todavía</option></select>
         <div id="runList" class="run-list"></div>
-        <p class="help">Elige hasta 4 bajadas, tuyas o de tus amigos. La referencia es la más rápida de las elegidas.</p>
+        <label class="reference-pick"><span>Referencia</span><select id="referenceSelect" aria-label="Bajada de referencia"></select></label>
+        <p class="help">Elige hasta 4 bajadas, tuyas o de tus amigos. Las demás se comparan con la referencia: la más rápida, o la que elijas (con un vídeo, la del vídeo).</p>
       </div>
       <div id="map" aria-label="Mapa con las bajadas superpuestas"></div>
       <div class="map-footer"><span id="mapSelection" role="status" aria-live="polite">Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.</span><button id="clearMapSelection" class="text-btn" type="button" hidden>Quitar selección</button></div>
+      <div class="replay">
+        <button id="replayPlay" class="btn outline small" type="button">▶ Reproducir</button>
+        <span class="replay-speeds" role="group" aria-label="Velocidad de la repetición">
+          <button type="button" data-speed="1" aria-pressed="true">×1</button><button type="button" data-speed="2" aria-pressed="false">×2</button><button type="button" data-speed="4" aria-pressed="false">×4</button>
+        </span>
+        <input id="replayTime" type="range" min="0" max="1000" step="100" value="0" aria-label="Momento de la repetición">
+        <span id="replayClock" class="replay-clock">00:00.0</span>
+      </div>
+      <div id="replayBoard" class="replay-board"><p class="placeholder">Pulsa ▶ para ver las bajadas a la vez en el mapa, como si hubieran salido juntas.</p></div>
     </section>
     <section class="panel">
       <div class="panel-title"><h2><span>Vídeo</span></h2><span class="caps" id="videoTag">GOPRO</span></div>
@@ -87,7 +97,8 @@
     </section>
     <section class="panel">
       <div class="panel-title"><h2><span>Diferencia de tiempo</span></h2><span class="caps">FRENTE A LA MÁS RÁPIDA · ARRIBA PIERDES</span></div>
-      <div class="panel-content"><div id="gapChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa.</p></div>
+      <div class="panel-content"><div id="gapChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa. Debajo, una barra por bajada: en rojo los tramos donde pierde tiempo frente a la referencia, en turquesa donde gana.</p>
+        <div id="lossList" class="loss-list"></div></div>
     </section>
     <section class="panel">
       <div class="panel-title"><h2><span>Por segmentos</span></h2></div>

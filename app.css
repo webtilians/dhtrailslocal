@@ -164,6 +164,30 @@ input[type=date],input[type=number]{color-scheme:dark}
 .moment-brake{border-left-color:#ffe066}
 .moment-shock{border-left-color:#c9a7ff}
 .moment-air{border-left-color:#5fd4ff}
+.reference-pick{display:flex;align-items:center;gap:10px;font-size:12px;color:#b3cadc}
+.reference-pick select{flex:1;min-width:0}
+.replay{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 17px;border-bottom:1px solid var(--line)}
+.replay input[type=range]{flex:1;min-width:120px;width:auto;padding:0;accent-color:#ffe066}
+.replay-speeds{display:flex;border:1px solid #365778;border-radius:5px;overflow:hidden}
+.replay-speeds button{font:700 11px Inter,system-ui,sans-serif;color:#cfe6f8;background:#112b40;border:0;padding:8px 10px;min-height:34px;cursor:pointer}
+.replay-speeds button[aria-pressed=true]{background:#2a5a82;color:#fff}
+.replay-clock{font:800 18px 'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums;color:#ffe066;min-width:62px;text-align:right}
+.replay-board{display:flex;flex-direction:column;gap:4px;padding:10px 17px 14px;border-bottom:1px solid var(--line)}
+.replay-board .placeholder{margin:0}
+.replay-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.replay-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.replay-row small{color:#8faac4;min-width:52px;text-align:right}
+.replay-row b{min-width:62px;text-align:right;font-variant-numeric:tabular-nums}
+.replay-row b.ahead{color:#3fd0c9}
+.replay-row b.behind{color:#ff8f8f}
+.loss-list{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.loss-title{margin:4px 0 0;font-size:12px;font-weight:700;color:#cfe6f8}
+.loss-head{display:flex;align-items:center;gap:8px;font-size:12px;color:#cfe6f8;margin-bottom:6px}
+.loss-items{display:flex;flex-wrap:wrap;gap:6px}
+.loss{font:inherit;font-size:12px;color:#e6f1fb;background:#112b40;border:1px solid #264c6c;border-left:4px solid #ff5c5c;border-radius:5px;padding:7px 10px;min-height:36px;cursor:pointer}
+.loss.gain{border-left-color:#3fd0c9}
+.loss:hover{background:#153b5a}
+.loss:focus-visible{outline:2px solid #ffe066;outline-offset:1px}
 .chart-band{fill:#cfe6f8;opacity:.07}
 .chart-lane{fill:#1a3247}
 .chart-lane-unknown{fill:#55687c}

@@ -1,6 +1,7 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
-import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints, timeAt}
+import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints, timeAt,
+  positionAt, timeLost, lossZones}
   from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
@@ -61,7 +62,7 @@ function showSelection(circuit, {reveal = false} = {}) {
       L.polyline(points, {color: '#071423', weight: 14, opacity: 1}),
       L.polyline(points, {color: HIGHLIGHT, weight: 8, opacity: 1}),
     ]).addTo(view.map);
-    $('mapSelection').textContent = 'Frenada ' + (mapSelection.index + 1) + ' resaltada · ' + Math.round(mapSelection.from) + '–' +
+    $('mapSelection').textContent = (mapSelection.title || 'Frenada ' + (mapSelection.index + 1)) + ' resaltada · ' + Math.round(mapSelection.from) + '–' +
       Math.round(mapSelection.to) + ' m desde la salida · ' + mapSelection.text;
     if (reveal) view.map.fitBounds(L.latLngBounds(points), {padding: [80, 80], maxZoom: 18});
   } else {
@@ -173,17 +174,27 @@ async function compare() {
   // Each run's own GPS line, in its colour.
   for (const d of data) view.add(L.polyline(d.profile.map(p => [p[2], p[3]]), {color: d.color, weight: 3, opacity: .95}))
     .bindTooltip(d.label, {sticky: true});
-  const reference = data.reduce((a, b) => b.run.elapsed_ms < a.run.elapsed_ms ? b : a);
+  const fastest = data.reduce((a, b) => b.run.elapsed_ms < a.run.elapsed_ms ? b : a);
+  const reference = data.find(d => d.run.id === referenceId) || fastest;
+  $('referenceSelect').replaceChildren(node('option', {value: '', textContent: 'La más rápida (' + fastest.label + ')'}),
+    ...data.map(d => node('option', {value: d.run.id, textContent: d.label + (clip?.runId === d.run.id ? ' · vídeo' : '')})));
+  $('referenceSelect').value = reference === fastest && referenceId !== fastest.run.id ? '' : reference.run.id;
   $('legend').replaceChildren(...data.map(d => node('span', {className: 'legend-item'}, [
     Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color}),
     node('span', {textContent: d.label + (d === reference ? ' · referencia' : '')})])));
   current = {circuit, data, reference};
   charts.push(null);   // the speed chart, drawn with the braking zones
+  // Where each run loses or gains time against the reference, every 25 m, as a strip under the chart.
+  const others = data.filter(d => d !== reference);
+  const lost = new Map(others.map(d => [d, timeLost(d.profile, reference.profile, 25)]));
   charts.push(lineChart($('gapChart'), {series: data.map(d => ({label: d.label, color: d.color,
     points: gapSeries(d.samples, reference.samples).map(p => ({x: p.s / 1000, y: p.ms / 1000}))})),
+    lanes: others.map(d => ({chip: d.color, spans: lost.get(d).filter(x => Math.abs(x.ms) > 50).map(x => ({from: x.from / 1000, to: x.to / 1000,
+      color: x.ms > 0 ? LOSS : GAIN, opacity: Math.min(1, 0.3 + Math.abs(x.ms) / 800)}))})),
     yFormat: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' s', zero: true,
     onSelect: (x, options) => selectPoint(circuit, x, options)}));
   renderSegments(circuit, data, reference);
+  renderLosses(circuit, reference, others, lost);
   // Braking shows the reference and the next run, unless you picked the runs yourself: that choice
   // stays while those runs are compared (an empty one too).
   const present = (brakingIds || []).filter(id => data.some(d => d.run.id === id));
@@ -192,6 +203,9 @@ async function compare() {
   brakingIds = brakingByHand ? present : byDefault.slice(0, BRAKING_MAX);
   renderBraking();
   if (clip) renderMoments();
+  $('replayTime').max = replayEnd();
+  replay.ms = Math.min(replay.ms, replayEnd());
+  drawReplay();
   const gates = gatesOf(circuit), referenceTimes = segmentTimes(reference.profile, gates);
   const worst = data.filter(d => d !== reference).map(d => {
     const lost = segmentTimes(d.profile, gates).map((t, i) => t - referenceTimes[i]);
@@ -313,6 +327,32 @@ function brakingVerdict(p, runs) {
   }
   return capital(whose(runs[f].run)) + ' es ' + seconds(Math.abs(lost)) + ' más rápida aquí' + (why.length ? ': ' + why.join(' y ') : '') +
     despite + '.' + note;
+}
+// For each run, the stretches where it loses most time against the reference (and where it gains
+// most): what to work on, day by day. Each one shows on the map and moves the video or the replay there.
+function renderLosses(circuit, reference, others, lost) {
+  if (!others.length) return $('lossList').replaceChildren();
+  $('lossList').replaceChildren(node('p', {className: 'loss-title', textContent: 'Dónde pierde o gana cada bajada frente a ' + reference.label}),
+    ...others.map(d => {
+      const zones = lossZones(lost.get(d));
+      const worst = zones.filter(z => z.ms > 0).slice(0, 3), best = zones.filter(z => z.ms < 0).slice(0, 3);
+      const chip = node('i', {className: 'chip'});
+      chip.style.background = d.color;
+      const items = [...worst, ...best].sort((a, b) => a.from - b.from).map(z => {
+        const text = (z.ms > 0 ? 'Pierde ' : 'Gana ') + decimal(Math.abs(z.ms) / 1000) + ' s de ' + Math.round(z.from) + ' a ' + Math.round(z.to) + ' m';
+        const b = node('button', {type: 'button', className: 'loss ' + (z.ms > 0 ? 'lose' : 'gain'), textContent: text});
+        b.addEventListener('click', () => {
+          mapSelection = {kind: 'zone', circuitId: circuit.id, key: 'loss', index: -1, title: 'Tramo', from: z.from, to: z.to,
+            text: shortLabel(d.run) + ' ' + text.toLowerCase()};
+          showSelection(circuit, {reveal: true});
+          seekVideo(z.from);
+        });
+        return b;
+      });
+      return node('div', {className: 'loss-run'}, [node('div', {className: 'loss-head'}, [chip,
+        node('span', {textContent: d.label + ' · ' + formatDelta(d.run.elapsed_ms - reference.run.elapsed_ms) + ' en total'})]),
+        node('div', {className: 'loss-items'}, items.length ? items : [node('small', {textContent: 'Sin tramos con más de 0,3 s de diferencia.'})])]);
+    }));
 }
 function gatesOf(circuit) {
   const d = distanceSeries(circuit.points);
@@ -449,25 +489,18 @@ $('analyze').addEventListener('click', async () => {
 $('circuitSelect').addEventListener('change', pickDefault);
 $('loginButton').addEventListener('click', () => shell.askLogin('Entra o crea tu cuenta para guardar tus rutas.'));
 // ---- GoPro video, played from the rider's own device and kept in step with the map and charts ----
-let clip = null, videoMarker = null, ghostMarker = null;
+let clip = null, referenceId = null;
+const LOSS = '#ff5c5c', GAIN = '#3fd0c9';
 // The video's dots go above everything else on the map, numbered braking pins included.
 view.map.createPane('videoNow').style.zIndex = 640;
 const clock = s => Math.floor(s / 60) + ':' + (s % 60).toFixed(1).padStart(4, '0').replace('.', ',');
 const madrid = ms => new Date(ms).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 const videoSay = (message, type = '') => say($('videoInfo'), message, type);
 const linked = () => current?.data.find(d => d.run.id === clip?.runId) || null;
-// The run to race against while watching: the fastest of the others compared.
-const ghostOf = d => current.data.filter(x => x !== d).sort((a, b) => a.run.elapsed_ms - b.run.elapsed_ms)[0] || null;
 const shortLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at);
 const decimal = (x, n = 1) => x.toFixed(n).replace('.', ',');
 
-// Where a run was this many ms after its start: position along the circuit and its own GPS point.
-function runAt(profile, ms) {
-  let i = profile.findIndex(p => p[1] >= ms);
-  if (i <= 0) i = i < 0 ? profile.length - 1 : 1;
-  const [a, b] = [profile[i - 1], profile[i]], f = b[1] > a[1] ? Math.min(1, Math.max(0, (ms - a[1]) / (b[1] - a[1]))) : 1;
-  return {s: a[0] + f * (b[0] - a[0]), lat: a[2] + f * (b[2] - a[2]), lon: a[3] + f * (b[3] - a[3])};
-}
+const runAt = positionAt;
 // The run whose time the video covers most: yours first, then your friends'.
 function runInVideo(t) {
   const from = t.lag * 1000, to = (t.lag + t.seconds) * 1000;
@@ -490,6 +523,8 @@ async function linkVideo() {
       'Sube la ruta de tu reloj de ese día, o usa el GPS de la propia GoPro: lo subimos como una ruta de entrenamiento y, si sigue un circuito, aparece la bajada.');
   }
   clip.runId = run.id;
+  // The video's run becomes the reference: the others say where they lost or gained against it.
+  referenceId = run.id;
   // Show that run: on its circuit and among the compared ones.
   if ($('circuitSelect').value !== run.circuit_id) {
     // With the best other run of that circuit, to race against while watching.
@@ -546,17 +581,16 @@ const video = () => $('video');
 // Map point, chart cursor and the line under the video, at the video's current time.
 function syncVideo() {
   const d = linked(), hud = $('videoHud');
-  if (ghostMarker && (!clip || !d)) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
   if (!clip || !d) {
-    if (videoMarker) {view.map.removeLayer(videoMarker); videoMarker = null;}
     hud.textContent = clip ? 'Vídeo grabado el ' + madrid(clip.telemetry.lag * 1000) + '.' : '';
     return;
   }
   const ms = (video().currentTime - clip.start) * 1000;
+  // The replay follows the video: every compared run where it was at this moment of the video's run.
+  replay.ms = Math.min(replayEnd(), Math.max(0, ms));
+  drawReplay();
   if (ms < 0 || ms > d.run.elapsed_ms) {
     hud.textContent = ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(d.run.elapsed_ms);
-    if (videoMarker) {view.map.removeLayer(videoMarker); videoMarker = null;}
-    if (ghostMarker) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
     return;
   }
   const at = runAt(d.profile, ms);
@@ -565,31 +599,110 @@ function syncVideo() {
     {t: Infinity});
   const speed = Math.abs(near.t - video().currentTime) < 0.5 ? near.speed * 3.6 :
     d.speed.kmh[Math.min(d.speed.kmh.length - 1, Math.max(0, Math.round(at.s / 10)))];
-  // Racing the other run: how far ahead or behind at this point, and where it was at this same time.
-  const ghost = ghostOf(d);
-  let race = '';
-  if (ghost) {
-    race = ' · ' + formatDelta(ms - timeAt(ghost.profile, at.s)) + ' frente a ' + shortLabel(ghost.run);
-    const where = runAt(ghost.profile, Math.min(ms, ghost.run.elapsed_ms));
-    if (!ghostMarker) ghostMarker = L.circleMarker([where.lat, where.lon], {radius: 7, color: '#ffffff', weight: 3, fillColor: ghost.color,
-      fillOpacity: 1, interactive: false, pane: 'videoNow'}).addTo(view.map);
-    else ghostMarker.setLatLng([where.lat, where.lon]).setStyle({fillColor: ghost.color});
-  } else if (ghostMarker) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
+  const ref = current.reference;
+  const race = ref !== d ? ' · ' + formatDelta(ms - timeAt(ref.profile, at.s)) + ' frente a ' + shortLabel(ref.run) : '';
   hud.textContent = formatMs(ms) + ' · ' + (speed === null ? '—' : Math.max(0, Math.round(speed)) + ' km/h') + ' · ' + Math.round(at.s) + ' m' + race;
-  // Yellow like the charts' cursor (this moment of the video), with a dark ring for any line or picture below.
-  if (!videoMarker) videoMarker = L.circleMarker([at.lat, at.lon], {radius: 10, color: '#071423', weight: 4, fillColor: HIGHLIGHT, fillOpacity: 1,
-    interactive: false, pane: 'videoNow'}).addTo(view.map);
-  else videoMarker.setLatLng([at.lat, at.lon]);
-  videoMarker.bringToFront();
-  charts.forEach(chart => chart?.setSelection(at.s / 1000));
 }
-// Jump in the video to the moment the run was this many metres down the circuit.
+// Jump to the moment the run reached this many metres down the circuit: in the video when there is
+// one, else in the replay (when the reference got there).
 function seekVideo(metres) {
   const d = linked();
-  if (!d || !Number.isFinite(metres)) return;
+  if (!Number.isFinite(metres) || !current) return;
+  if (!d) {
+    replay.ms = Math.min(replayEnd(), timeAt(current.reference.profile, metres));
+    return drawReplay();
+  }
   video().currentTime = Math.min(video().duration || Infinity, Math.max(0, clip.start + timeAt(d.profile, metres) / 1000));
   syncVideo();
 }
+
+// ---- Replay: the compared runs on the map at once, as if they had started together ----
+// Its clock is the video when there is one; else its own, at ×1, ×2 or ×4.
+const replay = {ms: 0, playing: false, speed: 1, last: 0, frame: 0};
+const replayDots = new Map();
+const replayEnd = () => Math.max(0, ...(current?.data || []).map(d => d.run.elapsed_ms));
+const replayShown = () => replay.ms > 0 || replay.playing || !!linked();
+function drawReplay() {
+  if (!current?.data.length || !replayShown()) {
+    replayDots.forEach(dot => view.map.removeLayer(dot));
+    replayDots.clear();
+    $('replayBoard').replaceChildren(node('p', {className: 'placeholder', textContent: 'Pulsa ▶ para ver las bajadas a la vez en el mapa, como si hubieran salido juntas.'}));
+    $('replayTime').value = 0; $('replayClock').textContent = formatMs(0);
+    return;
+  }
+  const ms = replay.ms, ref = current.reference;
+  for (const [id, dot] of replayDots)
+    if (!current.data.some(d => d.run.id === id)) {view.map.removeLayer(dot); replayDots.delete(id);}
+  const rows = current.data.map(d => {
+    const t = Math.min(ms, d.run.elapsed_ms), at = runAt(d.profile, t), video = clip?.runId === d.run.id;
+    // The video's run with a yellow ring, like the charts' cursor; the others with a white one.
+    const style = {radius: video ? 10 : 8, color: video ? HIGHLIGHT : '#ffffff', weight: video ? 4 : 3, fillColor: d.color, fillOpacity: 1,
+      interactive: false, pane: 'videoNow'};
+    let dot = replayDots.get(d.run.id);
+    if (!dot) replayDots.set(d.run.id, dot = L.circleMarker([at.lat, at.lon], style).addTo(view.map));
+    else dot.setLatLng([at.lat, at.lon]).setStyle(style);
+    if (video) dot.bringToFront();
+    // Ahead (−) or behind (+) the reference at this point of the circuit; at the finish, the final gap.
+    const gap = d === ref ? null : t >= d.run.elapsed_ms ? d.run.elapsed_ms - ref.run.elapsed_ms : t - timeAt(ref.profile, at.s);
+    return {d, at, done: t >= d.run.elapsed_ms, gap};
+  });
+  $('replayBoard').replaceChildren(...[...rows].sort((a, b) => b.at.s - a.at.s).map(r => {
+    const chip = node('i', {className: 'chip'});
+    chip.style.background = r.d.color;
+    return node('div', {className: 'replay-row'}, [chip, node('span', {textContent: r.d.label}),
+      node('small', {textContent: r.done ? 'en meta' : Math.round(r.at.s) + ' m'}),
+      node('b', {className: r.gap === null ? '' : r.gap > 0 ? 'behind' : 'ahead', textContent: r.gap === null ? 'referencia' : formatDelta(r.gap)})]);
+  }));
+  $('replayTime').value = ms;
+  $('replayClock').textContent = formatMs(ms);
+  const focus = rows.find(r => r.d.run.id === clip?.runId) || rows.find(r => r.d === ref);
+  if (focus) charts.forEach(chart => chart?.setSelection(focus.at.s / 1000));
+}
+function tick(now) {
+  if (!replay.playing) return;
+  replay.ms = Math.min(replayEnd(), replay.ms + (now - replay.last) * replay.speed);
+  replay.last = now;
+  drawReplay();
+  if (replay.ms >= replayEnd()) return stopReplay();
+  replay.frame = requestAnimationFrame(tick);
+}
+function stopReplay() {
+  replay.playing = false;
+  cancelAnimationFrame(replay.frame);
+  playButton();
+}
+const playButton = () => {
+  const running = linked() ? !video().paused : replay.playing;
+  $('replayPlay').textContent = running ? '❚❚ Pausa' : '▶ Reproducir';
+};
+$('replayPlay').addEventListener('click', () => {
+  if (!current?.data.length) return status('Elige primero las bajadas que quieres ver.', 'error');
+  if (linked()) {
+    video().playbackRate = replay.speed;
+    return video().paused ? video().play() : video().pause();
+  }
+  if (replay.playing) return stopReplay();
+  if (replay.ms >= replayEnd()) replay.ms = 0;
+  replay.playing = true;
+  replay.last = performance.now();
+  playButton();
+  replay.frame = requestAnimationFrame(tick);
+});
+document.querySelectorAll('.replay-speeds button').forEach(b => b.addEventListener('click', () => {
+  replay.speed = Number(b.dataset.speed);
+  document.querySelectorAll('.replay-speeds button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  if (linked()) video().playbackRate = replay.speed;
+}));
+$('replayTime').addEventListener('input', e => {
+  const ms = Number(e.target.value);
+  if (linked()) {video().currentTime = Math.max(0, clip.start + ms / 1000); return syncVideo();}
+  replay.ms = ms;
+  drawReplay();
+});
+$('referenceSelect').addEventListener('change', e => {
+  referenceId = e.target.value || null;
+  compare().catch(err => status(err.message, 'error'));
+});
 async function uploadGoproGps() {
   const t = clip.telemetry, name = clip.name.replace(/\.(mp4|lrv)$/i, '') + ' (GPS de la GoPro).gpx';
   videoSay('Subiendo el GPS de la GoPro como ruta…');
@@ -618,7 +731,9 @@ $('videoFile').addEventListener('change', async e => {
 video().addEventListener('timeupdate', syncVideo);
 video().addEventListener('seeked', syncVideo);
 // Smooth while playing, frame by frame where the browser allows it.
+video().addEventListener('pause', () => playButton());
 video().addEventListener('play', () => {
+  playButton();
   const step = () => {if (video().paused) return; syncVideo(); video().requestVideoFrameCallback ? video().requestVideoFrameCallback(step) : requestAnimationFrame(step);};
   step();
 });
