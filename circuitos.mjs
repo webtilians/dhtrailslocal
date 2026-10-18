@@ -1,6 +1,7 @@
 // DH Trails v0.8 — Circuitos (organization): import a route, mark start, finish and segments, save.
 import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, referenceStops, withoutStops} from './gps-engine.mjs';
 import {formatMs} from './sector-comparison.mjs';
+import {circuitChecks} from './circuit-checks.mjs';
 import {$, node, say, startShell, createMap, pin, drawCircuit, km} from './app-shell.mjs';
 
 const view = createMap('map');
@@ -57,7 +58,14 @@ function redraw() {
   }
   const ready = start !== null && finish !== null;
   stats(ready ? source.slice(start, finish + 1) : source, gates.length + 1);
+  renderChecks(ready ? circuitChecks(source, start, finish, gates, saved) : []);
   $('mapTag').textContent = ready ? 'LISTA PARA GUARDAR' : 'MARCA SALIDA Y META';
+}
+
+// What could make the circuit's timing unreliable, and other circuits on the same trail.
+function renderChecks(checks) {
+  $('checks').replaceChildren(...checks.map(c => node('p', {className: 'circuit-note ' + c.level, textContent: c.text})));
+  $('checks').hidden = !checks.length;
 }
 
 // Clicks and drags land on the nearest GPS point of the imported route.
@@ -182,6 +190,9 @@ $('saveRoute').addEventListener('click', async () => {
     if (!source) throw Error('Importa primero un archivo.');
     if (draft.start === null || draft.finish === null) throw Error('Marca la salida y la meta.');
     if (!$('circuitName').value.trim()) throw Error('Escribe el nombre del circuito.');
+    const warnings = circuitChecks(source, draft.start, draft.finish, draft.gates, saved).filter(c => c.level === 'warning');
+    if (warnings.length && !window.confirm('Antes de guardar, revisa:\n\n• ' + warnings.map(w => w.text).join('\n• ') +
+      '\n\n¿Guardar el circuito así?')) return feedback('No se ha guardado: corrige la salida, la meta o los segmentos y vuelve a guardar.');
     if (!cleanReference()) return;
     const c = withoutStops(source, draft.start, draft.finish, draft.gates.map(g => ({index: g.index, name: g.name})), []);
     const circuit = buildCircuit($('circuitName').value, c.route, c.start, c.finish, c.sectors, c.zones);
@@ -190,7 +201,7 @@ $('saveRoute').addEventListener('click', async () => {
     feedback('Ruta «' + circuit.name + '» guardada.' + (c.seconds >= 30 ? ' Se ha quitado del trazado una parada de ' +
       (c.seconds / 60).toFixed(1).replace('.', ',') + ' min.' : '') + ' Ya puedes usarla en un torneo. Además se está buscando en todas' +
       ' las rutas de entrenamiento ya subidas: sus bajadas aparecerán en Entrenamiento.', 'success');
-    source = null; draft = blank(); history = []; setTool('');
+    source = null; draft = blank(); history = []; setTool(''); renderChecks([]);
     $('circuitName').value = ''; $('sourceName').textContent = 'La ruta de una bajada que pase por todo el circuito';
     await loadSaved();
     show(saved.find(x => x.name === circuit.name) || saved[0]);
