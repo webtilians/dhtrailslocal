@@ -1,10 +1,11 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
-import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints}
+import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints, timeAt}
   from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap, km, dateText} from './app-shell.mjs';
+import {readGoproTelemetry, telemetryGpx, videoMoments} from './gopro.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -80,6 +81,7 @@ function showSelection(circuit, {reveal = false} = {}) {
 function selectPoint(circuit, kilometres, {reveal = true} = {}) {
   mapSelection = {kind: 'point', circuitId: circuit.id, metres: kilometres * 1000};
   showSelection(circuit, {reveal});
+  seekVideo(kilometres * 1000);
 }
 
 async function loadRuns(keepCircuit) {
@@ -189,6 +191,7 @@ async function compare() {
   const byDefault = [reference, ...data.filter(d => d !== reference)].map(d => d.run.id);
   brakingIds = brakingByHand ? present : byDefault.slice(0, BRAKING_MAX);
   renderBraking();
+  if (clip) renderMoments();
   const gates = gatesOf(circuit), referenceTimes = segmentTimes(reference.profile, gates);
   const worst = data.filter(d => d !== reference).map(d => {
     const lost = segmentTimes(d.profile, gates).map((t, i) => t - referenceTimes[i]);
@@ -274,6 +277,7 @@ function renderBraking() {
     button.addEventListener('click', () => {
       mapSelection = {kind: 'zone', circuitId: circuit.id, key, index: i, from: p.from, to: p.to, text: summary};
       showSelection(circuit, {reveal: true});
+      seekVideo(p.from);
     });
     return button;
   }) : [node('p', {className: 'placeholder', textContent: 'No hay frenadas claras, o el GPS no fue fiable donde se frena.'})]));
@@ -325,6 +329,7 @@ function renderSegments(circuit, data, reference) {
     button.addEventListener('click', () => {
       mapSelection = {kind: 'segment', circuitId: circuit.id, index: i};
       showSelection(circuit, {reveal: true});
+      seekVideo(i ? gatesOf(circuit)[i - 1] : 0);
     });
     return button;
   };
@@ -443,6 +448,184 @@ $('analyze').addEventListener('click', async () => {
 });
 $('circuitSelect').addEventListener('change', pickDefault);
 $('loginButton').addEventListener('click', () => shell.askLogin('Entra o crea tu cuenta para guardar tus rutas.'));
+// ---- GoPro video, played from the rider's own device and kept in step with the map and charts ----
+let clip = null, videoMarker = null, ghostMarker = null;
+// The video's dots go above everything else on the map, numbered braking pins included.
+view.map.createPane('videoNow').style.zIndex = 640;
+const clock = s => Math.floor(s / 60) + ':' + (s % 60).toFixed(1).padStart(4, '0').replace('.', ',');
+const madrid = ms => new Date(ms).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+const videoSay = (message, type = '') => say($('videoInfo'), message, type);
+const linked = () => current?.data.find(d => d.run.id === clip?.runId) || null;
+// The run to race against while watching: the fastest of the others compared.
+const ghostOf = d => current.data.filter(x => x !== d).sort((a, b) => a.run.elapsed_ms - b.run.elapsed_ms)[0] || null;
+const shortLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at);
+const decimal = (x, n = 1) => x.toFixed(n).replace('.', ',');
+
+// Where a run was this many ms after its start: position along the circuit and its own GPS point.
+function runAt(profile, ms) {
+  let i = profile.findIndex(p => p[1] >= ms);
+  if (i <= 0) i = i < 0 ? profile.length - 1 : 1;
+  const [a, b] = [profile[i - 1], profile[i]], f = b[1] > a[1] ? Math.min(1, Math.max(0, (ms - a[1]) / (b[1] - a[1]))) : 1;
+  return {s: a[0] + f * (b[0] - a[0]), lat: a[2] + f * (b[2] - a[2]), lon: a[3] + f * (b[3] - a[3])};
+}
+// The run whose time the video covers most: yours first, then your friends'.
+function runInVideo(t) {
+  const from = t.lag * 1000, to = (t.lag + t.seconds) * 1000;
+  const overlap = r => Math.min(to, Date.parse(r.started_at) + r.elapsed_ms) - Math.max(from, Date.parse(r.started_at));
+  return runs.filter(r => r.started_at && overlap(r) > 0)
+    .sort((a, b) => (a.mine === false) - (b.mine === false) || overlap(b) - overlap(a))[0] || null;
+}
+async function linkVideo() {
+  const t = clip.telemetry, run = runInVideo(t);
+  $('videoActions').replaceChildren();
+  $('videoActions').hidden = true;
+  if (!run) {
+    clip.runId = null;
+    syncVideo();
+    const upload = node('button', {type: 'button', className: 'btn outline', textContent: 'Usar el GPS de la GoPro'});
+    upload.addEventListener('click', () => uploadGoproGps().catch(err => videoSay('No se pudo subir el GPS de la GoPro: ' + err.message, 'error')));
+    $('videoActions').replaceChildren(upload);
+    $('videoActions').hidden = false;
+    return videoSay('El vídeo es del ' + madrid(t.lag * 1000) + ' (' + clock(t.seconds) + ') y no tienes ninguna bajada de ese momento. ' +
+      'Sube la ruta de tu reloj de ese día, o usa el GPS de la propia GoPro: lo subimos como una ruta de entrenamiento y, si sigue un circuito, aparece la bajada.');
+  }
+  clip.runId = run.id;
+  // Show that run: on its circuit and among the compared ones.
+  if ($('circuitSelect').value !== run.circuit_id) {
+    // With the best other run of that circuit, to race against while watching.
+    $('circuitSelect').value = run.circuit_id;
+    const best = runs.filter(r => r.circuit_id === run.circuit_id && r.id !== run.id).sort((a, b) => a.elapsed_ms - b.elapsed_ms)[0];
+    picked = [run.id, ...(best ? [best.id] : [])];
+  }
+  else if (!picked.includes(run.id)) picked = [...picked.slice(0, COLORS.length - 1), run.id];
+  renderRunList();
+  await compare();
+  clip.start = Date.parse(run.started_at) / 1000 - t.lag;
+  videoSay('Vídeo de la bajada ' + (run.mine === false ? 'de ' + run.pilot + ' ' : '') + 'del ' + madrid(Date.parse(run.started_at)) +
+    ' en ' + run.circuit_name + ': la salida está en el ' + clock(clip.start) + ' del vídeo y la meta en el ' +
+    clock(clip.start + run.elapsed_ms / 1000) + '.', 'success');
+  if (video().paused && video().currentTime < 0.1) video().currentTime = Math.max(0, clip.start - 2);
+  renderMoments();
+  syncVideo();
+}
+// Stops, hard braking, shocks and jumps of the run in the video, from the camera's own sensors.
+function renderMoments() {
+  const d = linked(), box = $('videoMoments');
+  if (!clip || !d) return box.replaceChildren();
+  const all = videoMoments(clip.telemetry, clip.start, clip.start + d.run.elapsed_ms / 1000);
+  const of = kind => all.filter(m => m.kind === kind);
+  const still = of('stop').reduce((sum, m) => sum + m.seconds, 0);
+  const counts = [
+    of('stop').length ? of('stop').length + ' parada(s), ' + decimal(still) + ' s quieto' : 'sin paradas',
+    of('brake').length + ' frenada(s) fuertes', of('shock').length + ' golpe(s) de 4 g o más',
+    of('air').length ? of('air').length + ' salto(s)' : 'ningún salto'];
+  // Every stop, braking and jump; of the shocks, the five strongest.
+  const strongest = of('shock').sort((a, b) => b.g - a.g).slice(0, 5);
+  const shown = all.filter(m => m.kind !== 'shock' || strongest.includes(m));
+  const text = m => ({
+    stop: () => 'Parada de ' + decimal(m.seconds) + ' s',
+    brake: () => 'Frenada de ' + Math.round(m.fromKmh) + ' a ' + Math.round(m.toKmh) + ' km/h en ' + decimal(m.until - m.t) + ' s (hasta ' + decimal(m.peak) + ' m/s²)',
+    shock: () => 'Golpe de ' + decimal(m.g) + ' g',
+    air: () => 'Salto: ' + decimal(m.seconds, 2) + ' s en el aire'})[m.kind]();
+  box.replaceChildren(
+    node('p', {className: 'moments-summary', textContent: 'En esta bajada: ' + counts.join(', ') + '.' +
+      (still >= 1 ? ' Sin las paradas habrías tardado unos ' + decimal(d.run.elapsed_ms / 1000 - still) + ' s.' : '')}),
+    ...shown.map(m => {
+      const at = runAt(d.profile, (m.t - clip.start) * 1000);
+      const button = node('button', {type: 'button', className: 'moment moment-' + m.kind}, [
+        node('b', {textContent: clock(m.t)}), node('span', {textContent: text(m)}), node('small', {textContent: Math.round(at.s) + ' m'})]);
+      button.addEventListener('click', () => {
+        video().currentTime = Math.max(0, m.t - 1.5);
+        syncVideo();
+        $('videoBox').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+      });
+      return button;
+    }));
+}
+const video = () => $('video');
+// Map point, chart cursor and the line under the video, at the video's current time.
+function syncVideo() {
+  const d = linked(), hud = $('videoHud');
+  if (ghostMarker && (!clip || !d)) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
+  if (!clip || !d) {
+    if (videoMarker) {view.map.removeLayer(videoMarker); videoMarker = null;}
+    hud.textContent = clip ? 'Vídeo grabado el ' + madrid(clip.telemetry.lag * 1000) + '.' : '';
+    return;
+  }
+  const ms = (video().currentTime - clip.start) * 1000;
+  if (ms < 0 || ms > d.run.elapsed_ms) {
+    hud.textContent = ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(d.run.elapsed_ms);
+    if (videoMarker) {view.map.removeLayer(videoMarker); videoMarker = null;}
+    if (ghostMarker) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
+    return;
+  }
+  const at = runAt(d.profile, ms);
+  // The camera's own speed at this frame (measured by its GPS ten times a second), else the run's.
+  const near = clip.telemetry.points.reduce((best, p) => p.fix >= 2 && Math.abs(p.t - video().currentTime) < Math.abs(best.t - video().currentTime) ? p : best,
+    {t: Infinity});
+  const speed = Math.abs(near.t - video().currentTime) < 0.5 ? near.speed * 3.6 :
+    d.speed.kmh[Math.min(d.speed.kmh.length - 1, Math.max(0, Math.round(at.s / 10)))];
+  // Racing the other run: how far ahead or behind at this point, and where it was at this same time.
+  const ghost = ghostOf(d);
+  let race = '';
+  if (ghost) {
+    race = ' · ' + formatDelta(ms - timeAt(ghost.profile, at.s)) + ' frente a ' + shortLabel(ghost.run);
+    const where = runAt(ghost.profile, Math.min(ms, ghost.run.elapsed_ms));
+    if (!ghostMarker) ghostMarker = L.circleMarker([where.lat, where.lon], {radius: 7, color: '#ffffff', weight: 3, fillColor: ghost.color,
+      fillOpacity: 1, interactive: false, pane: 'videoNow'}).addTo(view.map);
+    else ghostMarker.setLatLng([where.lat, where.lon]).setStyle({fillColor: ghost.color});
+  } else if (ghostMarker) {view.map.removeLayer(ghostMarker); ghostMarker = null;}
+  hud.textContent = formatMs(ms) + ' · ' + (speed === null ? '—' : Math.max(0, Math.round(speed)) + ' km/h') + ' · ' + Math.round(at.s) + ' m' + race;
+  // Yellow like the charts' cursor (this moment of the video), with a dark ring for any line or picture below.
+  if (!videoMarker) videoMarker = L.circleMarker([at.lat, at.lon], {radius: 10, color: '#071423', weight: 4, fillColor: HIGHLIGHT, fillOpacity: 1,
+    interactive: false, pane: 'videoNow'}).addTo(view.map);
+  else videoMarker.setLatLng([at.lat, at.lon]);
+  videoMarker.bringToFront();
+  charts.forEach(chart => chart?.setSelection(at.s / 1000));
+}
+// Jump in the video to the moment the run was this many metres down the circuit.
+function seekVideo(metres) {
+  const d = linked();
+  if (!d || !Number.isFinite(metres)) return;
+  video().currentTime = Math.min(video().duration || Infinity, Math.max(0, clip.start + timeAt(d.profile, metres) / 1000));
+  syncVideo();
+}
+async function uploadGoproGps() {
+  const t = clip.telemetry, name = clip.name.replace(/\.(mp4|lrv)$/i, '') + ' (GPS de la GoPro).gpx';
+  videoSay('Subiendo el GPS de la GoPro como ruta…');
+  const result = await shell.api.uploadTrainingRoute(new File([telemetryGpx(t, name)], name, {type: 'application/gpx+xml'}));
+  await Promise.all([loadRoutes(), loadRuns()]);
+  if (result.found.length) return linkVideo();
+  videoSay('Ruta guardada, pero no cuenta como bajada: ' + ((result.skipped || []).map(skippedMessage).join(' ') ||
+    noCircuitMessage(result.nearest)) + ' El GPS de la GoPro suele ser menos preciso que el de un reloj.', 'error');
+}
+$('videoFile').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('videoName').textContent = file.name + ' · ' + (file.size / 1e9).toFixed(1).replace('.', ',') + ' GB';
+  videoSay('Leyendo la telemetría de ' + file.name + '…');
+  try {
+    const telemetry = await readGoproTelemetry(file);
+    if (!telemetry.good) throw new Error('el vídeo no tiene ningún punto con señal GPS');
+    if (clip?.url) URL.revokeObjectURL(clip.url);
+    clip = {file, name: file.name, telemetry, url: URL.createObjectURL(file), runId: null, start: 0};
+    $('videoTag').textContent = (telemetry.camera || 'GOPRO').toUpperCase();
+    video().src = clip.url;
+    $('videoBox').hidden = false;
+    await linkVideo();
+  } catch (err) {videoSay('No se puede usar este vídeo: ' + err.message, 'error');}
+});
+video().addEventListener('timeupdate', syncVideo);
+video().addEventListener('seeked', syncVideo);
+// Smooth while playing, frame by frame where the browser allows it.
+video().addEventListener('play', () => {
+  const step = () => {if (video().paused) return; syncVideo(); video().requestVideoFrameCallback ? video().requestVideoFrameCallback(step) : requestAnimationFrame(step);};
+  step();
+});
+// GoPro films in H.265: not every browser can show it. The map and the charts still follow the time.
+video().addEventListener('error', () => videoSay('Este navegador no puede mostrar el vídeo (la GoPro graba en H.265). Prueba con Safari, ' +
+  'o con Chrome o Edge al día, o con el archivo .LRV de la tarjeta, más ligero. La telemetría sí se ha leído.', 'error'));
+
 let resizeTimer;
 window.addEventListener('resize', () => {clearTimeout(resizeTimer); resizeTimer = setTimeout(() => compare().catch(() => {}), 250);});
 
