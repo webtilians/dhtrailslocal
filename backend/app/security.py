@@ -16,6 +16,9 @@ from .models import Pilot
 _password_hasher=PasswordHash.recommended()
 _bearer=HTTPBearer(auto_error=False)
 _ALGORITHM="HS256"
+# Riders open the app from their phone now and then: a session lasts a month and the app renews it
+# once a day while in use, so only a month without opening it asks for the password again.
+SESSION_DAYS=30
 
 def password_hash(password:str)->str:
     return _password_hasher.hash(password)
@@ -24,8 +27,9 @@ def verify_password(password:str, encoded:str)->bool:
     return _password_hasher.verify(password,encoded)
 
 def issue_token(pilot_id:UUID)->str:
-    exp=datetime.now(timezone.utc)+timedelta(hours=12)
-    return jwt.encode({"sub":str(pilot_id),"exp":exp,"iss":"dhtrailslocal"},require_secret(),algorithm=_ALGORITHM)
+    now=datetime.now(timezone.utc)
+    return jwt.encode({"sub":str(pilot_id),"iat":now,"exp":now+timedelta(days=SESSION_DAYS),"iss":"dhtrailslocal"},
+                      require_secret(),algorithm=_ALGORITHM)
 
 def current_pilot(
     credentials:HTTPAuthorizationCredentials|None=Depends(_bearer),

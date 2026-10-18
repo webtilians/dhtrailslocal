@@ -109,6 +109,11 @@ def login(credentials:Credentials,request:Request,db:Session=Depends(get_db)):
 def whoami(p:Pilot=Depends(current_pilot)):
     return pilot_payload(p)
 
+@app.post("/api/auth/refresh")
+def refresh_session(p:Pilot=Depends(current_pilot)):
+    """A new session for a rider who still has a valid one (the app asks once a day)."""
+    return {"access_token":issue_token(p.id),"user":pilot_payload(p)}
+
 def circuit_payload(c:Circuit):
     return {
         "id":str(c.id),"cloud_id":str(c.id),"version":2,"name":c.name,

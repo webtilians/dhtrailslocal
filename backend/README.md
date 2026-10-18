@@ -104,7 +104,7 @@ La competición se publica en el mismo servidor que LAIN, con su propia direcci�
 | API | `dhtrails.service`, uvicorn en `127.0.0.1:8100`, máximo 400 MB de memoria |
 | Base de datos | PostgreSQL local, base `dhtrails`, sin contraseña: se entra con el usuario del sistema `dhtrails` |
 | Archivos GPS | `/var/lib/dhtrails/activities` |
-| Copias | `/var/backups/dhtrails`, diarias y antes de cada actualización, 14 días |
+| Copias | `/var/backups/dhtrails`, diarias y antes de cada actualización, 14 días; además, una copia diaria en el PC del organizador |
 
 Comandos en el servidor, como root:
 
@@ -112,6 +112,15 @@ Comandos en el servidor, como root:
 - Actualizar desde GitHub: `dhtrails-update` (otra rama: `DH_BRANCH=nombre dhtrails-update`).
 - Inscripción: abierta por defecto. `dhtrails-invite nuevo` exige un código a los nuevos pilotos, `dhtrails-invite quitar` la vuelve a abrir y `dhtrails-invite` muestra el código actual.
 - Copia inmediata: `dhtrails-backup`. Estado y registro: `systemctl status dhtrails`, `journalctl -u dhtrails -n 50`.
+- Sesiones: duran 30 días y la aplicación las renueva una vez al día mientras se usa.
+
+### Copia de seguridad fuera del servidor
+
+Si el servidor se pierde, las copias de `/var/backups/dhtrails` se pierden con él. Por eso un PC baja cada día la última copia (base de datos y archivos GPS):
+
+1. En el PC, una vez y sin permisos de administrador: `powershell -ExecutionPolicy Bypass -File deploy\pc\instalar-copias.ps1`. Crea una clave SSH solo para las copias, la carpeta `%USERPROFILE%\DHTrails-copias` y la tarea de Windows «DH Trails - copia de seguridad». La tarea se ejecuta cada día a las 21:00 y al iniciar sesión, o en cuanto se enciende el PC si estaba apagado. Guarda 30 días.
+2. En el servidor, con la clave pública que imprime: `dhtrails-copias-pc "ssh-ed25519 AAAA… nombre"`. Esa clave entra como el usuario `dhbackup` y solo puede ejecutar `dhtrails-backup-latest`, que envía la última copia: no abre una consola, no reenvía puertos y no puede escribir nada. Para ver los PC autorizados: `dhtrails-copias-pc`. Para quitar uno: `dhtrails-copias-pc quitar nombre`.
+3. Qué ha pasado cada día: `DHTrails-copias\registro.txt`. Restaurar una copia: `tar -xf dhtrails-AAAAMMDD-HHMM.tar`, luego `pg_restore -d dhtrails dhtrails-*.dump` y descomprimir `gps-*.tar.gz` en `/var/lib/dhtrails`.
 
 ## Pasar a un servidor de producción
 

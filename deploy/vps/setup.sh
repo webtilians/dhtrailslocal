@@ -37,7 +37,11 @@ main() {
   step "Usuario y carpetas"
   id dhtrails >/dev/null 2>&1 || useradd --system --home-dir "$DATA" --shell /usr/sbin/nologin dhtrails
   install -d -o dhtrails -g dhtrails -m 700 "$DATA" "$DATA/activities"
-  install -d -o root -g root -m 700 /var/backups/dhtrails
+  # dhbackup only reads the backups, to copy them to a computer (dhtrails-copias-pc). Its keys can run
+  # nothing but dhtrails-backup-latest; '*' leaves it without a password, not locked, so keys work.
+  id dhbackup >/dev/null 2>&1 || useradd --system --home-dir /var/lib/dhbackup --create-home --shell /bin/sh dhbackup
+  usermod -p '*' dhbackup
+  install -d -o root -g dhbackup -m 750 /var/backups/dhtrails
 
   step "Código ($branch)"
   [ -d "$APP/.git" ] || git clone -q "$REPO" "$APP"

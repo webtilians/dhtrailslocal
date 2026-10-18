@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# The only command the backup key of a computer can run (see dhtrails-copias-pc): sends the latest
+# copy of the database and of the GPS files as one tar on standard output.
+set -euo pipefail
+dir=/var/backups/dhtrails
+dump=$(ls -1t "$dir"/dhtrails-*.dump 2>/dev/null | head -n 1 || true)
+gps=$(ls -1t "$dir"/gps-*.tar.gz 2>/dev/null | head -n 1 || true)
+if [ -z "$dump" ] || [ -z "$gps" ]; then
+  echo "Todavía no hay copias en el servidor" >&2
+  exit 1
+fi
+tar -C "$dir" -cf - "$(basename "$dump")" "$(basename "$gps")"
