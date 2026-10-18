@@ -1,4 +1,4 @@
-// DH Trails Local v0.8 — public FastAPI client (no Supabase).
+// DH Trails Local v0.8 — browser client for the FastAPI server.
 // Same-origin when the page is served by FastAPI (this PC or the public server).
 const ENDPOINT_CONFIG='dhtrailslocal:api:url';
 

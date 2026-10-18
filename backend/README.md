@@ -1,6 +1,6 @@
 # DH Trails Local — FastAPI + PostgreSQL local
 
-**Esta es la arquitectura recomendada. No requiere Supabase ni servicios externos.**
+**Esta es la arquitectura recomendada. No requiere servicios externos.**
 
 El backend es un servidor Python FastAPI tradicional. Se ejecuta en Windows, Linux o macOS. PostgreSQL puede instalarse nativamente o levantarse en Docker; después puedes migrarlo al servidor donde ya alojas otras aplicaciones.
 
@@ -66,10 +66,6 @@ Para crear SECRET_KEY: `python3 -c "import secrets; print(secrets.token_urlsafe(
 
 Las rutas completas **solo se suben al servidor cuando eliges guardarlas** en el panel de actividades. Los parciales son estimaciones GPS, no tiempos certificados para clasificaciones.
 
-## ¿Y mi Santa Cruz ya guardado?
-
-En el editor local, en «02 Mis circuitos», selecciona Santa Cruz y pulsa «Guardar circuito seleccionado en servidor». Para moverlo desde GitHub Pages a localhost, exporta el JSON con «Exportar JSON» en tu navegador anterior e impórtalo en el editor local. La misma cuenta lo podrá recuperar desde otro navegador conectado a este servidor.
-
 ## Time trial, torneos y entrenamiento (v0.8)
 
 Variables de `backend/.env`:
@@ -129,8 +125,7 @@ Si el servidor se pierde, las copias de `/var/backups/dhtrails` se pierden con �
 3. Configura `DATABASE_URL`, un `SECRET_KEY` permanente y `GPS_STORAGE_DIR` en el servidor, fuera del repositorio.
 4. Ejecuta `alembic upgrade head` con las nuevas credenciales.
 5. Ejecuta Uvicorn detrás de un reverse proxy HTTPS: p. ej. `uvicorn app.main:app --host 127.0.0.1 --port 8000`. Solo expón el proxy 443, nunca PostgreSQL directamente.
-6. Si mantienes el frontend en GitHub Pages, configura «05 Servidor FastAPI» con la URL HTTPS pública de tu backend. Añade el origen exacto `https://webtilians.github.io` a `CORS_ORIGINS` (en la .env de producción).
-7. Protege el servidor con copias de seguridad, límites de peticiones, verificación de correo/recuperación de contraseña y monitorización antes de admitir registros públicos.
+6. Protege el servidor con copias de seguridad, límites de peticiones, verificación de correo/recuperación de contraseña y monitorización antes de admitir registros públicos.
 
 **Para producción abierta a terceros queda pendiente** endurecer autenticación (recuperación de contraseña, revocación/refresh tokens, rate limiting y verificación de correo), auditoría de cargas, control de cuotas y antifraude. El servidor v0.4 es un MVP para desarrollo/uso controlado. No lo publiques sin estas medidas.
 
@@ -144,7 +139,3 @@ Si el servidor se pierde, las copias de `/var/backups/dhtrails` se pierden con �
 ## Infraestructura
 
 El archivo `backend/compose.yaml` solo arranca PostgreSQL (no FastAPI). La base usa un volumen persistente. Está limitada al loopback **127.0.0.1** con contraseña de desarrollo; no utilices ese usuario ni contraseña en producción.
-
-## Nota sobre Supabase
-
-El código experimental de v0.3 puede permanecer en la historia del repositorio, pero **FastAPI + PostgreSQL local reemplaza esa integración en el frontend**. No hace falta crear proyecto Supabase ni conectarlo a ChatGPT.

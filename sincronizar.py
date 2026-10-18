@@ -48,9 +48,8 @@ def main():
                            'Hay que resolver la integración con GitHub:\n'+merged.stdout+merged.stderr)
     git('push', 'origin', 'master')
     print('Sincronización completada. Local y GitHub comparten los cambios.')
-    print('Pages se actualizará cuando termine el despliegue:')
-    print('https://github.com/webtilians/dhtrailslocal/actions')
-    print('Web: https://webtilians.github.io/dhtrailslocal/editor.html')
+    print('Las pruebas se ven en https://github.com/webtilians/dhtrailslocal/actions')
+    print('La web pública se actualiza en el servidor con dhtrails-update.')
     print('Si cambió el servidor Python, reinícialo para cargar esa versión; recarga el navegador para cambios web.')
 
 if __name__ == '__main__':

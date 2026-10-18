@@ -67,7 +67,7 @@ main() {
 # DH Trails, written once by setup.sh. After editing: systemctl restart dhtrails
 DATABASE_URL=postgresql+psycopg://dhtrails@/dhtrails?host=/var/run/postgresql
 SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')
-CORS_ORIGINS=https://$host,https://webtilians.github.io
+CORS_ORIGINS=https://$host
 GPS_STORAGE_DIR=$DATA/activities
 LOCAL_SINGLE_USER=false
 ORGANIZER_EMAILS=$DH_ORGANIZERS

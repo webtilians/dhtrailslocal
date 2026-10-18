@@ -35,5 +35,5 @@ jobs:
           node --check gopro.mjs
           node --check sw.js
           node --check competition-core.mjs
-      - name: Test geometry, storage and cloud mapping
+      - name: Test the browser modules
         run: node --test tests/*.test.mjs
