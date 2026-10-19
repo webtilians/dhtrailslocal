@@ -9,7 +9,7 @@ from app.main import app
 
 @pytest.fixture
 def organizers(monkeypatch):
-    # Accounts registered through admin() become organizers: only they may create circuits.
+    # Accounts registered through pilot(client, organizers) become organizers: they approve circuits.
     emails=set()
     monkeypatch.setattr(config,"ORGANIZER_EMAILS",emails)
     return emails
@@ -21,22 +21,25 @@ def pilot(client,organizers=None):
     assert p.status_code==201,p.text
     return {"Authorization":"Bearer "+p.json()["access_token"]}
 
-def circuit_payload(name="Santa Cruz"):
-    points=[[36.75-i*.00007,-4.44+i*.00004,400-i] for i in range(35)]
+def circuit_payload(name="Santa Cruz",shift=0.0):
+    points=[[36.75+shift-i*.00007,-4.44+i*.00004,400-i] for i in range(35)]
     return {"name":name,"points":points,
       "sectors":[{"index":10,"name":"Curvas"},{"index":22,"name":"Zona rápida"}],
       "weakZones":[{"from":12,"to":15,"name":"Mala señal"}],
       "gateRadius":18}
 
-def test_only_organizers_create_circuits(organizers):
+def test_riders_circuits_wait_for_approval(organizers):
     with TestClient(app) as client:
         rider=pilot(client)
-        assert client.post("/api/circuits",json=circuit_payload(),headers=rider).status_code==403
         assert client.get("/api/auth/me",headers=rider).json()["organizer"] is False
+        # In an area of its own (other tests leave circuits in this database).
+        created=client.post("/api/circuits",json=circuit_payload("Zona del rider",-45-uuid.uuid4().int%10000*0.003),headers=rider)
+        assert created.status_code==201,created.text
+        assert created.json()["approved"] is False and created.json()["can_edit"] is True
 
 def test_auth_circuit_persistence_and_tenant_isolation(organizers):
     with TestClient(app) as client:
-        a=pilot(client,organizers);b=pilot(client,organizers)
+        a=pilot(client,organizers);b=pilot(client)
         created=client.post("/api/circuits",json=circuit_payload(),headers=a)
         assert created.status_code==201,created.text
         cid=created.json()["id"]
@@ -45,7 +48,9 @@ def test_auth_circuit_persistence_and_tenant_isolation(organizers):
         mine=client.get("/api/circuits",headers=a)
         assert mine.status_code==200 and any(x["id"]==cid for x in mine.json())
         assert client.get(f"/api/circuits/{cid}",headers=b).status_code==404
-        assert client.get("/api/circuits",headers=b).json()==[]
+        # Everyone sees which circuits exist; only its rider (or an organizer) may change one.
+        seen={x["id"]:x for x in client.get("/api/circuits",headers=b).json()}
+        assert seen[cid]["mine"] is False and seen[cid]["can_edit"] is False
         update=circuit_payload("Santa Cruz v2")
         upd=client.put(f"/api/circuits/{cid}",json=update,headers=a)
         assert upd.status_code==200,upd.text

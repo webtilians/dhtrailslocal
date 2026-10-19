@@ -27,10 +27,11 @@ function prepareNext(t) {
 }
 
 async function loadCircuits() {
-  const circuits = await shell.api.listCircuits();
+  // Only approved circuits go into a tournament (riders' ones wait in Circuitos for an organizer).
+  const circuits = (await shell.api.listCircuits()).filter(c => c.approved);
   $('tCircuit').replaceChildren(...(circuits.length ? circuits.map(c => node('option', {value: c.id,
     textContent: c.name + ' · ' + km(distanceSeries(c.points).at(-1)) + ' · ' + (c.sectors.length + 1) + ' segmentos'})) :
-    [node('option', {value: '', textContent: 'Primero guarda un circuito en la pestaña Circuitos'})]));
+    [node('option', {value: '', textContent: 'Primero guarda o aprueba un circuito en la pestaña Circuitos'})]));
 }
 
 async function loadTournaments() {

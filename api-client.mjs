@@ -103,7 +103,7 @@ export function createCloudApi(config) {
     async signOut(){persistToken(null);},
     async me(){return request('/auth/me')},
     async setDisplayName(name){return request('/me/profile',{method:'PUT',body:{display_name:name}})},
-    // Circuits (organizers)
+    // Circuits: any rider draws them; organizers approve them for tournaments
     async saveCircuit(circuit){
       const isRemote=/^[0-9a-f-]{36}$/i.test(circuit.cloud_id||'');
       const result=await request(isRemote?'/circuits/'+circuit.cloud_id:'/circuits',{
@@ -115,6 +115,7 @@ export function createCloudApi(config) {
     },
     async listCircuits(){return request('/circuits')},
     async deleteCircuit(id){return request('/circuits/'+encodeURIComponent(id),{method:'DELETE'})},
+    async approveCircuit(id){return request('/circuits/'+encodeURIComponent(id)+'/approve',{method:'POST'})},
     async circuitCatalog(){return request('/public/circuits')},
     // Time trial
     async tournaments(){return request('/public/tournaments')},

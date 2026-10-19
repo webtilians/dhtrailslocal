@@ -150,6 +150,7 @@ def create_tournament(payload:TournamentIn,db:Session=Depends(get_db),p:Pilot=De
     require_organizer(p)
     c=load_circuit(db,payload.circuit_id)
     if not c:raise HTTPException(404,"Circuito no encontrado")
+    if c.approved_at is None:raise HTTPException(409,"Este circuito aún no está aprobado: apruébalo en Circuitos antes de usarlo en un torneo")
     # Standings compare splits between these exact gates: the circuit can no longer change.
     if c.published_at is None:c.published_at=utcnow()
     t=Tournament(name=payload.name,circuit_id=c.id,starts_on=payload.starts_on,ends_on=payload.ends_on,
