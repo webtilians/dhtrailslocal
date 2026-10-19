@@ -22,10 +22,11 @@ from .training import router as training_router, scan_routes_for_circuit
 from .friends import router as friends_router
 from .config import CORS_ORIGINS, GPS_STORAGE_DIR, MAX_UPLOAD_BYTES, REPO_ROOT, require_secret, LOCAL_SINGLE_USER, LOCAL_PILOT_ID
 from .database import get_db
-from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone
+from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone, utcnow
+from .circuit_rules import repeated
 from .ratelimit import RateLimit
 from .schemas import AttemptIn, CircuitIn, Credentials, RegisterIn
-from .security import current_pilot, issue_token, password_hash, pilot_payload, require_organizer, verify_password
+from .security import current_pilot, is_organizer, issue_token, password_hash, pilot_payload, require_organizer, verify_password
 
 app=FastAPI(title="DH Trails Local API",version="0.6.0",description="GPS training and monthly competition API; times are GPS estimates")
 app.add_middleware(CORSMiddleware,allow_origins=CORS_ORIGINS,allow_methods=["GET","POST","PUT","DELETE"],allow_headers=["Authorization","Content-Type"])
@@ -35,6 +36,8 @@ app.include_router(friends_router)
 
 # Per client address: slows password guessing and mass sign-up on a public server.
 login_limit=RateLimit(10,300)
+circuit_limit=RateLimit(30,3600)
+RIDER_CIRCUITS=20  # circuits a rider (not an organizer) may have
 register_limit=RateLimit(5,3600)
 def client_key(request:Request)->str:
     return request.client.host if request.client else "unknown"
@@ -114,12 +117,16 @@ def refresh_session(p:Pilot=Depends(current_pilot)):
     """A new session for a rider who still has a valid one (the app asks once a day)."""
     return {"access_token":issue_token(p.id),"user":pilot_payload(p)}
 
-def circuit_payload(c:Circuit):
+def circuit_payload(c:Circuit,p:Pilot|None=None,owner:str|None=None):
     return {
         "id":str(c.id),"cloud_id":str(c.id),"version":2,"name":c.name,
         "points":c.reference_points,"gateRadius":c.gate_radius_m,
         "createdAt":c.created_at.isoformat(),
         "published":c.published_at is not None,
+        # Riders draw circuits too: they count for training at once, for tournaments once approved.
+        "approved":c.approved_at is not None,"owner":owner,
+        "mine":p is not None and c.owner_id==p.id,
+        "can_edit":p is not None and (c.owner_id==p.id or is_organizer(p)) and c.published_at is None,
         "sectors":[{"index":s.gate_index,"name":s.name} for s in c.sectors],
         "weakZones":[{"from":z.start_index,"to":z.end_index,"name":z.name} for z in c.weak_zones]
     }
@@ -129,6 +136,20 @@ def circuit_for_user(db:Session,circuit_id:uuid.UUID,user_id:uuid.UUID)->Circuit
        .where(Circuit.id==circuit_id,Circuit.owner_id==user_id))
     if not c:raise HTTPException(404,"Circuito no encontrado")
     return c
+
+def circuit_to_change(db:Session,circuit_id:uuid.UUID,p:Pilot)->Circuit:
+    """A circuit its rider, or an organizer, may change or delete."""
+    c=db.scalar(select(Circuit).options(selectinload(Circuit.sectors),selectinload(Circuit.weak_zones))
+       .where(Circuit.id==circuit_id))
+    if not c or (c.owner_id!=p.id and not is_organizer(p)):raise HTTPException(404,"Circuito no encontrado")
+    return c
+
+def refuse_if_repeated(db:Session,p:Pilot,payload:CircuitIn,exclude:uuid.UUID|None=None):
+    """A rider may not add a circuit that already exists (organizers get the editor's warning)."""
+    if is_organizer(p):return
+    others=db.scalars(select(Circuit).where(Circuit.id!=exclude) if exclude else select(Circuit)).all()
+    same=repeated(payload.points,others)
+    if same:raise HTTPException(409,f"Ese circuito ya existe: «{same.name}». Búscalo en la lista de circuitos")
 
 def assign_circuit(c:Circuit,payload:CircuitIn):
     c.name=payload.name.strip()
@@ -144,22 +165,37 @@ def refuse_if_published(c:Circuit):
 
 @app.get("/api/circuits")
 def list_circuits(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
-    circuits=db.scalars(select(Circuit).options(selectinload(Circuit.sectors),selectinload(Circuit.weak_zones))
-        .where(Circuit.owner_id==p.id).order_by(Circuit.updated_at.desc()).limit(250)).all()
-    return [circuit_payload(c) for c in circuits]
+    """Every circuit, who drew it, and whether it is approved: riders see which exist before drawing one."""
+    rows=db.execute(select(Circuit,Pilot.display_name).join(Pilot,Pilot.id==Circuit.owner_id)
+        .options(selectinload(Circuit.sectors),selectinload(Circuit.weak_zones))
+        .order_by(Circuit.updated_at.desc()).limit(500)).all()
+    return [circuit_payload(c,p,owner) for c,owner in rows]
 
 @app.post("/api/circuits",status_code=201)
 def create_circuit(payload:CircuitIn,background:BackgroundTasks,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
-    # Circuits are the organizers' job; riders only upload their GPS runs.
-    require_organizer(p)
-    c=Circuit(owner_id=p.id,name=payload.name.strip(),reference_points=[])
+    # Any rider may draw the circuits of their area: they count for training at once, and an organizer
+    # approves them before a tournament can use them.
+    circuit_limit.hit(str(p.id))
+    organizer=is_organizer(p)
+    if not organizer and db.scalar(select(func.count()).select_from(Circuit).where(Circuit.owner_id==p.id))>=RIDER_CIRCUITS:
+        raise HTTPException(409,f"Ya tienes {RIDER_CIRCUITS} circuitos: borra alguno antes de crear otro")
+    refuse_if_repeated(db,p,payload)
+    c=Circuit(owner_id=p.id,name=payload.name.strip(),reference_points=[],approved_at=utcnow() if organizer else None)
     assign_circuit(c,payload)
     db.add(c)
     db.commit()
     db.refresh(c)
-    # Routes uploaded before this circuit existed may contain runs on it.
+    # Routes uploaded before this circuit existed may contain runs on it, anyone's.
     background.add_task(scan_routes_for_circuit,c.id)
-    return circuit_payload(c)
+    return circuit_payload(c,p,p.display_name)
+
+@app.post("/api/circuits/{circuit_id}/approve")
+def approve_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    require_organizer(p)
+    c=circuit_to_change(db,circuit_id,p)
+    if c.approved_at is None:c.approved_at=utcnow()
+    db.commit()
+    return circuit_payload(c,p)
 
 @app.get("/api/circuits/{circuit_id}")
 def get_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
@@ -167,9 +203,11 @@ def get_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(
 
 @app.put("/api/circuits/{circuit_id}")
 def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,background:BackgroundTasks,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
-    require_organizer(p)
-    c=circuit_for_user(db,circuit_id,p.id)
+    c=circuit_to_change(db,circuit_id,p)
     refuse_if_published(c)
+    refuse_if_repeated(db,p,payload,exclude=c.id)
+    # A rider's change is reviewed again.
+    if not is_organizer(p):c.approved_at=None
     # Delete old sector gates first: PostgreSQL enforces (circuit_id,sort_order)
     # uniqueness immediately. Keep deletions + replacements in ONE transaction.
     c.sectors.clear()
@@ -178,12 +216,11 @@ def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,background:BackgroundT
     assign_circuit(c,payload)
     db.commit()
     background.add_task(scan_routes_for_circuit,c.id)
-    return circuit_payload(circuit_for_user(db,circuit_id,p.id))
+    return circuit_payload(circuit_to_change(db,circuit_id,p),p)
 
 @app.delete("/api/circuits/{circuit_id}",status_code=204)
 def delete_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
-    require_organizer(p)
-    c=circuit_for_user(db,circuit_id,p.id)
+    c=circuit_to_change(db,circuit_id,p)
     refuse_if_published(c)
     db.delete(c)
     db.commit()

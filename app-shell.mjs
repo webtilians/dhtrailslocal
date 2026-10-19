@@ -16,11 +16,12 @@ export function say(el, message, type = '') {
 const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const INSTALLED = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
 
-// Time trial and training are for everyone; circuits and tournaments only for the organization.
+// Time trial, training and circuits are for everyone (riders draw the circuits of their area too);
+// tournaments only for the organization.
 const TABS = [
   {href: './index.html', label: 'Time trial', page: 'timetrial'},
   {href: './entrenamiento.html', label: 'Entrenamiento', page: 'entrenamiento'},
-  {href: './circuitos.html', label: 'Circuitos', page: 'circuitos', admin: true},
+  {href: './circuitos.html', label: 'Circuitos', page: 'circuitos'},
   {href: './torneos.html', label: 'Torneos', page: 'torneos', admin: true},
 ];
 

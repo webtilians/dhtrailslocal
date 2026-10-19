@@ -32,6 +32,8 @@ class Circuit(Base):
     gate_radius_m: Mapped[int] = mapped_column(Integer, nullable=False, default=18)
     # Set once by an organizer: the circuit joins the monthly competition and its gates are frozen.
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the organization accepts it for tournaments. A rider's circuit counts for training at once.
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
     sectors: Mapped[list["Sector"]] = relationship(back_populates="circuit", cascade="all, delete-orphan", order_by="Sector.sort_order", passive_deletes=True)
