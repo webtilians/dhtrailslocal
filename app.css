@@ -167,6 +167,11 @@ input[type=date],input[type=number]{color-scheme:dark}
 .map-duo.two.stacked #videoDockB{grid-column:3;grid-row:1}
 .map-duo.two.stacked #map{grid-column:1 / -1;grid-row:2}
 .map-duo.two .video-dock{justify-content:flex-start}
+.own-controls{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;padding:4px;background:#0b2639;border-top:1px solid var(--line)}
+.own-controls button{flex:1;max-width:58px;min-width:30px;min-height:30px;padding:0 1px;border:1px solid #365778;border-radius:4px;background:#112b40;color:#cfe6f8;font:700 10.5px Inter,system-ui,sans-serif;white-space:nowrap;overflow:hidden;cursor:pointer;font-variant-numeric:tabular-nums;letter-spacing:-.2px}
+.own-controls button:hover{background:#153b5a}
+.own-controls .own-play{background:#2a5a82;color:#fff}
+.own-controls button:focus-visible{outline:2px solid #ffe066;outline-offset:1px}
 .pair-gap{margin:0;padding:10px 17px;border-bottom:1px solid var(--line);background:#0b2639;font-size:14px;line-height:1.5;color:#dceaf7}
 .pair-gap b{color:#ffe066}
 .pair-gap .chip{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 6px 0 2px;vertical-align:0}
