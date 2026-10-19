@@ -172,6 +172,10 @@ input[type=date],input[type=number]{color-scheme:dark}
 .own-controls button:hover{background:#153b5a}
 .own-controls .own-play{background:#2a5a82;color:#fff}
 .own-controls button:focus-visible{outline:2px solid #ffe066;outline-offset:1px}
+main.wide-page{max-width:1900px}
+.layout.training{grid-template-columns:minmax(0,1fr)}
+.layout.training .side-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start;gap:18px}
+.title-actions{display:flex;align-items:center;gap:12px}
 .pair-gap{margin:0;padding:10px 17px;border-bottom:1px solid var(--line);background:#0b2639;font-size:14px;line-height:1.5;color:#dceaf7}
 .pair-gap b{color:#ffe066}
 .pair-gap .chip{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 6px 0 2px;vertical-align:0}
