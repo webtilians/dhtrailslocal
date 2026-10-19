@@ -8,6 +8,7 @@ import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, takeShared, createMap, km, dateText} from './app-shell.mjs';
 import {cameraGps, readGoproTelemetry, telemetryGpx, videoMoments} from './gopro.mjs';
 import {idealRun, progressSeries, runReport, worstStretch} from './insights.mjs';
+import {runGates, gatesPassed, beep, unlockSound} from './gate-sounds.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -946,7 +947,7 @@ function hudSecond() {
 // playing on keeps the point; moving either video, or playing one on its own, takes a new one.
 function showPairGap() {
   const box = $('pairGap'), a = linked(), b = linkedB();
-  if (!clipB?.url || !a || !b) {box.hidden = true; return;}
+  if (!clipB?.url || !a || !b) {box.hidden = true; markLeader(); return;}
   const msA = runMs(clip, video()), msB = runMs(clipB, videoB());
   if (pair.recapture && !video().seeking && !videoB().seeking) {pair.anchor = {msA, msB}; pair.recapture = false;}
   const inA = ms => Math.max(0, Math.min(ms, a.run.elapsed_ms)), inB = ms => Math.max(0, Math.min(ms, b.run.elapsed_ms));
@@ -954,6 +955,7 @@ function showPairGap() {
   box.hidden = false;
   // Being placed (not played together from here yet): where each one is.
   if (pair.moved || !pair.anchor) {
+    markLeader();
     const apart = Math.round(Math.abs(there - here));
     box.replaceChildren('Vídeo 1 en el metro ' + Math.round(here) + ', vídeo 2 en el metro ' + Math.round(there) + (apart > 25 ?
       ': no están en el mismo sitio. Llévalos a un mismo punto con sus botones, o pulsa un sector o una frenada.' :
@@ -966,12 +968,20 @@ function showPairGap() {
   const gained = (timeAt(b.profile, fromB + ridden) - inB(pair.anchor.msB)) - (inA(msA) - inA(pair.anchor.msA));
   const apart = Math.round(Math.abs(ridden - (there - fromB)));
   const chip = d => Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color});
+  markLeader(Math.abs(gained) < 50 ? null : gained > 0 ? 1 : 2, seconds(Math.abs(gained)));
   const start = fromA < 5 && fromB < 5 ? 'Desde la salida' : Math.abs(fromA - fromB) <= 5 ? 'Desde el metro ' + Math.round(fromA) :
     'Desde donde empezaron (metro ' + Math.round(fromA) + ' y ' + Math.round(fromB) + ')';
   box.replaceChildren(node('span', {textContent: start + ': '}),
     ...(Math.abs(gained) < 50 ? [node('b', {textContent: 'van igual'})] : [chip(gained > 0 ? a : b),
       node('b', {textContent: 'el vídeo ' + (gained > 0 ? '1' : '2') + ' le saca ' + seconds(Math.abs(gained)) + ' al ' + (gained > 0 ? '2' : '1')})]),
     node('span', {textContent: ' · ' + (apart < 1 ? 'a la par' : apart + ' m entre ellos')}));
+}
+// The video that goes ahead since both were played together gets a green frame, with how much it gains.
+function markLeader(lead = null, gain = '') {
+  [[$('videoDock'), 1], [$('videoDockB'), 2]].forEach(([dock, which]) => {
+    dock.classList.toggle('leading', lead === which);
+    dock.dataset.lead = lead === which ? gain : '';
+  });
 }
 // Where a video starts and ends along its run, when the camera was switched on after the start or off
 // before the finish ('' when it films the whole run).
@@ -999,6 +1009,7 @@ async function linkSecond() {
   if (!run) {
     clipB.runId = null;
     $('pairGap').hidden = true;
+    markLeader();
     sayB((!t ? 'Este vídeo no lleva la telemetría de una GoPro.' : !t.good ? 'Este vídeo no tiene señal GPS.' :
       !a ? 'El vídeo 1 no está enlazado con ninguna bajada.' : 'En este vídeo no hay otra bajada de ' + a.run.circuit_name + ', tuya ni de tus amigos.') +
       ' Puedes verlos juntos igual: ponlos en el mismo punto con sus barras y dale a ▶.', 'warning');
@@ -1034,6 +1045,7 @@ function dropSecond() {
   pair.moved = true;
   $('videoDockB').hidden = true;
   $('pairGap').hidden = true;
+  markLeader();
   $('mapDuo').classList.remove('two');
   $('videoNameB').textContent = 'Otra bajada del mismo circuito: tuya de otro día o de un amigo que te pase su vídeo';
   fitVideo();
@@ -1067,6 +1079,52 @@ videoB().addEventListener('pause', () => ownLabel(videoB()));
 videoB().addEventListener('seeking', movedOrJumped);
 videoB().addEventListener('timeupdate', () => {hudSecond(); showPairGap(); if (video().paused) drawReplay();});
 videoB().addEventListener('error', () => {if (clipB) sayB('Este navegador no puede mostrar el segundo vídeo (H.265). Prueba con Safari, o con Chrome o Edge al día.', 'error');});
+
+// ---- Beeps: the same one when a video's run goes through the start and the finish, a softer one at each
+// sector gate. Each video beeps at its own run's gates, only when it plays through them (not when moved).
+const BEEPS_KEY = 'dhtrails.beeps';
+let beeps = true;
+try {beeps = localStorage.getItem(BEEPS_KEY) !== 'off';} catch {}
+const gateTimes = new WeakMap();
+function gatesOfRun(d) {
+  if (!gateTimes.has(d)) gateTimes.set(d, runGates(gatesOf(current.circuit).map(m => timeAt(d.profile, m)), d.run.elapsed_ms));
+  return gateTimes.get(d);
+}
+// A video moved to a gate lands on a frame, a frame or two past it at most.
+const ON_GATE_MS = 80;
+function beepAtGates(v, clipOf, runOf) {
+  // last: the run's moment at the previous check while playing; rung: the gate that sounded last (so it
+  // does not sound twice when the video is paused just past it and played on).
+  let last = null, rung = null;
+  const check = () => {
+    const c = clipOf(), d = runOf();
+    if (!beeps || !c || !d || v.paused || v.seeking) {last = null; return;}
+    const ms = runMs(c, v);
+    // Checked on every frame; at ×4 the steps are longer.
+    gatesPassed(last, ms, gatesOfRun(d), 3000 * Math.max(1, v.playbackRate)).filter(g => g !== rung).forEach(g => {beep(g.kind); rung = g;});
+    last = ms;
+  };
+  const step = () => {if (v.paused) return; check(); v.requestVideoFrameCallback ? v.requestVideoFrameCallback(step) : requestAnimationFrame(step);};
+  // Played from on a gate (a sector of the bar under the video takes it there), it beeps as it starts.
+  v.addEventListener('play', () => {const c = clipOf(); last = c && !v.seeking ? runMs(c, v) - ON_GATE_MS : null; step();});
+  v.addEventListener('seeking', () => {last = null; rung = null;});
+  v.addEventListener('timeupdate', check);
+}
+beepAtGates(video(), () => clip, linked);
+beepAtGates(videoB(), () => clipB, linkedB);
+// The browser only lets the page make sound after a tap: any tap with a video loaded gets it ready.
+['pointerdown', 'keydown'].forEach(type => document.addEventListener(type, () => {if (beeps && clip) unlockSound();}, {passive: true}));
+const showBeeps = () => {
+  $('beepToggle').setAttribute('aria-pressed', String(beeps));
+  $('beepToggle').textContent = (beeps ? '🔊' : '🔇') + ' Pitidos';
+};
+$('beepToggle').addEventListener('click', () => {
+  beeps = !beeps;
+  try {localStorage.setItem(BEEPS_KEY, beeps ? 'on' : 'off');} catch {}
+  showBeeps();
+  if (beeps) beep('line');
+});
+showBeeps();
 
 // ---- Tools to look closely: each video's own buttons, and one stretch over and over ----
 const toolsHint = (text = '') => {$('toolsHint').textContent = text;};
