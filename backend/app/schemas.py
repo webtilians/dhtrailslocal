@@ -9,6 +9,12 @@ class Credentials(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8,max_length=128)
 
+class NoteIn(BaseModel):
+    circuit_id: UUID
+    attempt_id: UUID | None = None
+    metres: float = Field(ge=0,le=100000)
+    text: str = Field(min_length=1,max_length=200)
+
 class SectorIn(BaseModel):
     index: int = Field(ge=1)
     name: str = Field(min_length=1,max_length=70)

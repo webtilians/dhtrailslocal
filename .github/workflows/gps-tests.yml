@@ -35,6 +35,7 @@ jobs:
           node --check gopro.mjs
           node --check sw.js
           node --check circuit-checks.mjs
+          node --check insights.mjs
           node --check competition-core.mjs
       - name: Test the browser modules
         run: node --test tests/*.test.mjs

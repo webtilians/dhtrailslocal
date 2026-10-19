@@ -141,6 +141,22 @@ class Attempt(Base):
         Index("ix_training_attempts_ranking", "circuit_id", "review_status"),
     )
 
+class TrainingNote(Base):
+    """A rider's own note at a place of a circuit ("aquí freno tarde"), shown again on every run there."""
+    __tablename__ = "training_notes"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    pilot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False)
+    circuit_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("circuits.id", ondelete="CASCADE"), nullable=False)
+    # The run it was written on, if any (the note stays when that run goes).
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("training_attempts.id", ondelete="SET NULL"))
+    metres: Mapped[float] = mapped_column(Float, nullable=False)
+    text: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__=(
+        CheckConstraint("metres >= 0", name="note_metres"),
+        Index("ix_training_notes_pilot_circuit", "pilot_id", "circuit_id"),
+    )
+
 class AttemptSplit(Base):
     __tablename__ = "attempt_splits"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

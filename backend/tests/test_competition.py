@@ -355,3 +355,27 @@ def test_login_attempts_are_limited():
         body = {"email": f"nobody-{uuid.uuid4().hex}@example.com", "password": "wrong-password-123"}
         codes = [client.post("/api/auth/login", json=body).status_code for _ in range(11)]
         assert codes[:10] == [401] * 10 and codes[10] == 429
+
+def test_training_notes_are_the_riders_own(organizer):
+    with TestClient(app) as client:
+        org = account(client, email=organizer)
+        cid = new_circuit(client, org, "Notas DH")
+        rider, other = account(client), account(client)
+        upload(client, rider, "/api/training/routes", gpx(fixes(recent(90), 2000)), "notas.gpx")
+        run = client.get(f"/api/training/runs?circuit_id={cid}", headers=rider).json()[0]
+        r = client.post("/api/training/notes", headers=rider, json={"circuit_id": cid, "attempt_id": run["id"],
+                                                                    "metres": 475.26, "text": "  Aquí freno   tarde "})
+        assert r.status_code == 201, r.text
+        assert r.json()["text"] == "Aquí freno tarde" and r.json()["metres"] == 475.3
+        client.post("/api/training/notes", headers=rider, json={"circuit_id": cid, "metres": 120, "text": "Mirar a la salida"})
+        notes = client.get(f"/api/training/notes?circuit_id={cid}", headers=rider).json()
+        assert [n["metres"] for n in notes] == [120, 475.3]
+        # Nobody else sees them, deletes them, or writes on a run they cannot see.
+        assert client.get(f"/api/training/notes?circuit_id={cid}", headers=other).json() == []
+        assert client.delete(f"/api/training/notes/{notes[0]['id']}", headers=other).status_code == 404
+        assert client.post("/api/training/notes", headers=other, json={"circuit_id": cid, "attempt_id": run["id"],
+                                                                       "metres": 10, "text": "x"}).status_code == 404
+        assert client.post("/api/training/notes", headers=rider, json={"circuit_id": cid, "metres": -1, "text": "x"}).status_code == 422
+        assert client.post("/api/training/notes", headers=rider, json={"circuit_id": cid, "metres": 5, "text": "   "}).status_code == 422
+        assert client.delete(f"/api/training/notes/{notes[0]['id']}", headers=rider).status_code == 204
+        assert len(client.get(f"/api/training/notes?circuit_id={cid}", headers=rider).json()) == 1

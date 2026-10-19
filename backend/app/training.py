@@ -18,13 +18,16 @@ from . import config
 from .competition import public_circuit, read_gps_upload, remove_file, run_attempt, store_activity
 from .database import SessionLocal, get_db
 from .friends import friend_ids
-from .models import Activity, Attempt, Circuit, Pilot, Tournament
+from .models import Activity, Attempt, Circuit, Pilot, Tournament, TrainingNote
 from .ratelimit import RateLimit
+from .schemas import NoteIn
 from .security import current_pilot
 from .timing import GpsError, detect_attempts, haversine, parse_gps
 
 router=APIRouter(prefix="/api/training")
 route_limit=RateLimit(60,3600)
+note_limit=RateLimit(120,3600)
+MAX_NOTES=500  # per rider
 NEAR_ROUTE_M=200  # a circuit is only searched when its start lies this close to the route's area
 # As strict as a time trial (its default share): passing a circuit's start and finish on another
 # path, as on the way to other trails, is not a run of that circuit.
@@ -202,3 +205,36 @@ def one_run(run_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_
     if not row:raise HTTPException(404,"Bajada no encontrada")
     a,name,tournament,pilot=row
     return run_payload(a,name,with_profile=True,tournament_name=tournament,pilot_name=pilot,mine=a.pilot_id==p.id)
+
+# Notes: what a rider wants to remember at a place of a circuit. Only they see them.
+def note_payload(n:TrainingNote)->dict:
+    return {"id":str(n.id),"circuit_id":str(n.circuit_id),"attempt_id":str(n.attempt_id) if n.attempt_id else None,
+            "metres":n.metres,"text":n.text,"created_at":n.created_at.isoformat()}
+
+@router.get("/notes")
+def my_notes(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    return [note_payload(n) for n in db.scalars(select(TrainingNote)
+        .where(TrainingNote.pilot_id==p.id,TrainingNote.circuit_id==circuit_id).order_by(TrainingNote.metres)).all()]
+
+@router.post("/notes",status_code=201)
+def add_note(payload:NoteIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    note_limit.hit(str(p.id))
+    text=" ".join(payload.text.split())
+    if not text:raise HTTPException(422,"Escribe la nota")
+    if not db.get(Circuit,payload.circuit_id):raise HTTPException(404,"Circuito no encontrado")
+    # Written while watching a run of yours or of a friend; the note is still only yours.
+    if payload.attempt_id and not db.execute(comparable_runs([p.id,*friend_ids(db,p.id)])
+                                             .where(Attempt.id==payload.attempt_id,Attempt.circuit_id==payload.circuit_id)).first():
+        raise HTTPException(404,"Bajada no encontrada")
+    if db.scalar(select(func.count()).select_from(TrainingNote).where(TrainingNote.pilot_id==p.id))>=MAX_NOTES:
+        raise HTTPException(409,f"Ya tienes {MAX_NOTES} notas: borra alguna antes de añadir otra")
+    note=TrainingNote(pilot_id=p.id,circuit_id=payload.circuit_id,attempt_id=payload.attempt_id,
+                      metres=round(payload.metres,1),text=text)
+    db.add(note);db.commit()
+    return note_payload(note)
+
+@router.delete("/notes/{note_id}",status_code=204)
+def delete_note(note_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    note=db.scalar(select(TrainingNote).where(TrainingNote.id==note_id,TrainingNote.pilot_id==p.id))
+    if not note:raise HTTPException(404,"Nota no encontrada")
+    db.delete(note);db.commit()

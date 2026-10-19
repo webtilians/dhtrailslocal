@@ -1,12 +1,13 @@
 // DH Trails v0.8 — Entrenamiento: upload routes, find the app's circuits in them, overlay runs.
 import {formatMs, formatDelta} from './sector-comparison.mjs';
 import {resample, gapSeries, segmentTimes, circuitPosition, circuitStretch, trailOffsets, steadySpeed, inBlind, brakingPoints, timeAt,
-  positionAt, timeLost, lossZones, pairedTime}
+  positionAt, timeLost, lossZones, pairedTime, brakingZones}
   from './telemetry.mjs';
 import {lineChart} from './charts.mjs';
 import {distanceSeries} from './gps-engine.mjs';
 import {$, node, say, startShell, takeShared, createMap, km, dateText} from './app-shell.mjs';
 import {cameraGps, readGoproTelemetry, telemetryGpx, videoMoments} from './gopro.mjs';
+import {idealRun, progressSeries, runReport, worstStretch} from './insights.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -154,6 +155,8 @@ async function compare() {
   showSelection(circuit);
   if (!circuit) {$('compareTag').textContent = '—'; return;}
   $('compareTag').textContent = circuit.name.toUpperCase();
+  renderEvolution(circuit);
+  loadNotes(circuit).catch(() => {});
   const pts = circuit.points.map(p => [p[0], p[1]]);
   view.add(L.polyline(pts, {color: '#5d7c99', weight: 8, opacity: .45}));
   view.fit(pts);
@@ -203,6 +206,7 @@ async function compare() {
   brakingIds = brakingByHand ? present : byDefault.slice(0, BRAKING_MAX);
   renderBraking();
   if (clip) renderMoments();
+  renderMarks();
   $('replayTime').max = replayEnd();
   replay.ms = Math.min(replay.ms, replayEnd());
   drawReplay();
@@ -383,6 +387,228 @@ function renderSegments(circuit, data, reference) {
     node('p', {className: 'help', textContent: 'Pulsa un sector o su tiempo para verlo en amarillo en el mapa. En morado, el mejor tiempo de cada segmento.'}));
 }
 
+// ---- Your evolution on a circuit: a report of the latest run, the ideal run and the progress ----
+const mineOn = circuit => runs.filter(r => r.mine !== false && r.circuit_id === circuit.id && r.started_at && r.elapsed_ms);
+const day = iso => new Date(iso).toLocaleDateString('es-ES', {day: 'numeric', month: 'short'});
+let evolutionVersion = 0;
+// A run told against your earlier ones: total, sectors, and where you lose most against your best run.
+async function reportText(run) {
+  const circuit = circuitOf(run.circuit_id), mine = runs.filter(r => r.mine !== false && r.circuit_id === run.circuit_id && r.started_at);
+  const r = runReport(run, mine), today = new Date(run.started_at).toDateString() === new Date().toDateString();
+  const parts = [(today ? 'Hoy' : 'El ' + day(run.started_at)) + ' en ' + (circuit?.name || run.circuit_name) + ': ' + formatMs(run.elapsed_ms) +
+    (!r.best ? ', tu primera bajada aquí.' : r.record ? ', ¡tu mejor tiempo! (' + formatDelta(r.vsBest) + ').' :
+      ', ' + formatDelta(r.vsBest) + ' sobre tu mejor (' + day(r.best.started_at) + ')' +
+      (r.previous && r.previous !== r.best ? ' y ' + formatDelta(r.vsPrevious) + ' frente a la anterior.' : '.'))];
+  const sectors = [r.gained, r.lost].filter(Boolean).map(x => formatDelta(x.ms) + ' en S' + (x.sector + 1));
+  if (sectors.length) parts.push('Frente a la anterior: ' + sectors.join(', ') + '.');
+  if (r.margin) parts.push('Tu mayor margen, en S' + (r.margin.sector + 1) + ': ' + formatDelta(r.margin.ms).slice(1) + ' más que tu mejor S' + (r.margin.sector + 1) + '.');
+  // Where it loses most against your best run, and whether the previous run lost there too.
+  if (r.best && !r.record) {
+    const [mineProfile, bestProfile] = await Promise.all([profileOf(run.id), profileOf(r.best.id)]);
+    const worst = worstStretch(timeLost(mineProfile, bestProfile, 25));
+    if (worst?.ms >= 300) {
+      let again = false;
+      if (r.previous && r.previous !== r.best) {
+        const before = worstStretch(timeLost(await profileOf(r.previous.id), bestProfile, 25));
+        again = !!before && before.from < worst.to && before.to > worst.from;
+      }
+      parts.push('Donde más pierdes frente a tu mejor bajada: del metro ' + Math.round(worst.from) + ' al ' + Math.round(worst.to) +
+        ' (' + formatDelta(worst.ms) + ')' + (again ? ', como en la anterior.' : '.'));
+    }
+  }
+  return parts.join(' ');
+}
+function renderEvolution(circuit) {
+  const version = ++evolutionVersion, mine = mineOn(circuit);
+  $('evolutionTag').textContent = mine.length ? mine.length + ' BAJADA(S) TUYAS' : 'TUS BAJADAS EN ESTE CIRCUITO';
+  ['lastReport', 'progressChart', 'progressSectors'].forEach(id => $(id).replaceChildren());
+  if (!mine.length) {
+    $('idealRun').replaceChildren(node('p', {className: 'placeholder', textContent: 'Todavía no tienes bajadas en este circuito.'}));
+    return;
+  }
+  const latest = mine.reduce((a, b) => Date.parse(b.started_at) > Date.parse(a.started_at) ? b : a);
+  reportText(latest).then(text => {if (version === evolutionVersion) $('lastReport').replaceChildren(node('p', {className: 'report-line', textContent: text}));})
+    .catch(() => {});
+  renderIdeal(circuit, mine);
+  renderProgress(mine);
+}
+// The best of each sector put together, and which day each came from.
+function renderIdeal(circuit, mine) {
+  const ideal = idealRun(mine);
+  if (!ideal) return $('idealRun').replaceChildren(node('p', {className: 'placeholder', textContent: 'Hace falta el tiempo de cada sector: aún falta alguno en tus bajadas.'}));
+  const fastest = ideal.fastest;
+  const rows = ideal.sectors.map((s, i) => {
+    const inFastest = fastest.sector_splits_ms?.[i];
+    const go = node('button', {type: 'button', className: 'segment-button', textContent: 'S' + (i + 1), title: 'Ver el sector S' + (i + 1) + ' en el mapa'});
+    go.addEventListener('click', () => {
+      mapSelection = {kind: 'segment', circuitId: circuit.id, index: i};
+      showSelection(circuit, {reveal: true});
+      seekVideo(i ? gatesOf(circuit)[i - 1] : 0);
+    });
+    return node('tr', {}, [node('td', {}, [go]), node('td', {textContent: formatMs(s.ms)}),
+      node('td', {textContent: when(s.run.started_at)}),
+      node('td', {className: s.run === fastest ? 'best' : '', textContent: s.run === fastest ? 'es de tu mejor bajada' :
+        Number.isFinite(inFastest) ? formatDelta(inFastest - s.ms) + ' en tu mejor bajada' : '—'})]);
+  });
+  $('idealRun').replaceChildren(
+    node('p', {className: 'ideal-total'}, [node('b', {textContent: formatMs(ideal.ms)}),
+      node('span', {textContent: ideal.margin > 300 ? ' si juntaras tu mejor sector de cada bajada: ' + seconds(ideal.margin) + ' menos que tu mejor tiempo (' +
+        formatMs(fastest.elapsed_ms) + ', ' + day(fastest.started_at) + '). Ahí está tu margen.' :
+        ' juntando tu mejor sector de cada bajada: tu mejor bajada (' + formatMs(fastest.elapsed_ms) + ') ya está casi ahí.'})]),
+    node('table', {className: 'standings'}, [node('thead', {}, [node('tr', {}, ['Sector', 'Tu mejor', 'Día', 'Frente a tu mejor bajada'].map(t => node('th', {textContent: t})))]),
+      node('tbody', {}, rows)]));
+}
+const SECTOR_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#a46bd9', '#e2557e', '#5fb8c9', '#8f9c3a'];
+const clockTicks = v => {const m = Math.floor(v / 60), sec = Math.round(v - m * 60); return m + ':' + String(sec).padStart(2, '0');};
+// Your times on the circuit along the days, and each sector over your best in it.
+function renderProgress(mine) {
+  // A run with a long stop (half as long again as your record) would flatten everything else.
+  const record = Math.min(...mine.map(r => r.elapsed_ms)), kept = mine.filter(r => r.elapsed_ms <= record * 1.5);
+  const p = progressSeries(kept), left = mine.length - kept.length;
+  if (!p || p.points.length < 2) {
+    $('progressChart').replaceChildren(node('p', {className: 'placeholder', textContent: 'Con una sola bajada aún no hay progreso que ver.'}));
+    return;
+  }
+  const xFormat = x => day(new Date(p.first + x * 86400000).toISOString());
+  const legend = items => node('div', {className: 'chart-legend'}, items.map(([label, color]) =>
+    node('span', {className: 'legend-item'}, [Object.assign(node('i', {className: 'chip'}), {style: 'background:' + color}), node('span', {textContent: label})])));
+  lineChart($('progressChart'), {height: 190, xFormat, yFormat: clockTicks, series: [
+    {label: 'Tus bajadas', color: '#3987e5', points: p.points.map(q => ({x: q.x, y: q.total / 1000}))},
+    {label: 'Tu récord', color: HIGHLIGHT, points: p.points.map(q => ({x: q.x, y: q.record / 1000}))}]});
+  $('progressChart').prepend(legend([['Cada bajada', '#3987e5'], ['Tu récord hasta ese día', HIGHLIGHT]]));
+  if (left) $('progressChart').append(node('p', {className: 'help', textContent: 'No se ven ' + left + ' bajada(s) con paradas largas (más de ' +
+    formatMs(record * 1.5) + ').'}));
+  if (!p.sectors) return;
+  lineChart($('progressSectors'), {height: 170, xFormat, zero: true, yFormat: v => '+' + v.toFixed(0) + ' s',
+    series: Array.from({length: p.sectors}, (_, i) => ({label: 'S' + (i + 1), color: SECTOR_COLORS[i % SECTOR_COLORS.length],
+      points: p.points.filter(q => q.over[i] !== null).map(q => ({x: q.x, y: q.over[i] / 1000}))}))});
+  $('progressSectors').prepend(legend(Array.from({length: p.sectors}, (_, i) => ['S' + (i + 1), SECTOR_COLORS[i % SECTOR_COLORS.length]])));
+}
+
+// ---- Notes: what you want to remember at a place of the circuit, seen again on every run there ----
+let notes = [], notesCircuit = null, notesLayer = null;
+async function loadNotes(circuit, force = false) {
+  if (!force && notesCircuit === circuit.id) return renderNotes();
+  notesCircuit = circuit.id;
+  notes = await shell.api.trainingNotes(circuit.id);
+  if (notesCircuit === circuit.id) renderNotes();
+}
+// Where a note would go now: the video's run, else the point picked on a chart or the map, else the replay.
+function notePlace() {
+  const circuit = circuitOf($('circuitSelect').value), d = linked();
+  if (!circuit) return null;
+  if (d && clip) {
+    const ms = (video().currentTime - clip.start) * 1000;
+    if (ms >= 0 && ms <= d.run.elapsed_ms) return {metres: runAt(d.profile, ms).s, attempt: d.run.id, where: 'donde va el vídeo'};
+  }
+  if (mapSelection?.circuitId === circuit.id) {
+    if (mapSelection.kind === 'point') return {metres: mapSelection.metres, where: 'en el punto elegido'};
+    if (mapSelection.kind === 'zone') return {metres: mapSelection.from, where: 'al principio del tramo elegido'};
+    if (mapSelection.kind === 'segment') return {metres: mapSelection.index ? gatesOf(circuit)[mapSelection.index - 1] : 0, where: 'al principio del sector elegido'};
+  }
+  // With a video the replay follows it: before its start or after its finish there is no place yet.
+  if (current && replayShown() && !(d && clip)) return {metres: runAt(current.reference.profile, Math.min(replay.ms, current.reference.run.elapsed_ms)).s,
+    attempt: current.reference.run.id, where: 'donde va la repetición'};
+  return null;
+}
+function showNotePlace() {
+  const place = notePlace();
+  say($('noteWhere'), place ? 'Se guardará en el metro ' + Math.round(place.metres) + ' (' + place.where + ').' :
+    'Elige antes dónde: lleva el vídeo o la repetición a ese sitio, o pulsa un punto en una gráfica.', place ? '' : 'warning');
+}
+function renderNotes() {
+  const circuit = circuitOf($('circuitSelect').value);
+  if (notesLayer) view.map.removeLayer(notesLayer);
+  notesLayer = null;
+  if (!circuit || notesCircuit !== circuit.id) return;
+  const distances = distanceSeries(circuit.points);
+  notesLayer = L.layerGroup(notes.map(n => L.marker(circuitPosition(circuit.points, distances, n.metres), {
+    icon: L.divIcon({html: '<div class="note-pin">📝</div>', className: '', iconSize: [24, 24], iconAnchor: [12, 22]}),
+    pane: 'videoNow'}).bindTooltip('Metro ' + Math.round(n.metres) + ': ' + n.text, {direction: 'top', offset: [0, -18]}))).addTo(view.map);
+  $('notesList').replaceChildren(...(notes.length ? notes.map(n => {
+    const go = node('button', {type: 'button', className: 'text-btn', textContent: 'Ir'});
+    go.addEventListener('click', () => {
+      selectPoint(circuit, n.metres / 1000, {reveal: true});
+      seekVideo(n.metres);
+    });
+    const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: '✕', title: 'Borrar la nota'});
+    remove.addEventListener('click', async () => {
+      try {await shell.api.deleteTrainingNote(n.id); await loadNotes(circuit, true); renderMarks();}
+      catch (err) {say($('noteWhere'), 'No se pudo borrar: ' + err.message, 'error');}
+    });
+    return node('div', {className: 'item note-item'}, [node('span', {}, [node('b', {textContent: 'Metro ' + Math.round(n.metres)}),
+      node('span', {textContent: ' · ' + n.text}), node('small', {textContent: ' · ' + day(n.created_at)})]),
+      node('span', {className: 'row-actions'}, [go, remove])]);
+  }) : [node('p', {className: 'placeholder', textContent: 'Todavía no tienes notas en este circuito.'})]));
+}
+async function addNote() {
+  const circuit = circuitOf($('circuitSelect').value), text = $('noteText').value.trim(), place = notePlace();
+  if (!circuit) return say($('noteWhere'), 'Elige antes un circuito.', 'error');
+  if (!text) return say($('noteWhere'), 'Escribe la nota.', 'error');
+  if (!place) return showNotePlace();
+  try {
+    await shell.api.addTrainingNote({circuit_id: circuit.id, attempt_id: place.attempt || null, metres: Math.max(0, place.metres), text});
+    $('noteText').value = '';
+    say($('noteWhere'), 'Nota guardada en el metro ' + Math.round(place.metres) + '. La verás en el mapa y en la barra del vídeo de todas tus bajadas.', 'success');
+    await loadNotes(circuit, true);
+    renderMarks();
+  } catch (err) {say($('noteWhere'), 'No se pudo guardar: ' + err.message, 'error');}
+}
+$('addNote').addEventListener('click', addNote);
+$('noteText').addEventListener('keydown', e => {if (e.key === 'Enter') addNote();});
+$('noteText').addEventListener('focus', showNotePlace);
+$('noteHere').addEventListener('click', () => {
+  if (linked()) video().pause();
+  showNotePlace();
+  $('notesPanel').scrollIntoView({behavior: 'smooth', block: 'center'});
+  $('noteText').focus({preventScroll: true});
+});
+
+// ---- Under the video: its run's sectors, brakings and notes, to jump to them with one tap ----
+function renderMarks() {
+  const box = $('videoMarks'), d = linked(), circuit = current?.circuit;
+  if (!clip || !d || !circuit) {box.hidden = true; return;}
+  const span = d.run.elapsed_ms, at = ms => (Math.max(0, Math.min(span, ms)) / span * 100).toFixed(2) + '%';
+  const jump = (ms, lead = 0) => () => {video().currentTime = Math.max(0, clip.start + ms / 1000 - lead); syncVideo();};
+  const mark = (className, left, title, ms, lead, width) => {
+    const b = node('button', {type: 'button', className: 'mark ' + className, title, ariaLabel: title});
+    b.style.left = left;
+    if (width) b.style.width = width;
+    b.addEventListener('click', event => {event.stopPropagation(); jump(ms, lead)();});
+    return b;
+  };
+  const bounds = [0, ...gatesOf(circuit)];
+  const sectors = bounds.map((m, i) => {
+    const ms = i ? timeAt(d.profile, m) : 0, b = mark('mark-sector', at(ms), 'Sector S' + (i + 1), ms, 0);
+    b.textContent = 'S' + (i + 1);
+    return b;
+  });
+  const brakes = brakingZones(d.profile, {speed: d.speed}).map(z => {
+    const from = timeAt(d.profile, z.from), to = timeAt(d.profile, z.to);
+    return mark('mark-brake', at(from), 'Frenada ' + zoneText(z) + ' (metro ' + Math.round(z.from) + ')', from, 1.5,
+      'max(4px, ' + ((to - from) / span * 100).toFixed(2) + '%)');
+  });
+  const flags = notesCircuit === circuit.id ? notes.map(n => {
+    const ms = timeAt(d.profile, n.metres), b = mark('mark-note', at(ms), 'Nota en el metro ' + Math.round(n.metres) + ': ' + n.text, ms, 2);
+    b.textContent = '📝';
+    return b;
+  }) : [];
+  box.replaceChildren(node('div', {className: 'mark-track'}), ...brakes, ...sectors, ...flags, node('div', {className: 'mark-now'}));
+  box.onclick = event => {
+    const rect = box.getBoundingClientRect();
+    jump((event.clientX - rect.left) / rect.width * span)();
+  };
+  box.hidden = false;
+  moveMarks();
+}
+// The line of the bar at the video's moment.
+function moveMarks() {
+  const d = linked(), now = $('videoMarks').querySelector('.mark-now');
+  if (!now || !d || !clip) return;
+  const ms = (video().currentTime - clip.start) * 1000;
+  now.style.left = (Math.max(0, Math.min(1, ms / d.run.elapsed_ms)) * 100).toFixed(2) + '%';
+}
+
 async function loadFriends() {
   const {friends, incoming, outgoing} = await shell.api.friends();
   $('friendsCount').textContent = friends.length ? friends.length + ' AMIGO(S)' : '';
@@ -483,6 +709,10 @@ $('analyze').addEventListener('click', async () => {
       'Ruta guardada. ' + (notCounted || noCircuitMessage(result.nearest)), result.found.length ? 'success' : '');
     $('routeFile').value = ''; $('routeName').textContent = 'Una salida completa: encontraremos las bajadas';
     await Promise.all([loadRoutes(), loadRuns(result.found[0]?.circuit_id)]);
+    // What each new run says against your earlier ones, without having to read the charts.
+    const lines = await Promise.all((result.runs || []).slice(0, 4).map(r => runs.find(x => x.id === r.id)).filter(Boolean)
+      .map(r => reportText(r).catch(() => null)));
+    $('found').prepend(...lines.filter(Boolean).map(text => node('p', {className: 'report-line', textContent: text})));
   } catch (err) {status('No se pudo analizar la ruta: ' + err.message, 'error');}
   finally {btn.disabled = false;}
 });
@@ -613,6 +843,7 @@ function syncVideo() {
   drawReplay();
   followSecond(ms);
   repeatStretch(d, ms);
+  moveMarks();
   if (ms < 0 || ms > d.run.elapsed_ms) {
     setHud(hud, d, ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(d.run.elapsed_ms));
     return;
@@ -979,7 +1210,7 @@ $('videoFile').addEventListener('change', async e => {
 // beside it as tall as fits on the screen; a horizontal one beside it on a wide screen, and above it
 // on a phone.
 function dockVideo() {
-  $('videoDock').append(video(), $('videoHud'));
+  $('videoDock').append(video(), $('videoMarks'), $('videoHud'));
   $('videoDock').hidden = false;
   $('mapDuo').classList.add('with-video');
   fitVideo();
