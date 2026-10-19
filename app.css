@@ -180,7 +180,11 @@ main.wide-page{max-width:1900px}
 .pair-gap b{color:#ffe066}
 .pair-gap .chip{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 6px 0 2px;vertical-align:0}
 .map-duo.stacked .video-dock{order:-1}
-.video-dock{display:flex;flex-direction:column;justify-content:center;min-width:0;background:#000;border-left:1px solid var(--line)}
+.video-dock{position:relative;display:flex;flex-direction:column;justify-content:center;min-width:0;background:#000;border-left:1px solid var(--line)}
+/* The video that goes ahead since both were played together, and by how much. */
+.video-dock.leading{outline:3px solid #3ddc84;outline-offset:-3px}
+.video-dock.leading::before{content:'▲ DELANTE ' attr(data-lead);position:absolute;top:8px;left:8px;z-index:2;padding:3px 8px;border-radius:4px;background:#3ddc84;color:#04210f;font:800 11px Inter,system-ui,sans-serif;letter-spacing:.4px;pointer-events:none;white-space:nowrap;font-variant-numeric:tabular-nums}
+#beepToggle[aria-pressed=false]{color:#8faac4}
 .map-duo.stacked .video-dock{border-left:0;border-bottom:1px solid var(--line)}
 .video-dock video{display:block;width:100%;max-height:calc(var(--map-h,530px) - 36px);background:#000}
 .map-duo.stacked .video-dock video{max-height:none}
