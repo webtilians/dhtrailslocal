@@ -186,11 +186,14 @@ function cleanReference() {
 }
 $('saveRoute').addEventListener('click', async () => {
   try {
-    if (!shell?.me?.organizer) throw Error('Entra con tu cuenta de organizador.');
+    if (!shell?.me) throw Error('Entra con tu cuenta.');
     if (!source) throw Error('Importa primero un archivo.');
     if (draft.start === null || draft.finish === null) throw Error('Marca la salida y la meta.');
     if (!$('circuitName').value.trim()) throw Error('Escribe el nombre del circuito.');
     const warnings = circuitChecks(source, draft.start, draft.finish, draft.gates, saved).filter(c => c.level === 'warning');
+    // A rider may not repeat a circuit that exists (the server says so too); an organizer is warned.
+    const repeat = warnings.find(w => /^Parece el mismo circuito/.test(w.text));
+    if (repeat && !shell.me.organizer) throw Error(repeat.text + ' Búscalo en la lista de circuitos.');
     if (warnings.length && !window.confirm('Antes de guardar, revisa:\n\n• ' + warnings.map(w => w.text).join('\n• ') +
       '\n\n¿Guardar el circuito así?')) return feedback('No se ha guardado: corrige la salida, la meta o los segmentos y vuelve a guardar.');
     if (!cleanReference()) return;
@@ -198,9 +201,10 @@ $('saveRoute').addEventListener('click', async () => {
     const circuit = buildCircuit($('circuitName').value, c.route, c.start, c.finish, c.sectors, c.zones);
     $('saveRoute').disabled = true;
     await shell.api.saveCircuit(circuit);
-    feedback('Ruta «' + circuit.name + '» guardada.' + (c.seconds >= 30 ? ' Se ha quitado del trazado una parada de ' +
-      (c.seconds / 60).toFixed(1).replace('.', ',') + ' min.' : '') + ' Ya puedes usarla en un torneo. Además se está buscando en todas' +
-      ' las rutas de entrenamiento ya subidas: sus bajadas aparecerán en Entrenamiento.', 'success');
+    feedback('Circuito «' + circuit.name + '» guardado.' + (c.seconds >= 30 ? ' Se ha quitado del trazado una parada de ' +
+      (c.seconds / 60).toFixed(1).replace('.', ',') + ' min.' : '') + (shell.me.organizer ? ' Ya puedes usarlo en un torneo.' :
+      ' Ya cuenta para los entrenamientos de todos; la organización lo revisará para poder usarlo en torneos.') +
+      ' Además se está buscando en todas las rutas de entrenamiento ya subidas: sus bajadas aparecerán en Entrenamiento.', 'success');
     source = null; draft = blank(); history = []; setTool(''); renderChecks([]);
     $('circuitName').value = ''; $('sourceName').textContent = 'La ruta de una bajada que pase por todo el circuito';
     await loadSaved();
@@ -222,11 +226,22 @@ async function loadSaved() {
   $('savedList').replaceChildren(...(saved.length ? saved.map(c => {
     const see = node('button', {type: 'button', className: 'btn outline small', textContent: 'Ver'});
     see.addEventListener('click', () => show(c));
+    // Who drew it, and whether the organization accepted it for tournaments.
+    const badge = c.published ? node('span', {className: 'badge ok', textContent: 'En torneo'}) :
+      c.approved ? node('span', {className: 'badge ok', textContent: 'Aprobado'}) : node('span', {className: 'badge', textContent: 'Pendiente'});
     const row = node('div', {className: 'item'}, [
-      node('span', {}, [node('b', {textContent: c.name}), node('small', {textContent: ' · ' + km(distanceSeries(c.points).at(-1)) + ' · ' + (c.sectors.length + 1) + ' segmentos'})]),
-      node('span', {className: 'row-actions'}, [
-        ...(c.published ? [node('span', {className: 'badge ok', textContent: 'En torneo'})] : []), see])]);
-    if (!c.published) {
+      node('span', {}, [node('b', {textContent: c.name}), node('small', {textContent: ' · ' + km(distanceSeries(c.points).at(-1)) + ' · ' +
+        (c.sectors.length + 1) + ' segmentos · ' + (c.mine ? 'tuyo' : 'de ' + (c.owner || 'otro piloto'))})]),
+      node('span', {className: 'row-actions'}, [badge, see])]);
+    if (shell.me?.organizer && !c.approved) {
+      const approve = node('button', {type: 'button', className: 'btn primary small', textContent: 'Aprobar'});
+      approve.addEventListener('click', async () => {
+        try {await shell.api.approveCircuit(c.id); await loadSaved(); status('«' + c.name + '» aprobado: ya se puede usar en un torneo.', 'success');}
+        catch (err) {status('No se pudo aprobar: ' + err.message, 'error');}
+      });
+      row.lastChild.append(approve);
+    }
+    if (c.can_edit) {
       const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: 'Borrar'});
       remove.addEventListener('click', async () => {
         if (!window.confirm('¿Borrar el circuito «' + c.name + '»? Las bajadas de entrenamiento encontradas en él también se borran.')) return;
@@ -242,10 +257,10 @@ async function loadSaved() {
 async function start() {
   shell = await startShell('circuitos');
   const allowed = () => {
-    const ok = !!shell.me?.organizer;
+    const ok = !!shell.me;
     $('workspace').hidden = !ok;
     $('notAllowed').hidden = ok;
-    if (!ok && shell.api && !shell.me) shell.askLogin('Entra con tu cuenta de organizador para crear circuitos.');
+    if (!ok && shell.api && !shell.me) shell.askLogin('Entra con tu cuenta para crear los circuitos de tu zona.');
     return ok;
   };
   shell.onUser(() => {if (allowed()) loadSaved().catch(err => status(err.message, 'error'));});

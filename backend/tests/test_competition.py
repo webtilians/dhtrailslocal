@@ -379,3 +379,36 @@ def test_training_notes_are_the_riders_own(organizer):
         assert client.post("/api/training/notes", headers=rider, json={"circuit_id": cid, "metres": 5, "text": "   "}).status_code == 422
         assert client.delete(f"/api/training/notes/{notes[0]['id']}", headers=rider).status_code == 204
         assert len(client.get(f"/api/training/notes?circuit_id={cid}", headers=rider).json()) == 1
+
+def test_riders_draw_circuits_for_training_and_organizers_approve_them(organizer):
+    with TestClient(app) as client:
+        # An area of its own, away from the other tests' (circuits within 30 m of each other are repeats).
+        shift = -10 - uuid.uuid4().int % 10000 * 0.003
+        org = account(client, email=organizer)
+        rider, other = account(client), account(client)
+        # Another rider rode there before the circuit existed.
+        upload(client, other, "/api/training/routes", gpx(fixes(recent(90), 2000, shift)), "antes.gpx")
+        r = client.post("/api/circuits", headers=rider, json=circuit_body("Mi zona", shift))
+        assert r.status_code == 201, r.text
+        cid = r.json()["id"]
+        assert r.json()["approved"] is False and r.json()["mine"] is True
+        # It counts for training at once, for everyone: the other rider's earlier route has a run on it.
+        assert len(client.get(f"/api/training/runs?circuit_id={cid}", headers=other).json()) == 1
+        assert any(c["id"] == cid for c in client.get("/api/public/circuits").json())
+        # The same circuit again is refused; nobody else may change or approve it.
+        again = client.post("/api/circuits", headers=other, json=circuit_body("Copia", shift))
+        assert again.status_code == 409 and "Mi zona" in again.json()["detail"]
+        assert client.delete(f"/api/circuits/{cid}", headers=other).status_code == 404
+        assert client.put(f"/api/circuits/{cid}", headers=other, json=circuit_body("Mía", shift)).status_code == 404
+        assert client.post(f"/api/circuits/{cid}/approve", headers=rider).status_code == 403
+        # A tournament waits for the organization's approval.
+        today = date.today()
+        body = {"name": "Torneo de la zona", "circuit_id": cid, "min_match": 0.85,
+                "starts_on": today.isoformat(), "ends_on": (today + timedelta(days=5)).isoformat()}
+        assert client.post("/api/tournaments", headers=org, json=body).status_code == 409
+        listed = {c["id"]: c for c in client.get("/api/circuits", headers=org).json()}
+        assert listed[cid]["approved"] is False and listed[cid]["can_edit"] is True and listed[cid]["mine"] is False
+        assert client.post(f"/api/circuits/{cid}/approve", headers=org).json()["approved"] is True
+        assert client.post("/api/tournaments", headers=org, json=body).status_code == 201
+        # Once in a tournament its gates are frozen, for its rider too.
+        assert client.delete(f"/api/circuits/{cid}", headers=rider).status_code == 409
