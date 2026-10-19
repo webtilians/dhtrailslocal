@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {distanceSeries} from '../gps-engine.mjs';
 import {timeAt, resample, speedSeries, gapSeries, segmentTimes, circuitPosition, circuitStretch, brakingZones, brakingPoints,
-  trailOffsets, steadyProfile, steadySpeed, positionAt, timeLost, lossZones, pairedTime} from '../telemetry.mjs';
+  trailOffsets, steadyProfile, steadySpeed, positionAt, timeLost, lossZones} from '../telemetry.mjs';
 
 // 100 m at a steady 10 m/s, one fix per second, with a GPS step back at 50 m.
 const steady = [[0, 0, 0, 0], [10, 1000, 0, 0], [20, 2000, 0, 0], [30, 3000, 0, 0], [40, 4000, 0, 0],
@@ -172,17 +172,6 @@ test('replay: where a run was at a given time, before the start and after the fi
   assert.deepEqual(positionAt(run, 10000), {s: 75, lat: 36.00075, lon: -4});
   assert.equal(positionAt(run, -2000).s, 0);
   assert.equal(positionAt(run, 99000).s, 100);
-});
-test('two videos: the other run at the same spot, or at the same time', () => {
-  // b is slower over the middle 50 m: 2 s behind from 75 m on.
-  const a = {profile: [[0, 0, 0, 0], [25, 2500, 0, 0], [50, 5000, 0, 0], [75, 7500, 0, 0], [100, 10000, 0, 0]], elapsed: 10000};
-  const b = {profile: [[0, 0, 0, 0], [25, 2500, 0, 0], [50, 6000, 0, 0], [75, 9500, 0, 0], [100, 12000, 0, 0]], elapsed: 12000};
-  assert.equal(pairedTime(6250, a, b), 7750);           // a at 62.5 m; b got there 1.5 s later
-  assert.equal(pairedTime(6250, a, b, 'time'), 6250);
-  assert.equal(pairedTime(-2000, a, b), -2000);          // waiting at the start, both
-  assert.equal(pairedTime(11000, a, b), 13000);          // 1 s past a's finish: 1 s past b's
-  // And the other way round: b at 9 s is at 71.4 m, where a was at 7.14 s.
-  assert.ok(Math.abs(pairedTime(9000, b, a) - 7142.857) < 0.001);
 });
 test('time lost stretch by stretch, and joined into zones', () => {
   // The same 100 m: the run is 2 s slower between 25 and 75 m and 0.5 s faster in the last 25 m.

@@ -64,6 +64,7 @@
         <div id="videoDock" class="video-dock" hidden></div>
         <div id="videoDockB" class="video-dock" hidden></div>
       </div>
+      <p id="pairGap" class="pair-gap" hidden></p>
       <div class="map-footer"><span id="mapSelection" role="status" aria-live="polite">Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.</span><button id="clearMapSelection" class="text-btn" type="button" hidden>Quitar selección</button></div>
       <div class="replay">
         <button id="replayPlay" class="btn outline small" type="button">▶ Reproducir</button>
@@ -74,16 +75,10 @@
         <span id="replayClock" class="replay-clock">00:00.0</span>
       </div>
       <div id="videoTools" class="replay video-tools" hidden>
-        <span id="pairMode" class="replay-speeds" role="group" aria-label="Cómo van a la par los dos vídeos" hidden>
-          <button type="button" data-pair="place" aria-pressed="true">Mismo sitio</button><button type="button" data-pair="time" aria-pressed="false">Mismo tiempo</button>
-        </span>
         <button id="stepBack" class="btn outline small" type="button" aria-label="Retroceder una décima de segundo">◀ 0,1 s</button>
         <button id="stepForward" class="btn outline small" type="button" aria-label="Avanzar una décima de segundo">0,1 s ▶</button>
         <button id="loopStretch" class="btn outline small" type="button" aria-pressed="false">↻ Repetir el tramo</button>
         <button id="noteHere" class="btn outline small" type="button">📝 Nota aquí</button>
-        <button id="manualSync" class="btn outline small" type="button" aria-pressed="false" hidden>✋ Ajustar a mano</button>
-        <button id="syncHere" class="btn primary small" type="button" hidden>Sincronizar aquí</button>
-        <button id="clearSync" class="text-btn" type="button" hidden>Quitar ajuste</button>
         <span id="toolsHint" class="tools-hint" role="status" aria-live="polite"></span>
       </div>
       <div id="replayBoard" class="replay-board"><p class="placeholder">Pulsa ▶ para ver las bajadas a la vez en el mapa, como si hubieran salido juntas.</p></div>
@@ -91,7 +86,7 @@
     <section class="panel">
       <div class="panel-title"><h2><span>Vídeo</span></h2><span class="caps" id="videoTag">GOPRO</span></div>
       <div class="panel-content">
-        <label class="file-input" for="videoFile"><span class="upload">▶</span><span><b>Añadir el vídeo de la GoPro</b><small id="videoName">El MP4 de la cámara. No se sube: se ve desde tu dispositivo</small></span></label>
+        <label class="file-input" for="videoFile"><span class="upload">▶</span><span><b>Añadir el vídeo de la GoPro</b><small id="videoName">El MP4 de la cámara (o cualquier vídeo). No se sube: se ve desde tu dispositivo</small></span></label>
         <input id="videoFile" type="file" accept="video/mp4,.mp4,.lrv" hidden>
         <p id="videoInfo" class="help" role="status" aria-live="polite">La GoPro guarda en el vídeo su GPS con la hora exacta: así encontramos tu bajada en él y lo movemos junto al mapa y las gráficas. Pulsa la gráfica, un sector o una frenada para saltar a ese momento.</p>
         <div id="videoActions" class="action-row" hidden></div>
@@ -104,8 +99,8 @@
         <div id="secondVideo" class="second-video" hidden>
           <label class="file-input" for="videoFileB"><span class="upload">⧉</span><span><b>Comparar con otro vídeo</b><small id="videoNameB">Otra bajada del mismo circuito: tuya de otro día o de un amigo que te pase su vídeo</small></span></label>
           <input id="videoFileB" type="file" accept="video/mp4,.mp4,.lrv" hidden>
-          <p id="videoInfoB" class="help" role="status" aria-live="polite">Los dos vídeos van a la par: en el mismo sitio del circuito (ves cuánto tiempo saca uno al otro en cada punto) o en el mismo tiempo desde la salida (ves quién va por delante).</p>
-          <video id="videoB" playsinline muted preload="metadata" hidden></video>
+          <p id="videoInfoB" class="help" role="status" aria-live="polite">Pon los dos donde quieras (cada uno con su barra, o los dos a la vez pulsando un sector, una frenada o una nota) y dale a ▶: cada uno sigue a su ritmo con su propia información, y debajo ves cuánto le saca uno al otro desde ese punto.</p>
+          <video id="videoB" controls playsinline muted preload="metadata" hidden></video>
           <p id="videoHudB" class="video-hud" aria-live="off"></p>
         </div>
       </div>
