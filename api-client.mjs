@@ -145,6 +145,9 @@ export function createCloudApi(config) {
       return request('/training/runs'+(query?'?'+query:''));
     },
     async trainingRun(id){return request('/training/runs/'+encodeURIComponent(id))},
+    async trainingNotes(circuitId){return request('/training/notes?circuit_id='+encodeURIComponent(circuitId))},
+    async addTrainingNote(note){return request('/training/notes',{method:'POST',body:note})},
+    async deleteTrainingNote(id){return request('/training/notes/'+encodeURIComponent(id),{method:'DELETE'})},
     // Friends share their training runs with each other
     async friends(){return request('/friends')},
     async addFriend(name){return request('/friends',{method:'POST',body:{display_name:name}})},

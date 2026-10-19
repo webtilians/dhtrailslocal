@@ -80,6 +80,7 @@
         <button id="stepBack" class="btn outline small" type="button" aria-label="Retroceder una décima de segundo">◀ 0,1 s</button>
         <button id="stepForward" class="btn outline small" type="button" aria-label="Avanzar una décima de segundo">0,1 s ▶</button>
         <button id="loopStretch" class="btn outline small" type="button" aria-pressed="false">↻ Repetir el tramo</button>
+        <button id="noteHere" class="btn outline small" type="button">📝 Nota aquí</button>
         <button id="manualSync" class="btn outline small" type="button" aria-pressed="false" hidden>✋ Ajustar a mano</button>
         <button id="syncHere" class="btn primary small" type="button" hidden>Sincronizar aquí</button>
         <button id="clearSync" class="text-btn" type="button" hidden>Quitar ajuste</button>
@@ -96,6 +97,7 @@
         <div id="videoActions" class="action-row" hidden></div>
         <div id="videoBox" class="video-box" hidden>
           <video id="video" controls playsinline preload="metadata"></video>
+          <div id="videoMarks" class="video-marks" hidden role="group" aria-label="Sectores, frenadas y notas de la bajada del vídeo"></div>
           <p id="videoHud" class="video-hud" aria-live="off"></p>
           <div id="videoMoments" class="moments"></div>
         </div>
@@ -106,6 +108,14 @@
           <video id="videoB" playsinline muted preload="metadata" hidden></video>
           <p id="videoHudB" class="video-hud" aria-live="off"></p>
         </div>
+      </div>
+    </section>
+    <section class="panel" id="notesPanel">
+      <div class="panel-title"><h2><span>Notas</span></h2><span class="caps">SOLO LAS VES TÚ</span></div>
+      <div class="panel-content">
+        <div class="note-form"><input id="noteText" maxlength="200" autocomplete="off" placeholder="Qué quieres recordar aquí (p. ej. aquí freno tarde)" aria-label="Texto de la nota"><button id="addNote" class="btn primary small" type="button">Añadir</button></div>
+        <p id="noteWhere" class="help">La nota se guarda en un punto del circuito: donde va el vídeo, el punto que pulses en una gráfica o donde esté la repetición. La verás en ese sitio en todas tus bajadas.</p>
+        <div id="notesList" class="items"><p class="placeholder">Todavía no tienes notas en este circuito.</p></div>
       </div>
     </section>
     <section class="panel">
@@ -129,6 +139,18 @@
     <section class="panel">
       <div class="panel-title"><h2><span>Por segmentos</span></h2></div>
       <div class="panel-content"><div id="segments" class="standings-wrap"><p class="placeholder">Elige bajadas para compararlas.</p></div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Tu evolución</span></h2><span class="caps" id="evolutionTag">TUS BAJADAS EN ESTE CIRCUITO</span></div>
+      <div class="panel-content">
+        <div id="lastReport" class="report"></div>
+        <h3 class="mini-title">Tu bajada ideal</h3>
+        <div id="idealRun" class="standings-wrap"><p class="placeholder">Sube unas cuantas bajadas de este circuito.</p></div>
+        <h3 class="mini-title">Tu progreso</h3>
+        <div id="progressChart" class="chart"></div>
+        <div id="progressSectors" class="chart"></div>
+        <p class="help">Arriba, el tiempo de cada bajada y tu récord de cada momento. Abajo, cuánto le falta a cada sector para tu mejor tiempo en él: cuanto más cerca de 0, mejor. Solo cuentan tus bajadas.</p>
+      </div>
     </section>
   </div>
 </div>
