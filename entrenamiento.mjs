@@ -689,7 +689,15 @@ async function loadRoutes() {
 $('routeFile').addEventListener('change', e => {
   const file = e.target.files[0];
   $('routeName').textContent = file ? file.name + ' · ' + Math.round(file.size / 1024) + ' KB' : 'Una salida completa: encontraremos las bajadas';
+  // Chosen from «Subir ruta» at the top: analysed right away, and the page goes to the result below.
+  if (file && quickUpload) {
+    quickUpload = false;
+    $('analyze').closest('.panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+    $('analyze').click();
+  }
 });
+let quickUpload = false;
+$('quickUpload').addEventListener('click', () => {quickUpload = true; $('routeFile').click();});
 $('analyze').addEventListener('click', async () => {
   const file = $('routeFile').files[0];
   if (!file) return status('Elige primero un archivo GPX o TCX.', 'error');
@@ -1268,7 +1276,7 @@ function fitVideo() {
   const shape = el => el.videoWidth && el.videoHeight ? el.videoWidth / el.videoHeight : 16 / 9;
   const ratio = shape(v), two = duo.classList.contains('two'), other = two ? shape(videoB()) : 0, width = duo.clientWidth, hud = 36;
   // Room below for the replay bar and the video tools.
-  const phone = width < 700, height = Math.max(phone ? 260 : 340, Math.min(phone ? 560 : 640, window.innerHeight - 215));
+  const phone = width < 700, height = Math.max(phone ? 260 : 340, Math.min(phone ? 560 : 860, window.innerHeight - 215));
   // Two videos: beside the map when they are vertical on a wide screen; else both on top, the map below.
   const stacked = two ? phone || (ratio > 1 && other > 1) : phone && ratio > 1;
   let dock, dock2 = 0, map;

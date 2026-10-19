@@ -16,7 +16,7 @@
 <body>
 <div class="checkered"></div>
 <nav id="appNav"></nav>
-<main>
+<main class="wide-page">
 <header class="heading">
   <div><div class="kicker">DH / ENTRENAMIENTO</div><h1>Sube tus rutas. <span>Compara cada bajada.</span></h1>
   <p>Sube cualquier GPX: buscamos en él los circuitos de la aplicación y guardamos cada bajada que encontremos. Después superpón bajadas del mismo circuito para ver dónde vas más rápido y dónde pierdes tiempo.</p></div>
@@ -25,34 +25,10 @@
   <p>Para guardar tus rutas y compararlas necesitas una cuenta.</p>
   <button id="loginButton" class="btn primary" type="button">Entrar o crear cuenta</button>
 </div></section>
-<div class="layout" id="workspace" hidden>
-  <aside class="stack">
-    <section class="panel">
-      <div class="panel-title"><h2><span>Sube una ruta</span></h2></div>
-      <div class="panel-content">
-        <label class="file-input" for="routeFile"><span class="upload">↥</span><span><b>Importar GPX / TCX</b><small id="routeName">Una salida completa: encontraremos las bajadas</small></span></label>
-        <input id="routeFile" type="file" accept=".gpx,.tcx" hidden>
-        <button id="analyze" class="btn primary full cloud-spaced" type="button">Buscar circuitos</button>
-        <div id="found" class="results"></div>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="panel-title"><h2><span>Amigos</span></h2><span class="caps" id="friendsCount"></span></div>
-      <div class="panel-content">
-        <p class="help" style="margin-top:0">Tus amigos y tú os veis las bajadas en los circuitos (nunca las rutas completas) para compararlas.</p>
-        <div class="action-row"><input id="friendName" maxlength="30" placeholder="Nombre de piloto de tu amigo" autocomplete="off" aria-label="Nombre de piloto de tu amigo"><button id="addFriend" class="btn outline" type="button">Invitar</button></div>
-        <p id="friendFeedback" class="help" role="status" aria-live="polite"></p>
-        <div id="friendsList" class="items"></div>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="panel-title"><h2><span>Tus rutas</span></h2><span class="caps" id="routesCount"></span></div>
-      <div class="panel-content"><div id="routes" class="items"><p class="placeholder">Cargando…</p></div></div>
-    </section>
-  </aside>
+<div class="layout training" id="workspace" hidden>
   <div class="stack wide">
     <section class="panel map-panel">
-      <div class="panel-title"><h2><span>Compara</span></h2><span class="caps" id="compareTag">—</span></div>
+      <div class="panel-title"><h2><span>Compara</span></h2><span class="title-actions"><span class="caps" id="compareTag">—</span><button id="quickUpload" class="btn outline small" type="button" title="Elige un GPX o TCX y buscamos en él tus circuitos">↥ Subir ruta</button></span></div>
       <div class="panel-content compare-controls">
         <select id="circuitSelect" aria-label="Circuito"><option value="">Sin bajadas todavía</option></select>
         <div id="runList" class="run-list"></div>
@@ -146,6 +122,30 @@
       </div>
     </section>
   </div>
+  <aside class="stack side-row">
+    <section class="panel">
+      <div class="panel-title"><h2><span>Sube una ruta</span></h2></div>
+      <div class="panel-content">
+        <label class="file-input" for="routeFile"><span class="upload">↥</span><span><b>Importar GPX / TCX</b><small id="routeName">Una salida completa: encontraremos las bajadas</small></span></label>
+        <input id="routeFile" type="file" accept=".gpx,.tcx" hidden>
+        <button id="analyze" class="btn primary full cloud-spaced" type="button">Buscar circuitos</button>
+        <div id="found" class="results"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Amigos</span></h2><span class="caps" id="friendsCount"></span></div>
+      <div class="panel-content">
+        <p class="help" style="margin-top:0">Tus amigos y tú os veis las bajadas en los circuitos (nunca las rutas completas) para compararlas.</p>
+        <div class="action-row"><input id="friendName" maxlength="30" placeholder="Nombre de piloto de tu amigo" autocomplete="off" aria-label="Nombre de piloto de tu amigo"><button id="addFriend" class="btn outline" type="button">Invitar</button></div>
+        <p id="friendFeedback" class="help" role="status" aria-live="polite"></p>
+        <div id="friendsList" class="items"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Tus rutas</span></h2><span class="caps" id="routesCount"></span></div>
+      <div class="panel-content"><div id="routes" class="items"><p class="placeholder">Cargando…</p></div></div>
+    </section>
+  </aside>
 </div>
 <p id="status" class="status" role="status" aria-live="polite">Las bajadas de entrenamiento son privadas y no cuentan para ningún torneo.</p>
 </main>
