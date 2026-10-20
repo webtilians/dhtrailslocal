@@ -7,15 +7,34 @@ import {$, node, say, startShell, createMap, pin, drawCircuit, km} from './app-s
 const view = createMap('map');
 const blank = () => ({start: null, finish: null, gates: []});
 let shell = null, source = null, tool = '', draft = blank(), history = [], saved = [];
-// The saved circuit being changed (null: a new one).
-let editing = null;
+// The saved circuit being changed (null: a new one); saved: the bar over the map keeps the last result.
+let editing = null, savedNote = false;
 const others = () => saved.filter(c => c.id !== editing?.id);
 const status = (message, type = '') => say($('status'), message, type);
-const feedback = (message, type = '') => say($('saveFeedback'), message, type);
+// What saving said, under the button that saved: in «3 Guardar ruta» and in the bar over the map.
+const feedback = (message, type = '') => {say($('saveFeedback'), message, type); say($('mapBarMessage'), message, type);};
 const latlon = p => [p.lat, p.lon];
 const SNAP_M = 35;
 
-function snapshot() {history.push(JSON.stringify(draft)); if (history.length > 40) history.shift();}
+function snapshot() {savedNote = false; history.push(JSON.stringify(draft)); if (history.length > 40) history.shift();}
+// Over the map, where the line is being marked: the save button (the one in «3 Guardar ruta» falls
+// below a long list of segments), what is being edited, and what saving said.
+function drawBar() {
+  const ready = !!source && draft.start !== null && draft.finish !== null;
+  $('mapBar').hidden = !editing && !ready && !savedNote;
+  $('mapBarText').hidden = !editing && !ready;
+  $('mapBarText').textContent = editing ? 'Editando «' + editing.name + '»' + (editing.published ? ' (se usa en un torneo)' : '') +
+    ': mueve la meta, la salida o los segmentos, o importa otra ruta, y guarda.' : 'Salida y meta marcadas: ya se puede guardar.';
+  $('saveNear').hidden = !ready;
+  $('saveNear').textContent = editing ? 'Guardar los cambios' : 'Guardar ruta';
+  $('stopEditing').hidden = !editing;
+}
+$('saveNear').addEventListener('click', () => {
+  if ($('circuitName').value.trim()) return $('saveRoute').click();
+  $('circuitName').scrollIntoView({behavior: 'smooth', block: 'center'});
+  $('circuitName').focus({preventScroll: true});
+  feedback('Escribe el nombre del circuito y vuelve a pulsar Guardar.', 'error');
+});
 function setTool(next) {
   tool = next;
   document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
@@ -33,7 +52,7 @@ function redraw() {
   view.clear();
   const list = $('gatesList');
   list.replaceChildren();
-  if (!source) {stats(null); return;}
+  if (!source) {stats(null); drawBar(); return;}
   const {start, finish, gates} = draft;
   // The imported route in white over a dark edge, to be seen on the map and on the satellite; the
   // circuit (start to finish) in magenta over it: neither the colour of a pin.
@@ -63,6 +82,7 @@ function redraw() {
   stats(ready ? source.slice(start, finish + 1) : source, gates.length + 1);
   renderChecks(ready ? circuitChecks(source, start, finish, gates, others()) : []);
   $('mapTag').textContent = ready ? 'LISTA PARA GUARDAR' : 'MARCA SALIDA Y META';
+  drawBar();
 }
 
 // What could make the circuit's timing unreliable, and other circuits on the same trail.
@@ -138,6 +158,7 @@ $('undo').addEventListener('click', () => {
 $('routeFile').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
+  savedNote = false;
   try {
     if (file.size > 20 * 1024 * 1024) throw Error('El archivo supera los 20 MB.');
     const ext = file.name.split('.').at(-1).toLowerCase();
@@ -222,6 +243,7 @@ $('saveRoute').addEventListener('click', async () => {
       ' Ya cuenta para los entrenamientos de todos; la organización lo revisará para poder usarlo en torneos.') +
       ' Además se está buscando en todas las rutas de entrenamiento ya subidas: sus bajadas aparecerán en Entrenamiento.', 'success');
     setEditing(null);
+    savedNote = true;
     source = null; draft = blank(); history = []; setTool(''); renderChecks([]);
     $('circuitName').value = ''; $('sourceName').textContent = 'La ruta de una bajada que pase por todo el circuito';
     await loadSaved();
@@ -234,12 +256,12 @@ $('saveRoute').addEventListener('click', async () => {
 // them (a finish too far, a segment in the wrong place) or to import another route for it.
 function setEditing(c) {
   editing = c;
-  $('editingNote').hidden = !c;
-  $('editingText').textContent = c ? 'Editando «' + c.name + '»' + (c.published ? ' (se usa en un torneo)' : '') +
-    ': mueve la salida, la meta o los segmentos, o importa otra ruta, y pulsa Guardar ruta.' : '';
   $('saveRoute').textContent = c ? 'Guardar los cambios' : 'Guardar ruta';
+  drawBar();
 }
 function startEditing(c) {
+  savedNote = false;
+  feedback('');
   setEditing(c);
   source = c.points.map(p => ({lat: p[0], lon: p[1], ele: p[2] ?? null, time: null}));
   draft = {start: 0, finish: source.length - 1, gates: c.sectors.map((s, i) => ({index: s.index, name: s.name || 'Segmento ' + (i + 1)}))};
@@ -249,10 +271,12 @@ function startEditing(c) {
   setTool('finish');
   redraw();
   view.fit(source.map(latlon), 25);
-  $('map').scrollIntoView({behavior: 'smooth', block: 'start'});
+  // The bar with the save button first, then the map (on a phone, «3 Guardar ruta» is far above).
+  $('mapBar').scrollIntoView({behavior: 'smooth', block: 'start'});
   status('Editando «' + c.name + '». Arrastra la meta (o la salida, o un límite) a su sitio, o elige una herramienta y haz clic en la línea.', 'success');
 }
 $('stopEditing').addEventListener('click', () => {
+  savedNote = false;
   setEditing(null);
   source = null; draft = blank(); history = []; setTool(''); renderChecks([]); redraw();
   $('circuitName').value = ''; $('sourceName').textContent = 'La ruta de una bajada que pase por todo el circuito';

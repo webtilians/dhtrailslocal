@@ -49,7 +49,6 @@
         <label class="field-title" for="circuitName">Nombre del circuito</label>
         <input id="circuitName" maxlength="100" placeholder="Ej. Kawasaki" autocomplete="off">
         <div id="checks" class="circuit-notes" aria-live="polite" hidden></div>
-        <div id="editingNote" class="editing-note" hidden><span id="editingText"></span> <button id="stopEditing" type="button" class="text-btn">Dejar de editar</button></div>
         <button id="saveRoute" type="button" class="btn primary full cloud-spaced">Guardar ruta</button>
         <p id="saveFeedback" class="save-feedback" role="status" aria-live="polite">Si la bajada tiene paradas, se quitan solas del trazado al guardar.</p>
       </div>
@@ -58,6 +57,11 @@
   <div class="stack wide">
     <section class="panel map-panel">
       <div class="panel-title"><h2><span>Mapa</span></h2><span class="caps" id="mapTag">SIN RUTA</span></div>
+      <div id="mapBar" class="map-bar" hidden>
+        <p id="mapBarText"></p>
+        <div class="map-bar-actions"><button id="saveNear" type="button" class="btn primary small">Guardar ruta</button><button id="stopEditing" type="button" class="text-btn">Dejar de editar</button></div>
+        <p id="mapBarMessage" class="save-feedback" role="status" aria-live="polite"></p>
+      </div>
       <div id="map" aria-label="Mapa para marcar salida, segmentos y meta"></div>
       <div class="map-footer"><span><i class="dot route"></i> Tu ruta</span><span><i class="dot magenta"></i> Circuito</span><span><i class="dot green"></i> Salida</span><span><i class="dot gold"></i> Límite de segmento</span><span><i class="dot red"></i> Meta</span></div>
       <div class="stats"><div><small>Distancia</small><strong id="statDistance">—</strong></div><div><small>Segmentos</small><strong id="statSegments">—</strong></div><div><small>Desnivel</small><strong id="statDescent">—</strong></div></div>
