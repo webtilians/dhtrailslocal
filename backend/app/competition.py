@@ -75,8 +75,9 @@ def verified(a:Attempt)->bool:
     return a.review_status=="approved" and a.checks is not None and (not a.checks or a.reviewed_by is not None)
 
 def ensure_checks(db:Session,attempts:list[Attempt])->None:
-    """Look for edited or copied files in entries stored before these checks existed (once each)."""
-    todo=[a for a in attempts if a.checks is None and a.tournament_id]
+    """Look for edited or copied files in runs stored before these checks existed (once each): time trial
+    entries, and training runs before they enter the circuit records."""
+    todo=[a for a in attempts if a.checks is None]
     for a in todo:
         activity=db.get(Activity,a.activity_id) if a.activity_id else None
         try:

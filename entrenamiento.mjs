@@ -664,6 +664,22 @@ $('clearMapSelection').addEventListener('click', () => {
 function skippedMessage(s) {
   return 'Pasas por «' + s.circuit_name + '», pero ' + s.reason + ': no cuenta como bajada.';
 }
+// Where the new runs leave the rider in each circuit's records (Récords), with a link to the table.
+function recordLines(result) {
+  return (result.records || []).map(r => {
+    const name = result.found.find(f => f.circuit_id === r.circuit_id)?.circuit_name || 'el circuito';
+    const text = !r.visible ? (r.rank === null && r.not_counted ? 'En ' + name + ' tu bajada no cuenta para los récords: el archivo parece editado o copiado.' :
+        'En ' + name + ' no sales en los récords: lo elegiste en Récords.') :
+      r.rank === null ? 'En ' + name + ' tu bajada no cuenta para los récords: el archivo parece editado o copiado.' :
+      r.hot_seat && r.new_best ? '🔥 ¡Hot seat en ' + name + '! Tu ' + formatMs(r.elapsed_ms) + ' es el mejor tiempo' +
+        (r.next ? ': le sacas ' + formatDelta(r.next.gap_ms).replace('+', '') + ' a ' + r.next.pilot + '.' : '.') :
+      r.hot_seat ? 'Sigues en el hot seat de ' + name + ' con ' + formatMs(r.elapsed_ms) + '.' :
+      r.rank === 1 ? 'En ' + name + ' empatas con el mejor tiempo (' + formatMs(r.elapsed_ms) + '), pero el hot seat sigue siendo de quien lo marcó antes.' :
+      (r.new_best ? 'Nuevo récord tuyo en ' + name + ': ' : 'En ' + name + ' sigues ') + r.rank + 'º de ' + r.riders +
+        ', a ' + formatDelta(r.gap_ms) + ' del hot seat' + (r.new_best ? '' : ' (tu mejor: ' + formatMs(r.elapsed_ms) + ')') + '.';
+    return node('p', {className: 'report-line'}, [text + ' ', node('a', {href: './records.html#' + r.circuit_id, textContent: 'Ver récords'})]);
+  });
+}
 // Why a route gave no run: it rides part of a circuit, or the nearest circuit is somewhere else.
 function noCircuitMessage(nearest) {
   if (!nearest) return 'Todavía no hay circuitos en la aplicación.';
@@ -722,7 +738,7 @@ $('analyze').addEventListener('click', async () => {
     // What each new run says against your earlier ones, without having to read the charts.
     const lines = await Promise.all((result.runs || []).slice(0, 4).map(r => runs.find(x => x.id === r.id)).filter(Boolean)
       .map(r => reportText(r).catch(() => null)));
-    $('found').prepend(...lines.filter(Boolean).map(text => node('p', {className: 'report-line', textContent: text})));
+    $('found').prepend(...recordLines(result), ...lines.filter(Boolean).map(text => node('p', {className: 'report-line', textContent: text})));
   } catch (err) {status('No se pudo analizar la ruta: ' + err.message, 'error');}
   finally {btn.disabled = false;}
 });

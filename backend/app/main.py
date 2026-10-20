@@ -22,6 +22,7 @@ from .training import router as training_router, scan_routes_for_circuit
 from .friends import router as friends_router
 from .accounts import router as accounts_router
 from .mail import mail_ready
+from .records import router as records_router
 from .config import CORS_ORIGINS, GPS_STORAGE_DIR, MAX_UPLOAD_BYTES, REPO_ROOT, require_secret, LOCAL_SINGLE_USER, LOCAL_PILOT_ID
 from .database import get_db
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone, utcnow
@@ -36,6 +37,7 @@ app.include_router(competition_router)
 app.include_router(training_router)
 app.include_router(friends_router)
 app.include_router(accounts_router)
+app.include_router(records_router)
 
 # Per client address: slows password guessing and mass sign-up on a public server.
 login_limit=RateLimit(10,300)
@@ -320,7 +322,8 @@ def delete_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Dep
 # that would expose backend/.env, database passwords, uploads and Git metadata.
 _PUBLIC_FILES={"index.html","entrenamiento.html","circuitos.html","torneos.html","app.css","app-shell.mjs",
                "timetrial.mjs","entrenamiento.mjs","circuitos.mjs","torneos.mjs","telemetry.mjs","charts.mjs",
-               "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs","circuit-checks.mjs","insights.mjs","gate-sounds.mjs","contrasena.html","contrasena.mjs",
+               "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs","circuit-checks.mjs","insights.mjs","gate-sounds.mjs",
+               "records.html","records.mjs","contrasena.html","contrasena.mjs",
                "editor.html","competicion.html",  # these two only redirect old links
                "manifest.json","sw.js","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"}
 # Pages and modules change together on every update: browsers must check before reusing a copy.

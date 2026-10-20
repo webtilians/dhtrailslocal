@@ -21,6 +21,7 @@ const INSTALLED = window.matchMedia?.('(display-mode: standalone)').matches || n
 const TABS = [
   {href: './index.html', label: 'Time trial', page: 'timetrial'},
   {href: './entrenamiento.html', label: 'Entrenamiento', page: 'entrenamiento'},
+  {href: './records.html', label: 'Récords', page: 'records'},
   {href: './circuitos.html', label: 'Circuitos', page: 'circuitos'},
   {href: './torneos.html', label: 'Torneos', page: 'torneos', admin: true},
 ];

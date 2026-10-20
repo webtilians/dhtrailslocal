@@ -6,7 +6,7 @@ from datetime import date
 
 from sqlalchemy import (
     Date, DateTime, ForeignKey, Integer, String, Boolean, Text, CheckConstraint,
-    UniqueConstraint, Index, Float
+    UniqueConstraint, Index, Float, text
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -22,6 +22,8 @@ class Pilot(Base):
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(30), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    # Whether the rider's best times appear in the circuit records (app.records).
+    in_records: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
 
 class Circuit(Base):
     __tablename__ = "circuits"
@@ -128,7 +130,7 @@ class Attempt(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Set when an organizer decided by hand (not the automatic filter).
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pilots.id", ondelete="SET NULL"))
-    # Signs of an edited or copied file found on a time trial entry (app.integrity); NULL: not checked yet.
+    # Signs of an edited or copied file (app.integrity), on time trial entries and training runs; NULL: not checked yet.
     checks: Mapped[list | None] = mapped_column(JSONB)
     # [metres along the circuit, ms since the start, lat, lon] per reliable fix (server-timed runs).
     profile: Mapped[list | None] = mapped_column(JSONB)
