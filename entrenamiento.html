@@ -74,6 +74,10 @@
         <div id="secondVideo" class="second-video" hidden>
           <label class="file-input" for="videoFileB"><span class="upload">⧉</span><span><b>Comparar con otro vídeo</b><small id="videoNameB">Otra bajada del mismo circuito: tuya de otro día o de un amigo que te pase su vídeo</small></span></label>
           <input id="videoFileB" type="file" accept="video/mp4,.mp4,.lrv" hidden>
+          <form id="youtubeForm" class="youtube-form" autocomplete="off">
+            <input id="youtubeUrl" type="text" inputmode="url" placeholder="…o pega el enlace de un vídeo de YouTube" aria-label="Enlace de un vídeo de YouTube">
+            <button class="btn outline small" type="submit">Cargar</button>
+          </form>
           <p id="videoInfoB" class="help" role="status" aria-live="polite">Pon los dos donde quieras (cada uno con su barra, o los dos a la vez pulsando un sector, una frenada o una nota) y dale a ▶: cada uno sigue a su ritmo con su propia información, y debajo ves cuánto le saca uno al otro desde ese punto.</p>
           <video id="videoB" controls playsinline muted preload="metadata" hidden></video>
           <p id="videoHudB" class="video-hud" aria-live="off"></p>

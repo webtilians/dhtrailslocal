@@ -9,6 +9,7 @@ import {$, node, say, startShell, takeShared, createMap, km, dateText} from './a
 import {cameraGps, readGoproTelemetry, telemetryGpx, videoMoments} from './gopro.mjs';
 import {idealRun, progressSeries, runReport, worstStretch} from './insights.mjs';
 import {runGates, gatesPassed, beep, unlockSound} from './gate-sounds.mjs';
+import {youtubeLink, YouTubeVideo} from './youtube.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -790,7 +791,7 @@ async function linkVideo() {
   }
   clip.runId = run.id;
   // A second video of another circuit no longer makes sense.
-  if (clipB && runs.find(r => r.id === clipB.runId)?.circuit_id !== run.circuit_id) dropSecond();
+  if (clipB?.runId && runs.find(r => r.id === clipB.runId)?.circuit_id !== run.circuit_id) dropSecond();
   // The video's run becomes the reference: the others say where they lost or gained against it.
   referenceId = run.id;
   // Show that run: on its circuit and among the compared ones.
@@ -914,7 +915,9 @@ function setHud(hud, d, text) {
 // with its own bar, or both at once on a sector, a braking or a note: each where its run was there) and
 // play them together; from there each one runs on, and the line under them says how much one gains on
 // the other since that point. Nothing keeps re-aligning them while they play.
-const videoB = () => $('videoB');
+// The second video: a file of the device (a <video>), or a YouTube video (its player, made to look like one).
+let youtube = null;
+const videoB = () => youtube || $('videoB');
 const isPlaying = () => {const A = video(); return !A.paused && !A.seeking && A.readyState >= 3;};
 const runMs = (c, v) => (v.currentTime - c.start) * 1000;
 // Both videos to where each run was at this metre of the circuit (`lead` seconds before it).
@@ -943,15 +946,44 @@ async function playBoth() {
   if (pair.moved || !pair.anchor) pair.anchor = clipB?.url && clip ? {msA: runMs(clip, video()), msB: runMs(clipB, videoB())} : null;
   pair.moved = false;
   pair.joint = true;
-  videos.forEach(v => {v.playbackRate = replay.speed;});
+  // YouTube goes up to ×2: both at the same speed.
+  const rate = youtube ? Math.min(replay.speed, 2) : replay.speed;
+  videos.forEach(v => {v.playbackRate = rate;});
+  if (youtube && videos.includes(youtube)) return playAlong();
   await Promise.all(videos.map(v => v.play().catch(() => {})));
 }
-const pauseBoth = () => both().forEach(v => v.pause());
+const pauseBoth = () => {endAlong(); both().forEach(v => v.pause());};
+// With a YouTube video: it takes a moment to start (more than a file) and may stop to load. It goes first,
+// video 1 starts where it should be by then, and while both play video 1 keeps the distance they were
+// lined up at. Each still shows its own rider: only the two clocks are kept together.
+let along = null;
+function endAlong() {
+  if (!along) return;
+  along = null;
+  video().playbackRate = replay.speed;
+}
+async function playAlong() {
+  const fromA = video().currentTime, fromB = youtube.currentTime, mine = {fromA, fromB};
+  along = mine;
+  await youtube.play();
+  if (along !== mine) return;
+  video().currentTime = fromA + Math.max(0, youtube.currentTime - fromB);
+  await video().play().catch(() => {});
+}
+// A small difference is made up with video 1 a little faster or slower (no jump to see); a big one, when
+// YouTube stopped to load, with a jump.
+setInterval(() => {
+  if (!along || !youtube || video().paused || youtube.paused || video().seeking) return;
+  const rate = Math.min(replay.speed, 2);
+  const drift = (video().currentTime - along.fromA) - (youtube.currentTime - along.fromB);
+  if (Math.abs(drift) > 1) {video().currentTime -= drift; video().playbackRate = rate; return;}
+  video().playbackRate = Math.abs(drift) < 0.04 ? rate : rate * (drift > 0 ? 0.92 : 1.08);
+}, 250);
 // The line under the second video: its own run at its own frame.
 function hudSecond() {
   const v = videoB(), b = linkedB(), hud = $('videoHudB');
   if (!clipB?.url) return;
-  if (!b) return hud.replaceChildren('Vídeo 2 · ' + clock(v.currentTime));
+  if (!b) return hud.replaceChildren((youtube ? 'YouTube' : 'Vídeo 2') + ' · ' + clock(v.currentTime));
   const ms = runMs(clipB, v);
   if (ms < 0 || ms > b.run.elapsed_ms)
     return setHud(hud, b, ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(b.run.elapsed_ms));
@@ -1010,7 +1042,11 @@ function footageNote(c, d, which) {
 }
 function showSecond() {
   const dock = $('videoDockB');
-  dock.append(videoB(), dock.querySelector('.own-controls') || ownControls(videoB(), 'vídeo 2'), $('videoHudB'));
+  // Its own buttons belong to the one shown: the file's player or YouTube's. YouTube's is never moved (it
+  // was made first in the dock): an iframe moved in the page loads again and stops saying when it plays.
+  dock.querySelector('.own-controls')?.remove();
+  $('videoB').hidden = !!youtube;
+  dock.append(...(youtube ? [] : [videoB()]), ownControls(videoB(), 'vídeo 2'), $('videoHudB'));
   videoB().hidden = false;
   $('videoDockB').hidden = false;
   $('mapDuo').classList.add('two');
@@ -1026,7 +1062,11 @@ async function linkSecond() {
     clipB.runId = null;
     $('pairGap').hidden = true;
     markLeader();
-    sayB((!t ? 'Este vídeo no lleva la telemetría de una GoPro.' : !t.good ? 'Este vídeo no tiene señal GPS.' :
+    if (youtube) sayB('Vídeo de YouTube' + (youtube.title ? ': «' + youtube.title + '»' : '') + '. YouTube le quita el GPS, así que no tiene ' +
+      'tiempo ni velocidad: ponlos los dos en el mismo punto (la salida, o una curva o una piedra que se reconozca) con los botones ' +
+      'de cada uno y dale a ▶ Reproducir. Arrancan a la vez y cada uno sigue a su ritmo.' +
+      (linked() ? ' El mapa y la información siguen al vídeo 1.' : ''), 'success');
+    else sayB((!t ? 'Este vídeo no lleva la telemetría de una GoPro.' : !t.good ? 'Este vídeo no tiene señal GPS.' :
       !a ? 'El vídeo 1 no está enlazado con ninguna bajada.' : 'En este vídeo no hay otra bajada de ' + a.run.circuit_name + ', tuya ni de tus amigos.') +
       ' Puedes verlos juntos igual: ponlos en el mismo punto con sus barras y dale a ▶.', 'warning');
     hudSecond();
@@ -1051,7 +1091,14 @@ async function linkSecond() {
   if (first) toolsHint('Están los dos en el metro ' + Math.round(first) + ', donde empieza la imagen de los dos.');
   syncVideo();
 }
+function dropYoutube() {
+  if (!youtube) return;
+  endAlong();
+  youtube.destroy();
+  youtube = null;
+}
 function dropSecond() {
+  dropYoutube();
   videoB().pause();
   if (clipB?.url) URL.revokeObjectURL(clipB.url);
   videoB().removeAttribute('src');
@@ -1078,6 +1125,7 @@ $('videoFileB').addEventListener('change', async e => {
   sayB('Leyendo la telemetría de ' + file.name + '…');
   try {
     const telemetry = await readTelemetry(file);
+    dropYoutube();
     if (clipB?.url) URL.revokeObjectURL(clipB.url);
     clipB = {file, name: file.name, telemetry, url: URL.createObjectURL(file), runId: null, start: 0};
     videoB().src = clipB.url;
@@ -1085,16 +1133,49 @@ $('videoFileB').addEventListener('change', async e => {
     $('mapDuo').scrollIntoView({behavior: 'smooth', block: 'start'});
   } catch (err) {sayB('No se puede usar este vídeo: ' + err.message, 'error');}
 });
+// A YouTube video instead of a file: its link, and the same place and buttons as a file.
+$('youtubeForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  const link = youtubeLink($('youtubeUrl').value);
+  if (!link) return sayB('Eso no es el enlace de un vídeo de YouTube. En YouTube: Compartir → Copiar enlace, y pégalo aquí.', 'error');
+  sayB('Cargando el vídeo de YouTube…');
+  const holder = node('div', {className: 'yt-frame'}), dock = $('videoDockB'), was = dock.hidden;
+  // The player is made in the page, where it will be seen.
+  dock.prepend(holder);
+  dock.hidden = false;
+  $('mapDuo').classList.add('two');
+  try {
+    const next = await YouTubeVideo.create(link, holder);
+    dropYoutube();
+    if (clipB?.url && !clipB.youtube) {$('videoB').pause(); URL.revokeObjectURL(clipB.url); $('videoB').removeAttribute('src'); $('videoB').load();}
+    youtube = next;
+    listenSecond(youtube);
+    clipB = {youtube: link.id, name: youtube.title || 'YouTube', telemetry: null, url: 'https://youtu.be/' + link.id, runId: null, start: 0};
+    $('videoNameB').textContent = 'YouTube · ' + (youtube.title || link.id);
+    $('youtubeUrl').value = '';
+    await linkSecond();
+    $('mapDuo').scrollIntoView({behavior: 'smooth', block: 'start'});
+  } catch (err) {
+    holder.remove();
+    if (!clipB) {dock.hidden = was; $('mapDuo').classList.remove('two'); fitVideo();}
+    sayB('No se puede usar ese vídeo de YouTube: ' + err.message, 'error');
+  }
+});
 // Each video plays and pauses on its own (only ▶ Reproducir plays both); moving one, or playing it on
 // its own, starts counting again at the next joint play.
-videoB().addEventListener('loadedmetadata', () => {fitVideo(); syncVideo();});
-videoB().addEventListener('play', () => {if (!pair.joint) pair.moved = true; ownLabel(videoB());});
-// A pause of the second one does not end playing together: the browser itself pauses a muted video for a
-// moment at times (out of view, or short of data) and plays it on.
-videoB().addEventListener('pause', () => ownLabel(videoB()));
-videoB().addEventListener('seeking', movedOrJumped);
-videoB().addEventListener('timeupdate', () => {hudSecond(); showPairGap(); if (video().paused) drawReplay();});
-videoB().addEventListener('error', () => {if (clipB) sayB('Este navegador no puede mostrar el segundo vídeo (H.265). Prueba con Safari, o con Chrome o Edge al día.', 'error');});
+function listenSecond(v) {
+  v.addEventListener('loadedmetadata', () => {fitVideo(); syncVideo();});
+  v.addEventListener('play', () => {if (!pair.joint) pair.moved = true; ownLabel(videoB());});
+  // A pause of the second one does not end playing together: the browser itself pauses a muted video for a
+  // moment at times (out of view, or short of data) and plays it on.
+  v.addEventListener('pause', () => {if (v === youtube) endAlong(); ownLabel(videoB());});
+  v.addEventListener('seeking', movedOrJumped);
+  v.addEventListener('timeupdate', () => {hudSecond(); showPairGap(); if (video().paused) drawReplay();});
+  v.addEventListener('error', () => {
+    if (clipB) sayB(v === youtube ? youtube.error : 'Este navegador no puede mostrar el segundo vídeo (H.265). Prueba con Safari, o con Chrome o Edge al día.', 'error');
+  });
+}
+listenSecond($('videoB'));
 
 // ---- Beeps: the same one when a video's run goes through the start and the finish, a softer one at each
 // sector gate. Each video beeps at its own run's gates, only when it plays through them (not when moved).
@@ -1376,6 +1457,7 @@ video().addEventListener('timeupdate', syncVideo);
 video().addEventListener('seeked', syncVideo);
 // Smooth while playing, frame by frame where the browser allows it.
 video().addEventListener('pause', () => {
+  endAlong();
   pair.joint = false;
   ownLabel(video());
   playButton();
