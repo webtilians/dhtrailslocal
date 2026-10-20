@@ -7,6 +7,9 @@ import {$, node, say, startShell, createMap, pin, drawCircuit, km} from './app-s
 const view = createMap('map');
 const blank = () => ({start: null, finish: null, gates: []});
 let shell = null, source = null, tool = '', draft = blank(), history = [], saved = [];
+// The saved circuit being changed (null: a new one).
+let editing = null;
+const others = () => saved.filter(c => c.id !== editing?.id);
 const status = (message, type = '') => say($('status'), message, type);
 const feedback = (message, type = '') => say($('saveFeedback'), message, type);
 const latlon = p => [p.lat, p.lon];
@@ -58,7 +61,7 @@ function redraw() {
   }
   const ready = start !== null && finish !== null;
   stats(ready ? source.slice(start, finish + 1) : source, gates.length + 1);
-  renderChecks(ready ? circuitChecks(source, start, finish, gates, saved) : []);
+  renderChecks(ready ? circuitChecks(source, start, finish, gates, others()) : []);
   $('mapTag').textContent = ready ? 'LISTA PARA GUARDAR' : 'MARCA SALIDA Y META';
 }
 
@@ -190,7 +193,7 @@ $('saveRoute').addEventListener('click', async () => {
     if (!source) throw Error('Importa primero un archivo.');
     if (draft.start === null || draft.finish === null) throw Error('Marca la salida y la meta.');
     if (!$('circuitName').value.trim()) throw Error('Escribe el nombre del circuito.');
-    const warnings = circuitChecks(source, draft.start, draft.finish, draft.gates, saved).filter(c => c.level === 'warning');
+    const warnings = circuitChecks(source, draft.start, draft.finish, draft.gates, others()).filter(c => c.level === 'warning');
     // A rider may not repeat a circuit that exists (the server says so too); an organizer is warned.
     const repeat = warnings.find(w => /^Parece el mismo circuito/.test(w.text));
     if (repeat && !shell.me.organizer) throw Error(repeat.text + ' Búscalo en la lista de circuitos.');
@@ -199,18 +202,61 @@ $('saveRoute').addEventListener('click', async () => {
     if (!cleanReference()) return;
     const c = withoutStops(source, draft.start, draft.finish, draft.gates.map(g => ({index: g.index, name: g.name})), []);
     const circuit = buildCircuit($('circuitName').value, c.route, c.start, c.finish, c.sectors, c.zones);
+    const changed = editing;
+    if (changed) {
+      circuit.cloud_id = changed.id;
+      // A circuit a tournament uses: its entries are timed again, and its standings change.
+      if (changed.published && !window.confirm('«' + changed.name + '» se usa en un torneo. Al guardarlo se vuelven a cronometrar ' +
+          (changed.entries === 1 ? 'su bajada de torneo' : 'sus ' + changed.entries + ' bajadas de torneo') +
+          ' con la salida, la meta y los segmentos nuevos (cambia su clasificación) y se buscan otra vez las de entrenamiento.\n\n¿Guardar los cambios?'))
+        return feedback('No se ha guardado.');
+    }
     $('saveRoute').disabled = true;
     await shell.api.saveCircuit(circuit);
-    feedback('Circuito «' + circuit.name + '» guardado.' + (c.seconds >= 30 ? ' Se ha quitado del trazado una parada de ' +
+    feedback(changed ? 'Circuito «' + circuit.name + '» actualizado.' + (changed.published ? ' Se están volviendo a cronometrar sus bajadas de torneo' +
+        ' y buscando otra vez las de entrenamiento: en unos segundos verás los tiempos nuevos en Time trial, Entrenamiento y Récords.' :
+        ' Se están buscando otra vez sus bajadas en todas las rutas de entrenamiento.') + (!changed.published && !shell.me.organizer ?
+        ' La organización lo revisará de nuevo para poder usarlo en torneos.' : '') :
+      'Circuito «' + circuit.name + '» guardado.' + (c.seconds >= 30 ? ' Se ha quitado del trazado una parada de ' +
       (c.seconds / 60).toFixed(1).replace('.', ',') + ' min.' : '') + (shell.me.organizer ? ' Ya puedes usarlo en un torneo.' :
       ' Ya cuenta para los entrenamientos de todos; la organización lo revisará para poder usarlo en torneos.') +
       ' Además se está buscando en todas las rutas de entrenamiento ya subidas: sus bajadas aparecerán en Entrenamiento.', 'success');
+    setEditing(null);
     source = null; draft = blank(); history = []; setTool(''); renderChecks([]);
     $('circuitName').value = ''; $('sourceName').textContent = 'La ruta de una bajada que pase por todo el circuito';
     await loadSaved();
     show(saved.find(x => x.name === circuit.name) || saved[0]);
   } catch (err) {feedback('No se ha guardado: ' + err.message, 'error');}
   finally {$('saveRoute').disabled = false;}
+});
+
+// Change a saved circuit: its line comes into the editor with its start, segments and finish, to move
+// them (a finish too far, a segment in the wrong place) or to import another route for it.
+function setEditing(c) {
+  editing = c;
+  $('editingNote').hidden = !c;
+  $('editingText').textContent = c ? 'Editando «' + c.name + '»' + (c.published ? ' (se usa en un torneo)' : '') +
+    ': mueve la salida, la meta o los segmentos, o importa otra ruta, y pulsa Guardar ruta.' : '';
+  $('saveRoute').textContent = c ? 'Guardar los cambios' : 'Guardar ruta';
+}
+function startEditing(c) {
+  setEditing(c);
+  source = c.points.map(p => ({lat: p[0], lon: p[1], ele: p[2] ?? null, time: null}));
+  draft = {start: 0, finish: source.length - 1, gates: c.sectors.map((s, i) => ({index: s.index, name: s.name || 'Segmento ' + (i + 1)}))};
+  history = [];
+  $('circuitName').value = c.name;
+  $('sourceName').textContent = 'El trazado guardado de ' + c.name + ' · ' + source.length + ' puntos';
+  setTool('finish');
+  redraw();
+  view.fit(source.map(latlon), 25);
+  $('map').scrollIntoView({behavior: 'smooth', block: 'start'});
+  status('Editando «' + c.name + '». Arrastra la meta (o la salida, o un límite) a su sitio, o elige una herramienta y haz clic en la línea.', 'success');
+}
+$('stopEditing').addEventListener('click', () => {
+  setEditing(null);
+  source = null; draft = blank(); history = []; setTool(''); renderChecks([]); redraw();
+  $('circuitName').value = ''; $('sourceName').textContent = 'La ruta de una bajada que pase por todo el circuito';
+  feedback('');
 });
 
 function show(c) {
@@ -242,6 +288,11 @@ async function loadSaved() {
       row.lastChild.append(approve);
     }
     if (c.can_edit) {
+      const change = node('button', {type: 'button', className: 'btn outline small', textContent: 'Editar'});
+      change.addEventListener('click', () => startEditing(c));
+      row.lastChild.append(change);
+    }
+    if (c.can_delete) {
       const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: 'Borrar'});
       remove.addEventListener('click', async () => {
         if (!window.confirm('¿Borrar el circuito «' + c.name + '»? Las bajadas de entrenamiento encontradas en él también se borran.')) return;

@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from . import config
-from .competition import router as competition_router
+from .competition import retime_entries, router as competition_router
 from .training import router as training_router, scan_routes_for_circuit
 from .friends import router as friends_router
 from .accounts import router as accounts_router
@@ -119,7 +119,7 @@ def refresh_session(p:Pilot=Depends(current_pilot)):
     """A new session for a rider who still has a valid one (the app asks once a day)."""
     return {"access_token":issue_token(p),"user":pilot_payload(p)}
 
-def circuit_payload(c:Circuit,p:Pilot|None=None,owner:str|None=None):
+def circuit_payload(c:Circuit,p:Pilot|None=None,owner:str|None=None,entries:int=0):
     return {
         "id":str(c.id),"cloud_id":str(c.id),"version":2,"name":c.name,
         "points":c.reference_points,"gateRadius":c.gate_radius_m,
@@ -128,7 +128,10 @@ def circuit_payload(c:Circuit,p:Pilot|None=None,owner:str|None=None):
         # Riders draw circuits too: they count for training at once, for tournaments once approved.
         "approved":c.approved_at is not None,"owner":owner,
         "mine":p is not None and c.owner_id==p.id,
-        "can_edit":p is not None and (c.owner_id==p.id or is_organizer(p)) and c.published_at is None,
+        # Its rider changes it until a tournament uses it; an organizer, always (the times follow).
+        "can_edit":p is not None and (is_organizer(p) or (c.owner_id==p.id and c.published_at is None)),
+        "can_delete":p is not None and (c.owner_id==p.id or is_organizer(p)) and c.published_at is None,
+        "entries":entries,  # time trial entries timed on it
         "sectors":[{"index":s.gate_index,"name":s.name} for s in c.sectors],
         "weakZones":[{"from":z.start_index,"to":z.end_index,"name":z.name} for z in c.weak_zones]
     }
@@ -160,10 +163,10 @@ def assign_circuit(c:Circuit,payload:CircuitIn):
     c.sectors=[Sector(sort_order=i,gate_index=s.index,name=s.name.strip()) for i,s in enumerate(payload.sectors)]
     c.weak_zones=[WeakZone(start_index=z.from_index,end_index=z.to,name=z.name.strip()) for z in payload.weakZones]
 
-def refuse_if_published(c:Circuit):
-    # Ranked splits refer to these exact gates; changing them would corrupt the standings.
-    if c.published_at is not None:
-        raise HTTPException(409,"Este circuito se usa en un torneo: su trazado y sus segmentos ya no se pueden cambiar ni borrar")
+def refuse_if_published(c:Circuit,p:Pilot|None=None):
+    # Ranked splits refer to these exact gates: only an organizer changes them, and every entry is timed again.
+    if c.published_at is not None and not (p is not None and is_organizer(p)):
+        raise HTTPException(409,"Este circuito se usa en un torneo: no se puede borrar, y solo la organización puede cambiarlo")
 
 @app.get("/api/circuits")
 def list_circuits(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
@@ -171,7 +174,9 @@ def list_circuits(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     rows=db.execute(select(Circuit,Pilot.display_name).join(Pilot,Pilot.id==Circuit.owner_id)
         .options(selectinload(Circuit.sectors),selectinload(Circuit.weak_zones))
         .order_by(Circuit.updated_at.desc()).limit(500)).all()
-    return [circuit_payload(c,p,owner) for c,owner in rows]
+    entries=dict(db.execute(select(Attempt.circuit_id,func.count()).where(Attempt.tournament_id.is_not(None))
+        .group_by(Attempt.circuit_id)).all())
+    return [circuit_payload(c,p,owner,entries.get(c.id,0)) for c,owner in rows]
 
 @app.post("/api/circuits",status_code=201)
 def create_circuit(payload:CircuitIn,background:BackgroundTasks,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
@@ -206,8 +211,9 @@ def get_circuit(circuit_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(
 @app.put("/api/circuits/{circuit_id}")
 def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,background:BackgroundTasks,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     c=circuit_to_change(db,circuit_id,p)
-    refuse_if_published(c)
+    refuse_if_published(c,p)
     refuse_if_repeated(db,p,payload,exclude=c.id)
+    published=c.published_at is not None
     # A rider's change is reviewed again.
     if not is_organizer(p):c.approved_at=None
     # Delete old sector gates first: PostgreSQL enforces (circuit_id,sort_order)
@@ -217,7 +223,11 @@ def update_circuit(circuit_id:uuid.UUID,payload:CircuitIn,background:BackgroundT
     db.flush()
     assign_circuit(c,payload)
     db.commit()
+    # Tournament entries timed again on the new line, then the training runs found again, then the
+    # entries checked and judged (none is compared with a run still timed on the old line).
+    if published:background.add_task(retime_entries,c.id,False)
     background.add_task(scan_routes_for_circuit,c.id)
+    if published:background.add_task(retime_entries,c.id)
     return circuit_payload(circuit_to_change(db,circuit_id,p),p)
 
 @app.delete("/api/circuits/{circuit_id}",status_code=204)

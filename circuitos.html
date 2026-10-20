@@ -49,6 +49,7 @@
         <label class="field-title" for="circuitName">Nombre del circuito</label>
         <input id="circuitName" maxlength="100" placeholder="Ej. Kawasaki" autocomplete="off">
         <div id="checks" class="circuit-notes" aria-live="polite" hidden></div>
+        <div id="editingNote" class="editing-note" hidden><span id="editingText"></span> <button id="stopEditing" type="button" class="text-btn">Dejar de editar</button></div>
         <button id="saveRoute" type="button" class="btn primary full cloud-spaced">Guardar ruta</button>
         <p id="saveFeedback" class="save-feedback" role="status" aria-live="polite">Si la bajada tiene paradas, se quitan solas del trazado al guardar.</p>
       </div>
