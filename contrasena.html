@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<meta name="referrer" content="no-referrer">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<title>Nueva contraseña | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main>
+<header class="heading">
+  <div><div class="kicker">DH / TU CUENTA</div><h1>Elige una contraseña nueva. <span>Y vuelve a la pista.</span></h1>
+  <p>El enlace del correo vale durante una hora y una sola vez. Al cambiarla se cierran las sesiones abiertas con la contraseña anterior, también en otros dispositivos.</p></div>
+</header>
+<section class="panel narrow-panel">
+  <div class="panel-title"><h2>Nueva <span>contraseña</span></h2></div>
+  <div class="panel-content">
+    <form id="resetForm">
+      <label class="field"><span class="field-title">Contraseña nueva (mínimo 8 caracteres)</span>
+        <input id="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+      <label class="field"><span class="field-title">Repítela</span>
+        <input id="again" type="password" autocomplete="new-password" minlength="8" maxlength="128" required></label>
+      <button id="save" class="btn primary full" type="submit">Guardar y entrar</button>
+    </form>
+    <p id="feedback" class="save-feedback" role="status" aria-live="polite"></p>
+  </div>
+</section>
+</main>
+<script type="module" src="./contrasena.mjs"></script>

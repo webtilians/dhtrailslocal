@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Mail for «¿Has olvidado la contraseña?»: a Gmail account with an app password (later, the club's domain).
+#   dhtrails-correo                   what is set up (never the password)
+#   dhtrails-correo gmail             asks for the Gmail account and its app password (not shown while typed),
+#                                     saves them and sends a test mail to that account
+#   dhtrails-correo probar [correo]   sends a test mail
+#   dhtrails-correo quitar            turns mail off
+set -euo pipefail
+env_file=/etc/dhtrails/dhtrails.env
+setting() { grep "^$1=" "$env_file" | tail -n 1 | cut -d= -f2- || true; }
+forget() { sed -i '/^\(SMTP_HOST\|SMTP_PORT\|SMTP_USER\|SMTP_PASSWORD\|MAIL_FROM\)=/d' "$env_file"; }
+send_test() {
+  local to=${1:-$(setting SMTP_USER)}
+  (set -a; . "$env_file"; set +a; cd /opt/dhtrails/backend && /opt/dhtrails-venv/bin/python -m app.mail "$to")
+}
+case "${1:-}" in
+  gmail)
+    read -r -p "Cuenta de Gmail que envía los correos: " user
+    read -r -s -p "Contraseña de aplicación (16 letras; no se ve al escribir): " pass; echo
+    pass=${pass// /}
+    if [ -z "$user" ] || [ ${#pass} -lt 16 ]; then echo "Falta la cuenta o la contraseña de aplicación (16 letras)." >&2; exit 1; fi
+    forget
+    printf 'SMTP_HOST=smtp.gmail.com\nSMTP_PORT=587\nSMTP_USER=%s\nSMTP_PASSWORD=%s\nMAIL_FROM=%s\n' "$user" "$pass" "$user" >> "$env_file"
+    systemctl restart dhtrails
+    echo "Guardado. Enviando un correo de prueba a $user..."
+    send_test "$user" ;;
+  probar) send_test "${2:-}" ;;
+  quitar)
+    forget
+    systemctl restart dhtrails
+    echo "Correo desactivado: «¿Has olvidado la contraseña?» ya no aparece." ;;
+  "")
+    user=$(setting SMTP_USER)
+    if [ -n "$user" ]; then echo "Envía $user por $(setting SMTP_HOST):$(setting SMTP_PORT)"
+    else echo "Sin correo. Para activarlo: dhtrails-correo gmail"; fi ;;
+  *) echo "Uso: dhtrails-correo [gmail | probar [correo] | quitar]" >&2; exit 2 ;;
+esac

@@ -31,3 +31,13 @@ LOCAL_PILOT_ID = uuid.UUID("d48951f3-59a3-49b1-9635-ea0da0fb5d87")
 ORGANIZER_EMAILS = {x.strip().lower() for x in os.getenv("ORGANIZER_EMAILS", "").split(",") if x.strip()}
 INVITE_CODE = os.getenv("INVITE_CODE", "").strip()
 COMPETITION_TIMEZONE = os.getenv("COMPETITION_TIMEZONE", "Europe/Madrid")
+
+# Mail for forgotten passwords, through any SMTP server (app.mail): for now a Gmail account with an app
+# password, written on the server by dhtrails-correo. Without SMTP_HOST, mail is off.
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+MAIL_FROM = os.getenv("MAIL_FROM", "").strip()
+# The site's own address, for the links in the mail (never taken from the request).
+PUBLIC_URL = (os.getenv("PUBLIC_URL", "").strip() or (CORS_ORIGINS[0] if CORS_ORIGINS else "http://127.0.0.1:8000")).rstrip("/")
