@@ -22,7 +22,7 @@
   <p>Importa el GPX de una bajada, marca sobre el mapa la salida, la meta y los límites de los segmentos, y guarda el circuito. Cualquier piloto puede crear los de su zona: cuentan enseguida para los entrenamientos de todos (también en las rutas ya subidas) y la organización los revisa para poder usarlos en torneos. No se puede repetir uno que ya exista: mira antes la lista.</p></div>
 </header>
 <section id="notAllowed" class="panel notice" hidden><div class="panel-content">Entra con tu cuenta para crear los circuitos de tu zona.</div></section>
-<div class="layout" id="workspace">
+<div class="layout circuits-layout" id="workspace">
   <aside class="stack">
     <section class="panel">
       <div class="panel-title"><h2>1 <span>Importar archivo</span></h2></div>
@@ -66,7 +66,7 @@
       <div class="map-footer"><span><i class="dot route"></i> Tu ruta</span><span><i class="dot magenta"></i> Circuito</span><span><i class="dot green"></i> Salida</span><span><i class="dot gold"></i> Límite de segmento</span><span><i class="dot red"></i> Meta</span></div>
       <div class="stats"><div><small>Distancia</small><strong id="statDistance">—</strong></div><div><small>Segmentos</small><strong id="statSegments">—</strong></div><div><small>Desnivel</small><strong id="statDescent">—</strong></div></div>
     </section>
-    <section class="panel">
+    <section class="panel saved-panel">
       <div class="panel-title"><h2><span>Circuitos guardados</span></h2><span class="caps" id="savedCount"></span></div>
       <div class="panel-content"><div id="savedList" class="items"><p class="placeholder">Cargando…</p></div></div>
     </section>
