@@ -153,6 +153,10 @@ export function createCloudApi(config) {
     async friends(){return request('/friends')},
     async addFriend(name){return request('/friends',{method:'POST',body:{display_name:name}})},
     async acceptFriend(pilotId){return request('/friends/'+encodeURIComponent(pilotId)+'/accept',{method:'POST'})},
-    async removeFriend(pilotId){return request('/friends/'+encodeURIComponent(pilotId),{method:'DELETE'})}
+    async removeFriend(pilotId){return request('/friends/'+encodeURIComponent(pilotId),{method:'DELETE'})},
+    // Circuit records: every rider's best time on each circuit, and who holds its hot seat
+    async records({friends=false}={}){return request('/records'+(friends?'?friends=true':''))},
+    async circuitRecords(id,{friends=false}={}){return request('/records/'+encodeURIComponent(id)+(friends?'?friends=true':''))},
+    async showInRecords(visible){return request('/records/me',{method:'PUT',body:{visible}})}
   };
 }

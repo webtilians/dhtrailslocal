@@ -91,6 +91,9 @@ class RegisterIn(Credentials):
     def readable(cls,v):
         return readable_name(v) if v is not None and v.strip() else None
 
+class RecordsIn(BaseModel):
+    visible: bool
+
 class ProfileIn(BaseModel):
     display_name: str = Field(min_length=3,max_length=30)
 
