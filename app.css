@@ -94,7 +94,11 @@ dialog.auth::backdrop{background:#030a12cc}
 .tab-row{display:flex;gap:6px;margin-bottom:6px}
 .auth-form .forgot{align-self:flex-start;margin:2px 0 8px}
 .narrow-panel{max-width:520px}
-.editing-note{margin:12px 0 0;padding:10px 12px;border:1px solid #ff3fd2;border-radius:6px;background:#2a1430;color:#ffd6f6;font-size:12px;line-height:1.5}
+.map-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 14px;border-bottom:1px solid var(--line);background:#2a1430;color:#ffd6f6;font-size:12px;line-height:1.5}
+.map-bar p{margin:0;flex:1 1 260px}
+.map-bar .map-bar-actions{display:flex;align-items:center;gap:12px}
+.map-bar .save-feedback{flex-basis:100%}
+.map-bar .save-feedback:empty{display:none}
 .tab-btn{flex:1;border:1px solid #365778;background:#112b40;color:#b3c8dc;border-radius:5px;padding:10px;font-weight:800;font-size:12px}
 .tab-btn.selected{background:#144269;color:#fff;border-color:#24a9ff}
 .invite.off{display:none}
