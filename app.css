@@ -198,6 +198,12 @@ main.wide-page{max-width:1900px}
 #beepToggle[aria-pressed=false]{color:#8faac4}
 .map-duo.stacked .video-dock{border-left:0;border-bottom:1px solid var(--line)}
 .video-dock video{display:block;width:100%;max-height:calc(var(--map-h,530px) - 36px);background:#000}
+/* A YouTube video as the second one: its player where the video goes. */
+.video-dock .yt-frame{width:100%;aspect-ratio:16/9;max-height:calc(var(--map-h,530px) - 36px);background:#000}
+.video-dock .yt-frame.vertical{aspect-ratio:9/16}
+.video-dock .yt-frame iframe{display:block;width:100%;height:100%;border:0}
+.youtube-form{display:flex;gap:8px;margin-top:8px}
+.youtube-form input{flex:1;min-width:0}
 .map-duo.stacked .video-dock video{max-height:none}
 .map-duo.narrow .leaflet-control-layers-expanded{padding:3px 6px}
 .map-duo.narrow .leaflet-control-layers-base label{font-size:10px;gap:4px;margin:1px 0}
