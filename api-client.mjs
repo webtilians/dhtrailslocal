@@ -94,6 +94,13 @@ export function createCloudApi(config) {
       persistToken(result.access_token);
       return {user:result.user,session:{user:result.user}};
     },
+    // A forgotten password: a link by mail, then a new password from that link (which also signs in)
+    async forgotPassword(email){return request('/auth/forgot',{method:'POST',body:{email}})},
+    async resetPassword(resetToken,password){
+      const result=await request('/auth/reset',{method:'POST',body:{token:resetToken,password}});
+      persistToken(result.access_token);
+      return result.user;
+    },
     async signUp(email,password,{inviteCode,displayName}={}){
       const result=await request('/auth/register',{method:'POST',
         body:{email,password,invite_code:inviteCode||null,display_name:displayName||null}});

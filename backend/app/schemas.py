@@ -9,6 +9,13 @@ class Credentials(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8,max_length=128)
 
+class ForgotIn(BaseModel):
+    email: EmailStr
+
+class ResetIn(BaseModel):
+    token: str = Field(min_length=20,max_length=2000)
+    password: str = Field(min_length=8,max_length=128)
+
 class NoteIn(BaseModel):
     circuit_id: UUID
     attempt_id: UUID | None = None

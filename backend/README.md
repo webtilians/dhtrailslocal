@@ -75,6 +75,8 @@ Variables de `backend/.env`:
 | `ORGANIZER_EMAILS` | Correos (separados por comas) que pueden publicar circuitos y aprobar bajadas. En tu PC con `LOCAL_SINGLE_USER=true` el perfil local ya es organizador. |
 | `INVITE_CODE` | Vacío (por defecto): inscripción abierta. Si tiene valor, crear cuenta exige este código. El registro está limitado a 5 cuentas por hora y dirección. |
 | `COMPETITION_TIMEZONE` | Zona horaria de los meses de la clasificación (por defecto `Europe/Madrid`). |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | Correo para «¿Has olvidado la contraseña?» (`app/mail.py`), por cualquier servidor SMTP; puerto 587 con STARTTLS. Por ahora una cuenta de Gmail con contraseña de aplicación; con dominio propio solo cambian estos valores. Sin ellos, el enlace no aparece. Hotmail/Outlook.com no sirve: desde 2024 no acepta contraseñas de aplicaciones externas, solo OAuth. |
+| `PUBLIC_URL` | Dirección de la web para los enlaces del correo (por defecto, el primer valor de `CORS_ORIGINS`). |
 | `API_HOST`, `API_PORT` | Dirección y puerto de `python run.py`. |
 
 Endpoints (documentados en `/docs`):
@@ -108,7 +110,8 @@ Comandos en el servidor, como root:
 - Actualizar desde GitHub: `dhtrails-update` (otra rama: `DH_BRANCH=nombre dhtrails-update`).
 - Inscripción: abierta por defecto. `dhtrails-invite nuevo` exige un código a los nuevos pilotos, `dhtrails-invite quitar` la vuelve a abrir y `dhtrails-invite` muestra el código actual.
 - Copia inmediata: `dhtrails-backup`. Estado y registro: `systemctl status dhtrails`, `journalctl -u dhtrails -n 50`.
-- Sesiones: duran 30 días y la aplicación las renueva una vez al día mientras se usa.
+- Sesiones: duran 30 días y la aplicación las renueva una vez al día mientras se usa. Al cambiar la contraseña se cierran las abiertas con la anterior.
+- Correo para recuperar la contraseña: `dhtrails-correo gmail` pide la cuenta de Gmail y su contraseña de aplicación (no se ve al escribirla), la guarda en `/etc/dhtrails/dhtrails.env` y envía un correo de prueba. `dhtrails-correo probar otro@correo` vuelve a probar, `dhtrails-correo quitar` lo desactiva y `dhtrails-correo` dice cuál está puesta. La contraseña de aplicación se crea en la cuenta de Google → Seguridad → Verificación en dos pasos (activada) → Contraseñas de aplicaciones.
 
 ### Copia de seguridad fuera del servidor
 

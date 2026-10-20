@@ -3,7 +3,11 @@ import time
 from collections import defaultdict, deque
 from threading import Lock
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+
+def client_key(request: Request) -> str:
+    # Behind Caddy, uvicorn takes the rider's address from the proxy headers (--proxy-headers).
+    return request.client.host if request.client else "unknown"
 
 class RateLimit:
     def __init__(self, limit: int, seconds: float):

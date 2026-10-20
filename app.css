@@ -92,6 +92,8 @@ dialog.auth::backdrop{background:#030a12cc}
 .auth-form{padding:22px;display:flex;flex-direction:column;gap:2px}
 .auth-form .field{display:block}
 .tab-row{display:flex;gap:6px;margin-bottom:6px}
+.auth-form .forgot{align-self:flex-start;margin:2px 0 8px}
+.narrow-panel{max-width:520px}
 .tab-btn{flex:1;border:1px solid #365778;background:#112b40;color:#b3c8dc;border-radius:5px;padding:10px;font-weight:800;font-size:12px}
 .tab-btn.selected{background:#144269;color:#fff;border-color:#24a9ff}
 .invite.off{display:none}

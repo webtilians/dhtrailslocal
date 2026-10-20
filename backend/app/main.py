@@ -20,12 +20,14 @@ from . import config
 from .competition import router as competition_router
 from .training import router as training_router, scan_routes_for_circuit
 from .friends import router as friends_router
+from .accounts import router as accounts_router
+from .mail import mail_ready
 from .records import router as records_router
 from .config import CORS_ORIGINS, GPS_STORAGE_DIR, MAX_UPLOAD_BYTES, REPO_ROOT, require_secret, LOCAL_SINGLE_USER, LOCAL_PILOT_ID
 from .database import get_db
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone, utcnow
 from .circuit_rules import repeated
-from .ratelimit import RateLimit
+from .ratelimit import RateLimit, client_key
 from .schemas import AttemptIn, CircuitIn, Credentials, RegisterIn
 from .security import current_pilot, is_organizer, issue_token, password_hash, pilot_payload, require_organizer, verify_password
 
@@ -34,6 +36,7 @@ app.add_middleware(CORSMiddleware,allow_origins=CORS_ORIGINS,allow_methods=["GET
 app.include_router(competition_router)
 app.include_router(training_router)
 app.include_router(friends_router)
+app.include_router(accounts_router)
 app.include_router(records_router)
 
 # Per client address: slows password guessing and mass sign-up on a public server.
@@ -41,9 +44,6 @@ login_limit=RateLimit(10,300)
 circuit_limit=RateLimit(30,3600)
 RIDER_CIRCUITS=20  # circuits a rider (not an organizer) may have
 register_limit=RateLimit(5,3600)
-def client_key(request:Request)->str:
-    return request.client.host if request.client else "unknown"
-
 @app.on_event("startup")
 def validate_settings():
     require_secret()
@@ -52,7 +52,7 @@ def validate_settings():
 def health(db:Session=Depends(get_db)):
     db.execute(text("SELECT 1"))
     return {"ok":True,"service":"dhtrailslocal-fastapi","database":"postgresql","local_mode":LOCAL_SINGLE_USER,
-            "invite_required":bool(config.INVITE_CODE)}
+            "invite_required":bool(config.INVITE_CODE),"password_reset":mail_ready()}
 
 @app.post("/api/auth/local")
 def local_session(request:Request, db:Session=Depends(get_db)):
@@ -79,7 +79,7 @@ def local_session(request:Request, db:Session=Depends(get_db)):
             pilot=db.get(Pilot,LOCAL_PILOT_ID)
             if not pilot:
                 raise
-    return {"access_token":issue_token(pilot.id),
+    return {"access_token":issue_token(pilot),
             "user":{**pilot_payload(pilot),"local":True,"name":"Mis datos en este PC"}}
 
 @app.post("/api/auth/register",status_code=201)
@@ -100,7 +100,7 @@ def register(credentials:RegisterIn,request:Request,db:Session=Depends(get_db)):
         db.rollback()
         raise HTTPException(409,"El correo ya está registrado")
     db.refresh(p)
-    return {"access_token":issue_token(p.id),"user":pilot_payload(p)}
+    return {"access_token":issue_token(p),"user":pilot_payload(p)}
 
 @app.post("/api/auth/login")
 def login(credentials:Credentials,request:Request,db:Session=Depends(get_db)):
@@ -108,7 +108,7 @@ def login(credentials:Credentials,request:Request,db:Session=Depends(get_db)):
     p=db.scalar(select(Pilot).where(Pilot.email==str(credentials.email).strip().lower()))
     if not p or not verify_password(credentials.password,p.password_hash):
         raise HTTPException(401,"Credenciales incorrectas")
-    return {"access_token":issue_token(p.id),"user":pilot_payload(p)}
+    return {"access_token":issue_token(p),"user":pilot_payload(p)}
 
 @app.get("/api/auth/me")
 def whoami(p:Pilot=Depends(current_pilot)):
@@ -117,7 +117,7 @@ def whoami(p:Pilot=Depends(current_pilot)):
 @app.post("/api/auth/refresh")
 def refresh_session(p:Pilot=Depends(current_pilot)):
     """A new session for a rider who still has a valid one (the app asks once a day)."""
-    return {"access_token":issue_token(p.id),"user":pilot_payload(p)}
+    return {"access_token":issue_token(p),"user":pilot_payload(p)}
 
 def circuit_payload(c:Circuit,p:Pilot|None=None,owner:str|None=None):
     return {
@@ -322,7 +322,8 @@ def delete_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Dep
 # that would expose backend/.env, database passwords, uploads and Git metadata.
 _PUBLIC_FILES={"index.html","entrenamiento.html","circuitos.html","torneos.html","app.css","app-shell.mjs",
                "timetrial.mjs","entrenamiento.mjs","circuitos.mjs","torneos.mjs","telemetry.mjs","charts.mjs",
-               "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs","circuit-checks.mjs","insights.mjs","gate-sounds.mjs","records.html","records.mjs",
+               "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs","circuit-checks.mjs","insights.mjs","gate-sounds.mjs",
+               "records.html","records.mjs","contrasena.html","contrasena.mjs",
                "editor.html","competicion.html",  # these two only redirect old links
                "manifest.json","sw.js","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"}
 # Pages and modules change together on every update: browsers must check before reusing a copy.

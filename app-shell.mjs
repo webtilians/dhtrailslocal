@@ -90,6 +90,7 @@ export async function startShell(page) {
   shell.health = await shell.api.health();
   shell.me = shell.health.local_mode ? await shell.api.localSession() : await shell.api.user();
   dialog.querySelector('.invite').hidden = !shell.health.invite_required;
+  dialog.querySelector('.forgot').hidden = !shell.health.password_reset;
   draw();
   return shell;
 }
@@ -143,27 +144,40 @@ function authDialog(shell) {
   const signup = node('button', {type: 'button', className: 'tab-btn', textContent: 'Crear cuenta'});
   const submit = node('button', {type: 'submit', className: 'btn primary full', textContent: 'Entrar'});
   const cancel = node('button', {type: 'button', className: 'text-btn', textContent: 'Cancelar'});
+  // A forgotten password: the mail gets a link to choose a new one (only when the server can send mail).
+  const forgot = node('button', {type: 'button', className: 'text-btn forgot', textContent: '¿Has olvidado la contraseña?'});
+  const passwordField = field('Contraseña (mínimo 8 caracteres)', password);
   const setMode = next => {
     mode = next;
-    login.classList.toggle('selected', mode === 'login');
+    login.classList.toggle('selected', mode !== 'signup');
     signup.classList.toggle('selected', mode === 'signup');
-    nameField.hidden = mode === 'login';
-    inviteField.classList.toggle('off', mode === 'login');
-    submit.textContent = mode === 'login' ? 'Entrar' : 'Crear cuenta';
+    nameField.hidden = mode !== 'signup';
+    passwordField.hidden = mode === 'forgot';
+    inviteField.classList.toggle('off', mode !== 'signup');
+    forgot.hidden = mode !== 'login' || !shell.health?.password_reset;
+    submit.textContent = {login: 'Entrar', signup: 'Crear cuenta', forgot: 'Enviar el enlace'}[mode];
     password.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
+    say(feedback, mode === 'forgot' ? 'Escribe el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.' : '');
   };
+  forgot.addEventListener('click', () => {setMode('forgot'); email.focus();});
   login.addEventListener('click', () => setMode('login'));
   signup.addEventListener('click', () => setMode('signup'));
   const form = node('form', {method: 'dialog', className: 'auth-form'}, [
     node('div', {className: 'tab-row'}, [login, signup]), note, nameField, field('Correo electrónico', email),
-    field('Contraseña (mínimo 8 caracteres)', password), inviteField, feedback, submit, cancel]);
+    passwordField, forgot, inviteField, feedback, submit, cancel]);
   const dialog = node('dialog', {className: 'auth'}, [form]);
   cancel.addEventListener('click', () => dialog.close());
+  // Opened again after asking for a link: back to signing in.
+  dialog.addEventListener('close', () => {if (mode === 'forgot') setMode('login');});
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (!shell.api) return say(feedback, 'No hay conexión con el servidor.', 'error');
     submit.disabled = true;
     try {
+      if (mode === 'forgot') {
+        const sent = await shell.api.forgotPassword(email.value.trim());
+        return say(feedback, sent.detail, 'success');
+      }
       const result = mode === 'login'
         ? await shell.api.signIn(email.value.trim(), password.value)
         : await shell.api.signUp(email.value.trim(), password.value, {displayName: name.value.trim(), inviteCode: invite.value.trim()});
