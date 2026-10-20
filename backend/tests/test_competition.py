@@ -77,8 +77,9 @@ def test_time_trial_enters_valid_runs_automatically(organizer):
         assert client.post("/api/tournaments", headers=rider, json={"name": "x", "circuit_id": cid,
             "starts_on": "2026-10-01", "ends_on": "2026-10-31"}).status_code == 403
         tid = new_tournament(client, org, cid)
-        # The circuit is frozen while a tournament uses it.
-        assert client.put(f"/api/circuits/{cid}", headers=org, json=circuit_body("Otro")).status_code == 409
+        # While a tournament uses it, only an organizer changes it (tests/test_circuit_edit.py).
+        assert client.put(f"/api/circuits/{cid}", headers=rider, json=circuit_body("Otro")).status_code == 404
+        assert client.delete(f"/api/circuits/{cid}", headers=org).status_code == 409
         assert next(c for c in client.get("/api/public/circuits").json() if c["id"] == cid)["in_tournament"] is True
         assert any(t["id"] == tid and t["state"] == "activo" for t in client.get("/api/public/tournaments").json())
 

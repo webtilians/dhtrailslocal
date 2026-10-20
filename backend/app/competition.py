@@ -16,11 +16,12 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import distinct_on
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from . import config
-from .database import get_db
+from .database import SessionLocal, get_db
 from .integrity import integrity_checks
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Tournament
 from .ratelimit import RateLimit
@@ -119,14 +120,86 @@ async def read_gps_upload(file:UploadFile):
     except GpsError as exc:raise HTTPException(422,str(exc)) from exc
     return filename,ext,data,fixes,hashlib.sha256(data).hexdigest()
 
+def set_run(attempt:Attempt,run)->None:
+    """An attempt's time, splits and profile from a run the server timed (its old splits already gone)."""
+    attempt.started_at=datetime.fromtimestamp(run.started_ms/1000,timezone.utc)
+    attempt.elapsed_ms=round(run.seconds*1000)
+    attempt.confidence=run.confidence
+    attempt.gps_status="compatible" if run.status=="compatible" else "review"
+    attempt.notes=" · ".join(run.issues+run.notes)[:500] or None
+    attempt.timed_by="server"
+    attempt.profile=run.profile
+    attempt.splits=[AttemptSplit(sort_order=i,elapsed_ms=None if s is None else round(s*1000)) for i,s in enumerate(run.splits)]
+
 def run_attempt(p:Pilot,circuit_id,run,filename:str,activity_id,tournament_id=None)->Attempt:
     attempt=Attempt(pilot_id=p.id,circuit_id=circuit_id,activity_id=activity_id,tournament_id=tournament_id,
-        source_filename=filename,started_at=datetime.fromtimestamp(run.started_ms/1000,timezone.utc),
-        elapsed_ms=round(run.seconds*1000),confidence=run.confidence,
-        gps_status="compatible" if run.status=="compatible" else "review",
-        notes=" · ".join(run.issues+run.notes)[:500] or None,timed_by="server",profile=run.profile)
-    attempt.splits=[AttemptSplit(sort_order=i,elapsed_ms=None if s is None else round(s*1000)) for i,s in enumerate(run.splits)]
+        source_filename=filename)
+    set_run(attempt,run)
     return attempt
+
+def within_dates(db:Session,t:Tournament,runs:list)->tuple[list,dict]:
+    """The runs ridden between the tournament's first and last day (in its time zone), and each run's day."""
+    days={id(r):local_date(db,datetime.fromtimestamp(r.started_ms/1000,timezone.utc)) for r in runs}
+    return [r for r in runs if t.starts_on<=days[id(r)]<=t.ends_on],days
+
+def judge(t:Tournament,inside:list)->tuple:
+    """The run a file enters: the fastest that follows the circuit, or else the fastest, with the reasons
+    it cannot enter. (run, passing, reasons)"""
+    passing=[r for r in inside if r.status=="compatible" and r.confidence>=t.min_match]
+    run=min(passing or inside,key=lambda r:r.seconds)
+    reasons=[]
+    if run.confidence<t.min_match:
+        reasons.append(f"coincide un {round(run.confidence*100)} % con el circuito (mínimo {round(t.min_match*100)} %)")
+    if run.status!="compatible":reasons.extend(run.issues)
+    return run,bool(passing),reasons
+
+def decide(entry:Attempt,passing:bool,checks:list,reasons:list)->None:
+    entry.checks=checks
+    if passing and checks:
+        # Fine on the circuit, but the file looks edited or copied: the organization decides.
+        entry.review_status,entry.reviewed_at="pending",None
+    else:
+        entry.review_status="approved" if passing else "rejected"
+        entry.reviewed_at=utcnow()
+    entry.review_note="; ".join(reasons)[:300] or None
+
+def retime_entries(circuit_id:uuid.UUID,judging:bool=True)->int:
+    """After an organizer changes a circuit that tournaments use: every entry is timed again from its own
+    GPS file with the new gates and, when judging, checked and judged again like a new entry (a decision an
+    organizer took by hand stays). An update runs it first without judging, then the training runs are
+    found again, then judging: so no run is compared with another one still timed on the old line.
+    Runs after the response, in its own database session."""
+    with SessionLocal() as db:
+        c=load_circuit(db,circuit_id)
+        if not c:return 0
+        circuit=public_circuit(c)
+        entries=db.scalars(select(Attempt).options(selectinload(Attempt.splits))
+                           .where(Attempt.circuit_id==c.id,Attempt.tournament_id.is_not(None))).all()
+        for a in entries:
+            t=db.get(Tournament,a.tournament_id)
+            activity=db.get(Activity,a.activity_id) if a.activity_id else None
+            try:
+                data=(config.GPS_STORAGE_DIR/str(activity.owner_id)/activity.storage_name).read_bytes()
+                fixes=parse_gps(data,activity.format)
+            except (AttributeError,OSError,GpsError):
+                continue  # without its file, the entry keeps its time
+            inside,_=within_dates(db,t,[r for r in detect_attempts(fixes,circuit) if r.seconds is not None])
+            if not inside:
+                if a.reviewed_by is None:
+                    a.review_status,a.reviewed_at="rejected",utcnow()
+                    a.review_note="Con el circuito cambiado ya no hay en el archivo una bajada completa de la salida a la meta"
+                continue
+            run,passing,reasons=judge(t,inside)
+            # The old splits go first: (attempt, sort_order) is unique.
+            a.splits.clear()
+            db.flush()
+            set_run(a,run)
+            if not judging:continue
+            checks=integrity_checks(db,a.pilot_id,data,fixes,run,activity.sha256 or "",c.id,exclude_id=a.id)
+            if a.reviewed_by is None:decide(a,passing,checks,reasons)
+            else:a.checks=checks
+        db.commit()
+        return len(entries)
 
 @router.put("/me/profile")
 def set_profile(payload:ProfileIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
@@ -190,7 +263,7 @@ def tournament_standings(tournament_id:uuid.UUID,db:Session=Depends(get_db)):
         .join(Pilot,Pilot.id==Attempt.pilot_id).options(selectinload(Attempt.splits))
         .where(Attempt.tournament_id==t.id,Attempt.review_status=="approved",Attempt.elapsed_ms.is_not(None))
         .order_by(Attempt.pilot_id,Attempt.elapsed_ms,Attempt.started_at)
-        .distinct(Attempt.pilot_id)).all()
+        .ext(distinct_on(Attempt.pilot_id))).all()
     best.sort(key=lambda row:(row[0].elapsed_ms,row[0].started_at))
     leader=best[0][0].elapsed_ms if best else None
     rows=[]
@@ -238,29 +311,16 @@ async def submit_entry(tournament_id:uuid.UUID,file:UploadFile=File(...),db:Sess
     runs=[r for r in detect_attempts(fixes,public_circuit(t.circuit)) if r.seconds is not None]
     if not runs:
         raise HTTPException(422,f"No hay en el archivo una bajada completa y con hora de la salida a la meta de {t.circuit.name}")
-    days={id(r):local_date(db,datetime.fromtimestamp(r.started_ms/1000,timezone.utc)) for r in runs}
-    inside=[r for r in runs if t.starts_on<=days[id(r)]<=t.ends_on]
+    inside,days=within_dates(db,t,runs)
     if not inside:
         raise HTTPException(422,f"La bajada es del {days[id(runs[0])]:%d/%m/%Y} y el torneo va del "
                                 f"{t.starts_on:%d/%m/%Y} al {t.ends_on:%d/%m/%Y}")
-    passing=[r for r in inside if r.status=="compatible" and r.confidence>=t.min_match]
-    run=min(passing or inside,key=lambda r:r.seconds)
-    reasons=[]
-    if run.confidence<t.min_match:
-        reasons.append(f"coincide un {round(run.confidence*100)} % con el circuito (mínimo {round(t.min_match*100)} %)")
-    if run.status!="compatible":reasons.extend(run.issues)
+    run,passing,reasons=judge(t,inside)
     # Before storing this file, so it is not compared with itself.
     checks=integrity_checks(db,p.id,data,fixes,run,digest,t.circuit_id)
     activity=store_activity(db,p,filename,ext,data,fixes,digest,datetime.fromtimestamp(run.started_ms/1000,timezone.utc))
     entry=run_attempt(p,t.circuit_id,run,filename,activity.id,t.id)
-    entry.checks=checks
-    if passing and checks:
-        # Fine on the circuit, but the file looks edited or copied: the organization decides.
-        entry.review_status,entry.reviewed_at="pending",None
-    else:
-        entry.review_status="approved" if passing else "rejected"
-        entry.reviewed_at=utcnow()
-    entry.review_note="; ".join(reasons)[:300] or None
+    decide(entry,passing,checks,reasons)
     try:
         db.flush();db.add(entry);db.commit()
     except Exception:
