@@ -2,7 +2,9 @@
 
 Each run found is timed like a time trial entry and kept privately with its profile
 (position along the circuit and time of every reliable fix), so the rider can overlay
-runs of the same circuit and compare speeds. Training runs never enter any standings.
+runs of the same circuit and compare speeds. Training runs never enter a tournament's standings;
+the rider's best time on each circuit enters its records (app.records), after the same checks for
+edited or copied files as a time trial entry.
 The rider's own time trial entries are listed too, so they can be compared with training,
 and so are the runs of accepted friends (only runs on circuits, never their whole routes).
 """
@@ -18,7 +20,9 @@ from . import config
 from .competition import public_circuit, read_gps_upload, remove_file, run_attempt, store_activity
 from .database import SessionLocal, get_db
 from .friends import friend_ids
+from .integrity import integrity_checks
 from .models import Activity, Attempt, Circuit, Pilot, Tournament, TrainingNote
+from .records import places
 from .ratelimit import RateLimit
 from .schemas import NoteIn
 from .security import current_pilot
@@ -111,13 +115,17 @@ def scan_routes_for_circuit(circuit_id:uuid.UUID)->int:
                                          Attempt.timed_by=="server",Attempt.review_status.is_(None)))
         found=0
         for a in db.scalars(select(Activity).where(Activity.id.not_in(tournament_evidence()))).all():
-            try:fixes=parse_gps((config.GPS_STORAGE_DIR/str(a.owner_id)/a.storage_name).read_bytes(),a.format)
+            try:
+                data=(config.GPS_STORAGE_DIR/str(a.owner_id)/a.storage_name).read_bytes()
+                fixes=parse_gps(data,a.format)
             except (OSError,GpsError):continue
             if not near_route(fixes,circuit):continue
             owner=db.get(Pilot,a.owner_id)
             for run in detect_attempts(fixes,circuit):
                 if not follows_circuit(run):continue
-                db.add(run_attempt(owner,c.id,run,a.filename,a.id))
+                attempt=run_attempt(owner,c.id,run,a.filename,a.id)
+                attempt.checks=integrity_checks(db,owner.id,data,fixes,run,a.sha256 or "",c.id)
+                db.add(attempt)
                 found+=1
         db.commit()
         return found
@@ -151,6 +159,8 @@ async def upload_route(file:UploadFile=File(...),db:Session=Depends(get_db),p:Pi
         for c,runs in found:
             for run in runs:
                 attempt=run_attempt(p,c.id,run,filename,activity.id)
+                # As for a time trial entry: a run that looks edited or copied stays out of the records.
+                attempt.checks=integrity_checks(db,p.id,data,fixes,run,digest,c.id)
                 db.add(attempt);attempts.append((attempt,c.name))
         db.commit()
     except Exception:
@@ -162,7 +172,9 @@ async def upload_route(file:UploadFile=File(...),db:Session=Depends(get_db),p:Pi
             "skipped":[{"circuit_id":str(c.id),"circuit_name":c.name,"match":round(run.confidence*100),
                         "reason":skipped_reason(run)} for c,run in skipped],
             "nearest":None if found or skipped else nearest_circuit(fixes,[public_circuit(c) for c in circuits]),
-            "runs":[run_payload(a,name) for a,name in attempts]}
+            "runs":[run_payload(a,name) for a,name in attempts],
+            # Where the rider stands now in each circuit's records.
+            "records":places(db,p,[c.id for c,_ in found],[a.id for a,_ in attempts])}
 
 @router.get("/routes")
 def my_routes(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):

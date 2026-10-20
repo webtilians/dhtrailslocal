@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<title>Récords | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main>
+<header class="heading">
+  <div><div class="kicker">DH / RÉCORDS</div><h1>¿Quién está en el hot seat? <span>El mejor tiempo de cada circuito.</span></h1>
+  <p>Cada ruta que subes en Entrenamiento se busca en todos los circuitos, y tu mejor bajada en cada uno entra aquí, igual que las de los torneos. El más rápido ocupa el 🔥 hot seat hasta que alguien le baje el tiempo. Las bajadas que parecen editadas o copiadas no cuentan.</p></div>
+</header>
+<section id="notAllowed" class="panel notice" hidden><div class="panel-content">Entra con tu cuenta para ver los récords de los circuitos.</div></section>
+<div class="layout" id="workspace">
+  <aside class="stack">
+    <section class="panel">
+      <div class="panel-title"><h2>Hot <span>seats</span></h2><span class="caps" id="seatCount"></span></div>
+      <div class="panel-content">
+        <div class="seg-toggle" role="group" aria-label="Con quién comparar">
+          <button type="button" data-friends="false" aria-pressed="true">Todos</button><button type="button" data-friends="true" aria-pressed="false">Mis amigos</button>
+        </div>
+        <div id="seats" class="seats"><p class="placeholder">Cargando…</p></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2>Tu <span>nombre</span></h2></div>
+      <div class="panel-content">
+        <label class="check-row"><input id="visible" type="checkbox"> <span>Salir en las clasificaciones</span></label>
+        <p id="visibleHelp" class="help"></p>
+      </div>
+    </section>
+  </aside>
+  <div class="stack wide">
+    <section class="panel">
+      <div class="panel-title"><h2><span id="boardTitle">Clasificación</span></h2><span class="caps" id="boardTag"></span></div>
+      <div class="panel-content">
+        <div id="hotSeat" class="hot-seat" hidden></div>
+        <p id="myPlace" class="my-place" hidden></p>
+        <div id="board" class="standings-wrap"><p class="placeholder">Elige un circuito.</p></div>
+        <div id="sectorKings" class="sector-kings" hidden></div>
+        <div id="notCounted" class="not-counted" hidden></div>
+      </div>
+    </section>
+  </div>
+</div>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+</main>
+<script type="module" src="./records.mjs"></script>

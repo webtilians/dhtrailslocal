@@ -46,12 +46,16 @@ def editor_sign(data:bytes)->str|None:
         if key in told:return f"el archivo dice que lo creó o editó {name}, un programa para editar rutas"
     return None
 
-def time_signs(fixes,run)->list[str]:
+def from_camera(data:bytes)->bool:
+    """The route this app writes from a GoPro's own GPS (Entrenamiento), with ten fixes a second."""
+    return b'creator="DH Trails (GoPro' in data[:8192]
+
+def time_signs(fixes,run,whole_seconds=True)->list[str]:
     """Hours edited by hand or by a program: odd intervals, or a speed no rider keeps on a trail."""
     seg=[f for f in fixes[run.start_index:run.finish_index+1] if f.time is not None]
     steps=[(b.time-a.time)/1000 for a,b in zip(seg,seg[1:]) if b.time>a.time]
     signs=[]
-    if steps:
+    if steps and whole_seconds:
         odd=sum(1 for s in steps if abs(s-round(s))>0.05)/len(steps)
         if odd>FRACTIONAL_SHARE:
             signs.append(f"el {round(odd*100)} % de los intervalos entre puntos no son segundos enteros, "
@@ -104,6 +108,6 @@ def integrity_checks(db:Session,pilot_id,data:bytes,fixes,run,digest:str,circuit
     signs=[]
     editor=editor_sign(data)
     if editor:signs.append(editor)
-    signs+=time_signs(fixes,run)
+    signs+=time_signs(fixes,run,whole_seconds=not from_camera(data))
     signs+=copy_signs(db,pilot_id,digest,run.profile,round(run.seconds*1000),circuit_id,exclude_id)
     return signs
