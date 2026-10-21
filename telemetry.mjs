@@ -234,3 +234,75 @@ export function brakingPoints(runs, {joinM = 35, marginM = 20} = {}) {
     return {from, to, zones: pair, speed, ms: runs.map(r => timeAt(r.profile, to) - timeAt(r.profile, from))};
   }).sort((p, q) => p.from - q.from);
 }
+
+// Where a run is at each moment of its video. A watch's run and a camera's video keep different clocks
+// (on 21/10/2026 three runs were 3.4 to 5 s off their videos, each a different amount), and a watch's GPS
+// also strays along the trail by some seconds. The camera's own GPS, ten fixes a second on the frames'
+// clock, says where the frames are wherever its fixes lie on the circuit (checked against the images of
+// two videos of the same trail). `fixes` are the camera's ({t: video second, lat, lon, dop, fix}), `start`
+// the video second where the run starts by the clocks. Returns {shift: seconds to add to `start` (the
+// frame where the run starts), profile: the run on the video's clock (the camera where its fixes are on
+// the line, the run moved by the camera's usual difference elsewhere), share: part of the circuit seen
+// by the camera}, or null when the camera's GPS cannot tell (too few fixes on the line).
+export function videoTrack(fixes, start, profile, points, distances, {maxOff = 12, maxDop = 5, step = 10, minShare = 0.3} = {}) {
+  const length = profile.at(-1)[0], end = start + profile.at(-1)[1] / 1000;
+  const kx = Math.cos(points[0][0] * Math.PI / 180) * 111195, ky = 111195;
+  // The camera's fixes on the line, metres along it, searched near the last one (no jumps across a loop).
+  // Only fixes that go further than all before count (GPS jitter steps back), and never faster than a
+  // rider goes (a fix thrown ahead would hide the good ones after it).
+  const seen = [];
+  let hint = 0;
+  for (const p of fixes) {
+    // A camera that does not tell its precision (DOP) counts on its fixes being on the line.
+    if (p.fix < 2 || p.t < start - 10 || p.t > end + 10 || p.dop >= maxDop) continue;
+    let best = {s: 0, off: Infinity};
+    for (let i = 0; i + 1 < points.length; i++) {
+      if (distances[i + 1] < hint - 150 || distances[i] > hint + 150) continue;
+      const ax = (points[i][1] - p.lon) * kx, ay = (points[i][0] - p.lat) * ky;
+      const dx = (points[i + 1][1] - points[i][1]) * kx, dy = (points[i + 1][0] - points[i][0]) * ky, len2 = dx * dx + dy * dy;
+      const f = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0, off = Math.hypot(ax + f * dx, ay + f * dy);
+      if (off < best.off) best = {s: distances[i] + f * (distances[i + 1] - distances[i]), off};
+    }
+    if (best.off > maxOff) continue;
+    const last = seen.at(-1);
+    if (last && (best.s - last.s) / Math.max(0.05, p.t - last.t) > 30) continue;
+    hint = best.s;
+    if (!last || best.s > last.s) seen.push({t: p.t, s: best.s});
+  }
+  // When the camera got to a metre (between two fixes at most 2 s apart), or null.
+  const camAt = s => {
+    const i = seen.findIndex(p => p.s >= s);
+    if (i <= 0) return null;
+    const a = seen[i - 1], b = seen[i];
+    return b.t - a.t <= 2 ? a.t + (b.t - a.t) * (s - a.s) / (b.s - a.s) : null;
+  };
+  const marks = [];
+  for (let s = 0; s < length; s += step) marks.push(s);
+  marks.push(length);
+  const raw = marks.map(s => {const c = camAt(s); return c === null ? null : c - (start + timeAt(profile, s) / 1000);});
+  const found = raw.filter(x => x !== null);
+  if (found.length < 3 || found.length < minShare * marks.length) return null;
+  const median = list => {const v = [...list].sort((a, b) => a - b); return v.length % 2 ? v[v.length >> 1] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;};
+  // The difference between the clocks moves along the run (a watch strays more in some stretches): where
+  // the camera saw a metre, its own, steadied over about 30 m on each side (a GPS fix is a few metres off);
+  // between those, it goes from one to the next; before the first and after the last, it stays.
+  const near = raw.map((x, i) => x === null ? null : median(raw.slice(Math.max(0, i - 3), i + 4).filter(y => y !== null)));
+  const known = near.map((x, i) => [i, x]).filter(([, x]) => x !== null);
+  const shiftAt = i => {
+    const after = known.findIndex(([j]) => j >= i);
+    if (after === 0) return known[0][1];
+    if (after < 0) return known.at(-1)[1];
+    const [j0, x0] = known[after - 1], [j1, x1] = known[after];
+    return j1 === i ? x1 : x0 + (x1 - x0) * (i - j0) / (j1 - j0);
+  };
+  const shifts = marks.map((_, i) => shiftAt(i)), shift = shifts[0], t0 = start + shift;
+  let last = -1;
+  const out = marks.map((s, i) => {
+    let ms = i ? Math.round((start + timeAt(profile, s) / 1000 + shifts[i] - t0) * 1000) : 0;
+    if (ms <= last) ms = last + 1;
+    last = ms;
+    const at = circuitPosition(points, distances, s);
+    return [s, ms, at[0], at[1]];
+  });
+  return {shift, profile: out, share: found.length / marks.length};
+}
