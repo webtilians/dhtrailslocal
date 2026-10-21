@@ -1,5 +1,7 @@
 // DH Trails v0.8 — small SVG line charts for training telemetry (no library).
 // One y-axis per chart, thin 2 px lines, recessive grid, a crosshair with every run's value.
+import {T, dec} from './i18n.mjs';
+
 const NS = 'http://www.w3.org/2000/svg';
 const svg = (tag, attrs = {}) => {
   const el = document.createElementNS(NS, tag);
@@ -19,7 +21,7 @@ function niceTicks(min, max, count = 5) {
 // estimate (drawn dashed). bands: [{from, to}] shaded behind the lines.
 // lanes: [{color, chip, spans: [{from, to, color, opacity}], unknown: [{from, to}]}], one strip each under the plot
 // (like where each run brakes, and where its GPS was not reliable); chip: a colour square before the strip.
-export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => String(v), xFormat = v => v.toFixed(2).replace('.', ',') + ' km', zero = false, height = 220, onSelect}) {
+export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => String(v), xFormat = v => dec(v, 2) + ' km', zero = false, height = 220, onSelect}) {
   host.replaceChildren();
   const width = Math.max(280, host.clientWidth || 600);
   const laneSpace = lanes.length ? lanes.length * 9 + 4 : 0;
@@ -30,7 +32,7 @@ export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => 
   const xMax = Math.max(...xs), y = niceTicks(Math.min(...ys, zero ? 0 : Infinity), Math.max(...ys, zero ? 0 : -Infinity));
   const sx = v => m.left + v / xMax * (width - m.left - m.right);
   const sy = v => m.top + (y.max - v) / (y.max - y.min) * (height - m.top - m.bottom);
-  const root = svg('svg', {viewBox: `0 0 ${width} ${height}`, width, height, class: 'chart-svg', role: onSelect ? 'group' : 'img', 'aria-label': 'Comparación por distancia'});
+  const root = svg('svg', {viewBox: `0 0 ${width} ${height}`, width, height, class: 'chart-svg', role: onSelect ? 'group' : 'img', 'aria-label': T('Comparación por distancia')});
   for (const t of y.ticks) {
     root.append(svg('line', {x1: m.left, x2: width - m.right, y1: sy(t), y2: sy(t), class: t === 0 && zero ? 'chart-zero' : 'chart-grid'}));
     const label = svg('text', {x: m.left - 8, y: sy(t) + 4, 'text-anchor': 'end', class: 'chart-tick'});
@@ -99,7 +101,7 @@ export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => 
       const row = document.createElement('div');
       const chip = document.createElement('i');
       chip.style.background = s.color;
-      row.append(chip, s.label + ': ' + (visible ? yFormat(p.y) + (p.est ? ' (media, GPS no fiable)' : '') : '—'));
+      row.append(chip, s.label + ': ' + (visible ? yFormat(p.y) + (p.est ? ' (' + T('media, GPS no fiable') + ')' : '') : '—'));
       tip.append(row);
     });
     tip.hidden = false;
@@ -123,7 +125,7 @@ export function lineChart(host, {series, bands = [], lanes = [], yFormat = v => 
     hit.setAttribute('aria-valuetext', xFormat(selected ?? 0));
   };
   if (onSelect) {
-    Object.entries({tabindex: 0, role: 'slider', 'aria-label': 'Punto del circuito: flechas para mover, Inicio y Fin para los extremos',
+    Object.entries({tabindex: 0, role: 'slider', 'aria-label': T('Punto del circuito: flechas para mover, Inicio y Fin para los extremos'),
       'aria-valuemin': 0, 'aria-valuemax': xMax, class: 'chart-hit'}).forEach(([k, v]) => hit.setAttribute(k, v));
     setSelection(null);
     hit.addEventListener('click', event => {setSelection(eventX(event)); onSelect(selected);});

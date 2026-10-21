@@ -11,6 +11,7 @@ import {idealRun, progressSeries, runReport, worstStretch} from './insights.mjs'
 import {runGates, gatesPassed, beep, unlockSound} from './gate-sounds.mjs';
 import {youtubeLink, YouTubeVideo} from './youtube.mjs';
 import {shakeSeries, matchBumps, samePlace} from './bumps.mjs';
+import {T, dec, locale, ordinal, tServer} from './i18n.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -19,7 +20,7 @@ let shell = null, catalog = [], runs = [], picked = [];
 const profiles = new Map();
 const status = (message, type = '') => say($('status'), message, type);
 // Day and hour tell apart several runs of the same outing.
-const when = iso => iso ? new Date(iso).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : '—';
+const when = iso => iso ? new Date(iso).toLocaleString(locale, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'}) : '—';
 // A friend's run carries their name; yours do not.
 const runLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at) + ' · ' + formatMs(r.elapsed_ms);
 const circuitOf = id => catalog.find(c => c.id === id);
@@ -29,10 +30,10 @@ let mapSelection = null, selectionLayer = null, charts = [], comparisonVersion =
 const BRAKING_MAX = 2;
 let current = null, brakingIds = null, brakingByHand = false, brakingLayer = null;
 const kmh = v => Math.round(v) + ' km/h';
-const seconds = ms => (ms / 1000).toFixed(1).replace('.', ',') + ' s';
-const zoneText = z => 'de ' + Math.round(z.fromKmh) + ' a ' + kmh(z.toKmh) + ' en ' + Math.round(z.to - z.from) + ' m';
-const whose = r => r.mine === false ? 'la de ' + r.pilot + ' (' + when(r.started_at) + ')' : 'la tuya (' + when(r.started_at) + ')';
-const owner = r => (r.mine === false ? r.pilot : 'tu bajada') + ' (' + when(r.started_at) + ')';
+const seconds = ms => dec(ms / 1000) + ' s';
+const zoneText = z => T('de {from} a {to} en {m} m', {from: Math.round(z.fromKmh), to: kmh(z.toKmh), m: Math.round(z.to - z.from)});
+const whose = r => r.mine === false ? T('la de {name} ({when})', {name: r.pilot, when: when(r.started_at)}) : T('la tuya ({when})', {when: when(r.started_at)});
+const owner = r => (r.mine === false ? r.pilot : T('tu bajada')) + ' (' + when(r.started_at) + ')';
 const capital = text => text[0].toUpperCase() + text.slice(1);
 
 function showSelection(circuit, {reveal = false} = {}) {
@@ -49,16 +50,16 @@ function showSelection(circuit, {reveal = false} = {}) {
     button.setAttribute('aria-pressed', String(mapSelection?.kind === 'zone' && Number(button.dataset.zone) === mapSelection.index)));
   $('clearMapSelection').hidden = !mapSelection;
   if (!mapSelection) {
-    $('mapSelection').textContent = 'Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.';
+    $('mapSelection').textContent = T('Pulsa una gráfica para localizar un punto o un sector de la tabla para resaltar su tramo.');
     return;
   }
   const distances = distanceSeries(circuit.points);
   if (mapSelection.kind === 'point') {
     const point = circuitPosition(circuit.points, distances, mapSelection.metres);
-    const label = Math.round(Math.min(distances.at(-1), mapSelection.metres)) + ' m desde la salida';
+    const label = T('{m} m desde la salida', {m: Math.round(Math.min(distances.at(-1), mapSelection.metres))});
     selectionLayer = L.circleMarker(point, {radius: 9, color: '#071423', weight: 3, fillColor: HIGHLIGHT, fillOpacity: 1})
       .addTo(view.map).bindTooltip(label, {permanent: true, direction: 'top', offset: [0, -10]});
-    $('mapSelection').textContent = 'Punto seleccionado · ' + label;
+    $('mapSelection').textContent = T('Punto seleccionado') + ' · ' + label;
     if (reveal) view.map.panTo(point);
   } else if (mapSelection.kind === 'zone') {
     const points = circuitStretch(circuit.points, distances, mapSelection.from, mapSelection.to);
@@ -66,8 +67,8 @@ function showSelection(circuit, {reveal = false} = {}) {
       L.polyline(points, {color: '#071423', weight: 14, opacity: 1}),
       L.polyline(points, {color: HIGHLIGHT, weight: 8, opacity: 1}),
     ]).addTo(view.map);
-    $('mapSelection').textContent = (mapSelection.title || 'Frenada ' + (mapSelection.index + 1)) + ' resaltada · ' + Math.round(mapSelection.from) + '–' +
-      Math.round(mapSelection.to) + ' m desde la salida · ' + mapSelection.text;
+    $('mapSelection').textContent = T('{what} resaltada', {what: mapSelection.title || T('Frenada {n}', {n: mapSelection.index + 1})}) + ' · ' +
+      T('{from}–{to} m desde la salida', {from: Math.round(mapSelection.from), to: Math.round(mapSelection.to)}) + ' · ' + mapSelection.text;
     if (reveal) view.map.fitBounds(L.latLngBounds(points), {padding: [80, 80], maxZoom: 18});
   } else {
     const bounds = [0, ...circuit.sectors.map(s => s.index), circuit.points.length - 1];
@@ -77,7 +78,8 @@ function showSelection(circuit, {reveal = false} = {}) {
       L.polyline(points, {color: '#071423', weight: 12, opacity: 1}),
       L.polyline(points, {color: HIGHLIGHT, weight: 7, opacity: 1}),
     ]).addTo(view.map);
-    $('mapSelection').textContent = 'Sector S' + (mapSelection.index + 1) + ' resaltado · ' + Math.round(distances[start]) + '–' + Math.round(distances[end]) + ' m desde la salida';
+    $('mapSelection').textContent = T('Sector S{n} resaltado', {n: mapSelection.index + 1}) + ' · ' +
+      T('{from}–{to} m desde la salida', {from: Math.round(distances[start]), to: Math.round(distances[end])});
     if (reveal) view.fit(points, 45);
   }
   if (reveal) $('map').scrollIntoView({behavior: 'smooth', block: 'center'});
@@ -100,9 +102,9 @@ async function loadRuns(keepCircuit) {
   const select = $('circuitSelect');
   const previous = keepCircuit || select.value;
   select.replaceChildren(...(counts.size ? [...counts].map(([id, n]) => node('option', {value: id,
-    textContent: (circuitOf(id)?.name || runs.find(r => r.circuit_id === id).circuit_name) + ' · ' + n.mine + ' tuya(s)' +
-      (n.friends ? ' · ' + n.friends + ' de amigos' : '')})) :
-    [node('option', {value: '', textContent: 'Sin bajadas todavía: sube una ruta'})]));
+    textContent: (circuitOf(id)?.name || runs.find(r => r.circuit_id === id).circuit_name) + ' · ' + T('{n} tuya(s)', {n: n.mine}) +
+      (n.friends ? ' · ' + T('{n} de amigos', {n: n.friends}) : '')})) :
+    [node('option', {value: '', textContent: T('Sin bajadas todavía: sube una ruta')})]));
   if (counts.has(previous)) select.value = previous;
   pickDefault();
 }
@@ -126,7 +128,7 @@ function renderRunList() {
     const slot = picked.indexOf(r.id);
     const box = node('input', {type: 'checkbox', checked: slot >= 0});
     box.addEventListener('change', () => {
-      if (box.checked && picked.length >= COLORS.length) {box.checked = false; return status('Puedes comparar hasta 4 bajadas a la vez.', 'error');}
+      if (box.checked && picked.length >= COLORS.length) {box.checked = false; return status(T('Puedes comparar hasta 4 bajadas a la vez.'), 'error');}
       picked = box.checked ? [...picked, r.id] : picked.filter(id => id !== r.id);
       renderRunList();
       compare().catch(err => status(err.message, 'error'));
@@ -134,8 +136,8 @@ function renderRunList() {
     const chip = node('i', {className: 'chip'});
     if (slot >= 0) chip.style.background = COLORS[slot];
     const option = node('label', {className: 'run-option' + (slot >= 0 ? ' on' : '')}, [box, chip,
-      node('span', {textContent: runLabel(r)}), node('small', {textContent: r.tournament_name ? 'Torneo · ' + r.tournament_name : r.source_filename || ''})]);
-    return r === firstFriend ? [node('div', {className: 'run-group', textContent: 'De tus amigos'}), option] : [option];
+      node('span', {textContent: runLabel(r)}), node('small', {textContent: r.tournament_name ? T('Torneo') + ' · ' + r.tournament_name : r.source_filename || ''})]);
+    return r === firstFriend ? [node('div', {className: 'run-group', textContent: T('De tus amigos')}), option] : [option];
   }));
 }
 
@@ -165,8 +167,8 @@ async function compare() {
   view.fit(pts);
   const chosen = picked.map(id => runs.find(r => r.id === id)).filter(Boolean);
   if (!chosen.length) {
-    $('segments').replaceChildren(node('p', {className: 'placeholder', textContent: 'Elige bajadas para compararlas.'}));
-    $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: 'Elige una bajada para ver dónde frena.'}));
+    $('segments').replaceChildren(node('p', {className: 'placeholder', textContent: T('Elige bajadas para compararlas.')}));
+    $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: T('Elige una bajada para ver dónde frena.')}));
     return;
   }
   const distances = distanceSeries(circuit.points);
@@ -182,12 +184,12 @@ async function compare() {
     .bindTooltip(d.label, {sticky: true});
   const fastest = data.reduce((a, b) => b.run.elapsed_ms < a.run.elapsed_ms ? b : a);
   const reference = data.find(d => d.run.id === referenceId) || fastest;
-  $('referenceSelect').replaceChildren(node('option', {value: '', textContent: 'La más rápida (' + fastest.label + ')'}),
-    ...data.map(d => node('option', {value: d.run.id, textContent: d.label + (clip?.runId === d.run.id ? ' · vídeo' : '')})));
+  $('referenceSelect').replaceChildren(node('option', {value: '', textContent: T('La más rápida ({run})', {run: fastest.label})}),
+    ...data.map(d => node('option', {value: d.run.id, textContent: d.label + (clip?.runId === d.run.id ? ' · ' + T('vídeo') : '')})));
   $('referenceSelect').value = reference === fastest && referenceId !== fastest.run.id ? '' : reference.run.id;
   $('legend').replaceChildren(...data.map(d => node('span', {className: 'legend-item'}, [
     Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color}),
-    node('span', {textContent: d.label + (d === reference ? ' · referencia' : '')})])));
+    node('span', {textContent: d.label + (d === reference ? ' · ' + T('referencia') : '')})])));
   current = {circuit, data, reference};
   charts.push(null);   // the speed chart, drawn with the braking zones
   // Where each run loses or gains time against the reference, every 25 m, as a strip under the chart.
@@ -197,7 +199,7 @@ async function compare() {
     points: gapSeries(d.samples, reference.samples).map(p => ({x: p.s / 1000, y: p.ms / 1000}))})),
     lanes: others.map(d => ({chip: d.color, spans: lost.get(d).filter(x => Math.abs(x.ms) > 50).map(x => ({from: x.from / 1000, to: x.to / 1000,
       color: x.ms > 0 ? LOSS : GAIN, opacity: Math.min(1, 0.3 + Math.abs(x.ms) / 800)}))})),
-    yFormat: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + ' s', zero: true,
+    yFormat: v => (v > 0 ? '+' : v < 0 ? '−' : '') + dec(Math.abs(v)) + ' s', zero: true,
     onSelect: (x, options) => selectPoint(circuit, x, options)}));
   renderSegments(circuit, data, reference);
   renderLosses(circuit, reference, others, lost);
@@ -217,9 +219,9 @@ async function compare() {
   const worst = data.filter(d => d !== reference).map(d => {
     const lost = segmentTimes(d.profile, gates).map((t, i) => t - referenceTimes[i]);
     const i = lost.indexOf(Math.max(...lost));
-    return d.label + ' pierde más en el segmento ' + (i + 1) + ' (' + formatDelta(lost[i]) + ')';
+    return T('{run} pierde más en el segmento {n} ({delta})', {run: d.label, n: i + 1, delta: formatDelta(lost[i])});
   });
-  status(worst.length ? worst.join(' · ') + '.' : 'Elige otra bajada para compararla con esta.', 'success');
+  status(worst.length ? worst.join(' · ') + '.' : T('Elige otra bajada para compararla con esta.'), 'success');
 }
 // Braking of one or two runs, corner by corner: on the circuit in each run's colour (with two, the
 // first outside and the second inside), as strips under the speed chart and as a list that says
@@ -236,7 +238,7 @@ function renderBraking() {
     const on = chosen.includes(d);
     const box = node('input', {type: 'checkbox', checked: on});
     box.addEventListener('change', () => {
-      if (box.checked && chosen.length >= BRAKING_MAX) {box.checked = false; return status('Puedes solapar las frenadas de 2 bajadas a la vez.', 'error');}
+      if (box.checked && chosen.length >= BRAKING_MAX) {box.checked = false; return status(T('Puedes solapar las frenadas de 2 bajadas a la vez.'), 'error');}
       brakingIds = box.checked ? [...brakingIds, d.run.id] : brakingIds.filter(id => id !== d.run.id);
       brakingByHand = true;
       renderBraking();
@@ -244,7 +246,7 @@ function renderBraking() {
     const chip = node('i', {className: 'chip'});
     chip.style.background = d.color;
     return node('label', {className: 'run-option' + (on ? ' on' : '')}, [box, chip,
-      node('span', {textContent: d.label + (d === reference ? ' · referencia' : '')})]);
+      node('span', {textContent: d.label + (d === reference ? ' · ' + T('referencia') : '')})]);
   }));
   const span = p => {
     const found = p.zones.filter(Boolean);
@@ -258,7 +260,7 @@ function renderBraking() {
       unknown: d.speed.blind.map(([a, b]) => ({from: Math.min(a, b) / 1000, to: Math.max(a, b) / 1000}))})),
     yFormat: kmh, onSelect: (x, options) => selectPoint(circuit, x, options)});
   if (!chosen.length) {
-    $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: 'Marca una o dos bajadas para ver sus frenadas.'}));
+    $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: T('Marca una o dos bajadas para ver sus frenadas.')}));
     return showSelection(circuit);
   }
   const distances = distanceSeries(circuit.points);
@@ -272,12 +274,12 @@ function renderBraking() {
     const stretch = circuitStretch(circuit.points, distances, z.from, z.to);
     layers.push(L.polyline(stretch, {color: '#071423', weight: styles[k].casing, opacity: .95}),
       L.polyline(stretch, {color: d.color, weight: styles[k].line, opacity: 1})
-        .bindTooltip('Frenada ' + (i + 1) + ' · ' + capital(whose(d.run)) + ': ' + zoneText(z), {sticky: true}));
+        .bindTooltip(T('Frenada {n}', {n: i + 1}) + ' · ' + capital(whose(d.run)) + ': ' + zoneText(z), {sticky: true}));
   }));
   points.forEach((p, i) => {
     const number = L.divIcon({html: '<div class="brake-pin">' + (i + 1) + '</div>', className: '', iconSize: [22, 22], iconAnchor: [11, 11]});
     layers.push(L.marker(circuitPosition(circuit.points, distances, span(p).from), {icon: number, keyboard: false})
-      .bindTooltip('Frenada ' + (i + 1) + ' · ' + Math.round(span(p).from) + '–' + Math.round(span(p).to) + ' m', {direction: 'top', offset: [0, -10]}));
+      .bindTooltip(T('Frenada {n}', {n: i + 1}) + ' · ' + Math.round(span(p).from) + '–' + Math.round(span(p).to) + ' m', {direction: 'top', offset: [0, -10]}));
   });
   brakingLayer = L.layerGroup(layers).addTo(view.map);
   $('brakingList').replaceChildren(...(points.length ? points.map((p, i) => {
@@ -286,13 +288,14 @@ function renderBraking() {
       chip.style.background = d.color;
       return node('span', {className: 'zone-row'}, [chip, node('span', {textContent:
         (d.run.mine === false ? d.run.pilot + ' · ' : '') + when(d.run.started_at) + ': ' +
-        (z ? 'frena desde ' + Math.round(z.from) + ' m, ' + zoneText(z) : withoutBraking(p.speed[k])) + ' · pasa en ' + seconds(p.ms[k])})]);
+        (z ? T('frena desde {m} m, {zone}', {m: Math.round(z.from), zone: zoneText(z)}) : withoutBraking(p.speed[k])) + ' · ' +
+        T('pasa en {time}', {time: seconds(p.ms[k])})})]);
     });
     const summary = two ? brakingVerdict(p, chosen) : zoneText(p.zones[0]);
-    const button = node('button', {type: 'button', className: 'zone-item', title: 'Ver la frenada ' + (i + 1) + ' en el mapa'}, [
+    const button = node('button', {type: 'button', className: 'zone-item', title: T('Ver la frenada {n} en el mapa', {n: i + 1})}, [
       node('b', {className: 'brake-pin', textContent: i + 1}),
       node('span', {className: 'zone-body'}, [
-        node('small', {textContent: Math.round(p.from) + '–' + Math.round(p.to) + ' m desde la salida'}), ...rows,
+        node('small', {textContent: T('{from}–{to} m desde la salida', {from: Math.round(p.from), to: Math.round(p.to)})}), ...rows,
         ...(two ? [node('span', {className: 'zone-verdict', textContent: summary})] : [])])]);
     button.dataset.zone = i;
     button.addEventListener('click', () => {
@@ -301,55 +304,56 @@ function renderBraking() {
       seekVideo(p.from);
     });
     return button;
-  }) : [node('p', {className: 'placeholder', textContent: 'No hay frenadas claras, o el GPS no fue fiable donde se frena.'})]));
+  }) : [node('p', {className: 'placeholder', textContent: T('No hay frenadas claras, o el GPS no fue fiable donde se frena.')})]));
   showSelection(circuit);
 }
 // What a run does at a braking point where it has no clear braking of its own.
 function withoutBraking({topKmh, lowKmh, unsure}) {
-  if (unsure) return 'aquí su GPS no es fiable y no se puede medir cómo frena';
-  if (topKmh === null) return 'sin datos';
+  if (unsure) return T('aquí su GPS no es fiable y no se puede medir cómo frena');
+  if (topKmh === null) return T('sin datos');
   const top = Math.round(topKmh), low = Math.round(lowKmh);
-  if (top - low >= 5) return 'baja de ' + top + ' a ' + low + ' km/h poco a poco, sin una frenada clara';
-  if (top - low >= 2) return 'apenas frena: de ' + top + ' a ' + low + ' km/h';
-  return 'no frena: va a unos ' + low + ' km/h';
+  if (top - low >= 5) return T('baja de {top} a {low} km/h poco a poco, sin una frenada clara', {top, low});
+  if (top - low >= 2) return T('apenas frena: de {top} a {low} km/h', {top, low});
+  return T('no frena: va a unos {low} km/h', {low});
 }
 // Which of two runs gets through a braking point faster, and what it does differently. The figures
 // are compared rounded like on screen, so the differences match them.
 function brakingVerdict(p, runs) {
   const lost = p.ms[1] - p.ms[0];
   const doubtful = runs.filter((_, k) => p.speed[k].unsure).map(d => owner(d.run));
-  const note = doubtful.length ? ' Ojo: aquí el GPS de ' + doubtful.join(' y de ') + ' no es fiable, así que su frenada no se puede comparar.' : '';
-  if (Math.abs(lost) < 100) return 'Las dos pasan en el mismo tiempo.' + note;
+  const note = doubtful.length ? ' ' + T('Ojo: aquí el GPS de {who} no es fiable, así que su frenada no se puede comparar.', {who: doubtful.join(T(' y de '))}) : '';
+  if (Math.abs(lost) < 100) return T('Las dos pasan en el mismo tiempo.') + note;
   const f = lost > 0 ? 0 : 1, o = 1 - f, quick = p.zones[f], slow = p.zones[o];
   const why = [];
   let despite = '';
   if (!doubtful.length && quick && slow) {
     const later = Math.round(quick.from - slow.from), exit = Math.round(quick.toKmh) - Math.round(slow.toKmh);
-    if (Math.abs(later) >= 10) why.push('frena ' + Math.abs(later) + ' m ' + (later > 0 ? 'más tarde' : 'antes'));
-    if (Math.abs(exit) >= 2) why.push('sale ' + Math.abs(exit) + ' km/h más ' + (exit > 0 ? 'rápida' : 'despacio'));
+    if (Math.abs(later) >= 10) why.push(later > 0 ? T('frena {m} m más tarde', {m: later}) : T('frena {m} m antes', {m: -later}));
+    if (Math.abs(exit) >= 2) why.push(exit > 0 ? T('sale {v} km/h más rápida', {v: exit}) : T('sale {v} km/h más despacio', {v: -exit}));
   } else if (!doubtful.length && p.speed[f].lowKmh !== null && p.speed[o].lowKmh !== null) {
     const kept = Math.round(p.speed[f].lowKmh), other = Math.round(p.speed[o].lowKmh);
-    if (kept - other >= 2) why.push('no baja de ' + kept + ' km/h y la otra baja a ' + other);
-    else if (other - kept >= 2) despite = ', aunque baja más (a ' + kept + ' km/h; la otra a ' + other + ')';
+    if (kept - other >= 2) why.push(T('no baja de {kept} km/h y la otra baja a {other}', {kept, other}));
+    else if (other - kept >= 2) despite = T(', aunque baja más (a {kept} km/h; la otra a {other})', {kept, other});
   }
-  return capital(whose(runs[f].run)) + ' es ' + seconds(Math.abs(lost)) + ' más rápida aquí' + (why.length ? ': ' + why.join(' y ') : '') +
-    despite + '.' + note;
+  return T('{who} es {time} más rápida aquí', {who: capital(whose(runs[f].run)), time: seconds(Math.abs(lost))}) +
+    (why.length ? ': ' + why.join(T(' y ')) : '') + despite + '.' + note;
 }
 // For each run, the stretches where it loses most time against the reference (and where it gains
 // most): what to work on, day by day. Each one shows on the map and moves the video or the replay there.
 function renderLosses(circuit, reference, others, lost) {
   if (!others.length) return $('lossList').replaceChildren();
-  $('lossList').replaceChildren(node('p', {className: 'loss-title', textContent: 'Dónde pierde o gana cada bajada frente a ' + reference.label}),
+  $('lossList').replaceChildren(node('p', {className: 'loss-title', textContent: T('Dónde pierde o gana cada bajada frente a {run}', {run: reference.label})}),
     ...others.map(d => {
       const zones = lossZones(lost.get(d));
       const worst = zones.filter(z => z.ms > 0).slice(0, 3), best = zones.filter(z => z.ms < 0).slice(0, 3);
       const chip = node('i', {className: 'chip'});
       chip.style.background = d.color;
       const items = [...worst, ...best].sort((a, b) => a.from - b.from).map(z => {
-        const text = (z.ms > 0 ? 'Pierde ' : 'Gana ') + decimal(Math.abs(z.ms) / 1000) + ' s de ' + Math.round(z.from) + ' a ' + Math.round(z.to) + ' m';
+        const where = {time: dec(Math.abs(z.ms) / 1000), from: Math.round(z.from), to: Math.round(z.to)};
+        const text = z.ms > 0 ? T('Pierde {time} s de {from} a {to} m', where) : T('Gana {time} s de {from} a {to} m', where);
         const b = node('button', {type: 'button', className: 'loss ' + (z.ms > 0 ? 'lose' : 'gain'), textContent: text});
         b.addEventListener('click', () => {
-          mapSelection = {kind: 'zone', circuitId: circuit.id, key: 'loss', index: -1, title: 'Tramo', from: z.from, to: z.to,
+          mapSelection = {kind: 'zone', circuitId: circuit.id, key: 'loss', index: -1, title: T('Tramo'), from: z.from, to: z.to,
             text: shortLabel(d.run) + ' ' + text.toLowerCase()};
           showSelection(circuit, {reveal: true});
           seekVideo(z.from);
@@ -357,8 +361,8 @@ function renderLosses(circuit, reference, others, lost) {
         return b;
       });
       return node('div', {className: 'loss-run'}, [node('div', {className: 'loss-head'}, [chip,
-        node('span', {textContent: d.label + ' · ' + formatDelta(d.run.elapsed_ms - reference.run.elapsed_ms) + ' en total'})]),
-        node('div', {className: 'loss-items'}, items.length ? items : [node('small', {textContent: 'Sin tramos con más de 0,3 s de diferencia.'})])]);
+        node('span', {textContent: d.label + ' · ' + T('{delta} en total', {delta: formatDelta(d.run.elapsed_ms - reference.run.elapsed_ms)})})]),
+        node('div', {className: 'loss-items'}, items.length ? items : [node('small', {textContent: T('Sin tramos con más de 0,3 s de diferencia.')})])]);
     }));
 }
 function gatesOf(circuit) {
@@ -370,9 +374,9 @@ function renderSegments(circuit, data, reference) {
   const best = times[0].map((_, i) => Math.min(...times.map(t => t[i])));
   const sectorButton = (text, i) => {
     const button = node('button', {type: 'button', className: 'segment-button', textContent: text,
-      title: 'Ver sector S' + (i + 1) + ' en el mapa'});
+      title: T('Ver sector S{n} en el mapa', {n: i + 1})});
     button.dataset.segment = i;
-    button.setAttribute('aria-label', 'Ver sector S' + (i + 1) + ' en el mapa: ' + text);
+    button.setAttribute('aria-label', T('Ver sector S{n} en el mapa', {n: i + 1}) + ': ' + text);
     button.addEventListener('click', () => {
       mapSelection = {kind: 'segment', circuitId: circuit.id, index: i};
       showSelection(circuit, {reveal: true});
@@ -380,31 +384,32 @@ function renderSegments(circuit, data, reference) {
     });
     return button;
   };
-  const head = node('tr', {}, [node('th', {textContent: 'Bajada'}), node('th', {textContent: 'Total'}),
+  const head = node('tr', {}, [node('th', {textContent: T('Bajada')}), node('th', {textContent: T('Total')}),
     ...times[0].map((_, i) => node('th', {}, [sectorButton('S' + (i + 1), i)]))]);
   const rows = data.map((d, n) => node('tr', {}, [
     node('td', {}, [Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color}), node('span', {textContent: ' ' + (d.run.mine === false ? d.run.pilot + ' · ' : '') + when(d.run.started_at)})]),
     node('td', {className: 'time', textContent: formatMs(d.run.elapsed_ms) + (d === reference ? '' : ' (' + formatDelta(d.run.elapsed_ms - reference.run.elapsed_ms) + ')')}),
     ...times[n].map((t, i) => node('td', {className: t === best[i] ? 'best' : ''}, [sectorButton(formatMs(t), i)]))]));
   $('segments').replaceChildren(node('table', {className: 'standings'}, [node('thead', {}, [head]), node('tbody', {}, rows)]),
-    node('p', {className: 'help', textContent: 'Pulsa un sector o su tiempo para verlo en amarillo en el mapa. En morado, el mejor tiempo de cada segmento.'}));
+    node('p', {className: 'help', textContent: T('Pulsa un sector o su tiempo para verlo en amarillo en el mapa. En morado, el mejor tiempo de cada segmento.')}));
 }
 
 // ---- Your evolution on a circuit: a report of the latest run, the ideal run and the progress ----
 const mineOn = circuit => runs.filter(r => r.mine !== false && r.circuit_id === circuit.id && r.started_at && r.elapsed_ms);
-const day = iso => new Date(iso).toLocaleDateString('es-ES', {day: 'numeric', month: 'short'});
+const day = iso => new Date(iso).toLocaleDateString(locale, {day: 'numeric', month: 'short'});
 let evolutionVersion = 0;
 // A run told against your earlier ones: total, sectors, and where you lose most against your best run.
 async function reportText(run) {
   const circuit = circuitOf(run.circuit_id), mine = runs.filter(r => r.mine !== false && r.circuit_id === run.circuit_id && r.started_at);
   const r = runReport(run, mine), today = new Date(run.started_at).toDateString() === new Date().toDateString();
-  const parts = [(today ? 'Hoy' : 'El ' + day(run.started_at)) + ' en ' + (circuit?.name || run.circuit_name) + ': ' + formatMs(run.elapsed_ms) +
-    (!r.best ? ', tu primera bajada aquí.' : r.record ? ', ¡tu mejor tiempo! (' + formatDelta(r.vsBest) + ').' :
-      ', ' + formatDelta(r.vsBest) + ' sobre tu mejor (' + day(r.best.started_at) + ')' +
-      (r.previous && r.previous !== r.best ? ' y ' + formatDelta(r.vsPrevious) + ' frente a la anterior.' : '.'))];
-  const sectors = [r.gained, r.lost].filter(Boolean).map(x => formatDelta(x.ms) + ' en S' + (x.sector + 1));
-  if (sectors.length) parts.push('Frente a la anterior: ' + sectors.join(', ') + '.');
-  if (r.margin) parts.push('Tu mayor margen, en S' + (r.margin.sector + 1) + ': ' + formatDelta(r.margin.ms).slice(1) + ' más que tu mejor S' + (r.margin.sector + 1) + '.');
+  const where = {circuit: circuit?.name || run.circuit_name, time: formatMs(run.elapsed_ms), day: day(run.started_at)};
+  const parts = [(today ? T('Hoy en {circuit}: {time}', where) : T('El {day} en {circuit}: {time}', where)) +
+    (!r.best ? T(', tu primera bajada aquí.') : r.record ? T(', ¡tu mejor tiempo! ({delta}).', {delta: formatDelta(r.vsBest)}) :
+      T(', {delta} sobre tu mejor ({day})', {delta: formatDelta(r.vsBest), day: day(r.best.started_at)}) +
+      (r.previous && r.previous !== r.best ? T(' y {delta} frente a la anterior.', {delta: formatDelta(r.vsPrevious)}) : '.'))];
+  const sectors = [r.gained, r.lost].filter(Boolean).map(x => T('{delta} en S{n}', {delta: formatDelta(x.ms), n: x.sector + 1}));
+  if (sectors.length) parts.push(T('Frente a la anterior: {list}.', {list: sectors.join(', ')}));
+  if (r.margin) parts.push(T('Tu mayor margen, en S{n}: {delta} más que tu mejor S{n}.', {n: r.margin.sector + 1, delta: formatDelta(r.margin.ms).slice(1)}));
   // Where it loses most against your best run, and whether the previous run lost there too.
   if (r.best && !r.record) {
     const [mineProfile, bestProfile] = await Promise.all([profileOf(run.id), profileOf(r.best.id)]);
@@ -415,18 +420,18 @@ async function reportText(run) {
         const before = worstStretch(timeLost(await profileOf(r.previous.id), bestProfile, 25));
         again = !!before && before.from < worst.to && before.to > worst.from;
       }
-      parts.push('Donde más pierdes frente a tu mejor bajada: del metro ' + Math.round(worst.from) + ' al ' + Math.round(worst.to) +
-        ' (' + formatDelta(worst.ms) + ')' + (again ? ', como en la anterior.' : '.'));
+      parts.push(T('Donde más pierdes frente a tu mejor bajada: del metro {from} al {to} ({delta})',
+        {from: Math.round(worst.from), to: Math.round(worst.to), delta: formatDelta(worst.ms)}) + (again ? T(', como en la anterior.') : '.'));
     }
   }
   return parts.join(' ');
 }
 function renderEvolution(circuit) {
   const version = ++evolutionVersion, mine = mineOn(circuit);
-  $('evolutionTag').textContent = mine.length ? mine.length + ' BAJADA(S) TUYAS' : 'TUS BAJADAS EN ESTE CIRCUITO';
+  $('evolutionTag').textContent = mine.length ? T('{n} BAJADA(S) TUYAS', {n: mine.length}) : T('TUS BAJADAS EN ESTE CIRCUITO');
   ['lastReport', 'progressChart', 'progressSectors'].forEach(id => $(id).replaceChildren());
   if (!mine.length) {
-    $('idealRun').replaceChildren(node('p', {className: 'placeholder', textContent: 'Todavía no tienes bajadas en este circuito.'}));
+    $('idealRun').replaceChildren(node('p', {className: 'placeholder', textContent: T('Todavía no tienes bajadas en este circuito.')}));
     return;
   }
   const latest = mine.reduce((a, b) => Date.parse(b.started_at) > Date.parse(a.started_at) ? b : a);
@@ -438,11 +443,11 @@ function renderEvolution(circuit) {
 // The best of each sector put together, and which day each came from.
 function renderIdeal(circuit, mine) {
   const ideal = idealRun(mine);
-  if (!ideal) return $('idealRun').replaceChildren(node('p', {className: 'placeholder', textContent: 'Hace falta el tiempo de cada sector: aún falta alguno en tus bajadas.'}));
+  if (!ideal) return $('idealRun').replaceChildren(node('p', {className: 'placeholder', textContent: T('Hace falta el tiempo de cada sector: aún falta alguno en tus bajadas.')}));
   const fastest = ideal.fastest;
   const rows = ideal.sectors.map((s, i) => {
     const inFastest = fastest.sector_splits_ms?.[i];
-    const go = node('button', {type: 'button', className: 'segment-button', textContent: 'S' + (i + 1), title: 'Ver el sector S' + (i + 1) + ' en el mapa'});
+    const go = node('button', {type: 'button', className: 'segment-button', textContent: 'S' + (i + 1), title: T('Ver el sector S{n} en el mapa', {n: i + 1})});
     go.addEventListener('click', () => {
       mapSelection = {kind: 'segment', circuitId: circuit.id, index: i};
       showSelection(circuit, {reveal: true});
@@ -450,15 +455,17 @@ function renderIdeal(circuit, mine) {
     });
     return node('tr', {}, [node('td', {}, [go]), node('td', {textContent: formatMs(s.ms)}),
       node('td', {textContent: when(s.run.started_at)}),
-      node('td', {className: s.run === fastest ? 'best' : '', textContent: s.run === fastest ? 'es de tu mejor bajada' :
-        Number.isFinite(inFastest) ? formatDelta(inFastest - s.ms) + ' en tu mejor bajada' : '—'})]);
+      node('td', {className: s.run === fastest ? 'best' : '', textContent: s.run === fastest ? T('es de tu mejor bajada') :
+        Number.isFinite(inFastest) ? T('{delta} en tu mejor bajada', {delta: formatDelta(inFastest - s.ms)}) : '—'})]);
   });
   $('idealRun').replaceChildren(
     node('p', {className: 'ideal-total'}, [node('b', {textContent: formatMs(ideal.ms)}),
-      node('span', {textContent: ideal.margin > 300 ? ' si juntaras tu mejor sector de cada bajada: ' + seconds(ideal.margin) + ' menos que tu mejor tiempo (' +
-        formatMs(fastest.elapsed_ms) + ', ' + day(fastest.started_at) + '). Ahí está tu margen.' :
-        ' juntando tu mejor sector de cada bajada: tu mejor bajada (' + formatMs(fastest.elapsed_ms) + ') ya está casi ahí.'})]),
-    node('table', {className: 'standings'}, [node('thead', {}, [node('tr', {}, ['Sector', 'Tu mejor', 'Día', 'Frente a tu mejor bajada'].map(t => node('th', {textContent: t})))]),
+      node('span', {textContent: ' ' + (ideal.margin > 300 ?
+        T('si juntaras tu mejor sector de cada bajada: {margin} menos que tu mejor tiempo ({time}, {day}). Ahí está tu margen.',
+          {margin: seconds(ideal.margin), time: formatMs(fastest.elapsed_ms), day: day(fastest.started_at)}) :
+        T('juntando tu mejor sector de cada bajada: tu mejor bajada ({time}) ya está casi ahí.', {time: formatMs(fastest.elapsed_ms)}))})]),
+    node('table', {className: 'standings'}, [node('thead', {}, [node('tr', {}, [T('Sector'), T('Tu mejor'), T('Día'), T('Frente a tu mejor bajada')]
+      .map(text => node('th', {textContent: text})))]),
       node('tbody', {}, rows)]));
 }
 const SECTOR_COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500', '#a46bd9', '#e2557e', '#5fb8c9', '#8f9c3a'];
@@ -469,18 +476,18 @@ function renderProgress(mine) {
   const record = Math.min(...mine.map(r => r.elapsed_ms)), kept = mine.filter(r => r.elapsed_ms <= record * 1.5);
   const p = progressSeries(kept), left = mine.length - kept.length;
   if (!p || p.points.length < 2) {
-    $('progressChart').replaceChildren(node('p', {className: 'placeholder', textContent: 'Con una sola bajada aún no hay progreso que ver.'}));
+    $('progressChart').replaceChildren(node('p', {className: 'placeholder', textContent: T('Con una sola bajada aún no hay progreso que ver.')}));
     return;
   }
   const xFormat = x => day(new Date(p.first + x * 86400000).toISOString());
   const legend = items => node('div', {className: 'chart-legend'}, items.map(([label, color]) =>
     node('span', {className: 'legend-item'}, [Object.assign(node('i', {className: 'chip'}), {style: 'background:' + color}), node('span', {textContent: label})])));
   lineChart($('progressChart'), {height: 190, xFormat, yFormat: clockTicks, series: [
-    {label: 'Tus bajadas', color: '#3987e5', points: p.points.map(q => ({x: q.x, y: q.total / 1000}))},
-    {label: 'Tu récord', color: HIGHLIGHT, points: p.points.map(q => ({x: q.x, y: q.record / 1000}))}]});
-  $('progressChart').prepend(legend([['Cada bajada', '#3987e5'], ['Tu récord hasta ese día', HIGHLIGHT]]));
-  if (left) $('progressChart').append(node('p', {className: 'help', textContent: 'No se ven ' + left + ' bajada(s) con paradas largas (más de ' +
-    formatMs(record * 1.5) + ').'}));
+    {label: T('Tus bajadas'), color: '#3987e5', points: p.points.map(q => ({x: q.x, y: q.total / 1000}))},
+    {label: T('Tu récord'), color: HIGHLIGHT, points: p.points.map(q => ({x: q.x, y: q.record / 1000}))}]});
+  $('progressChart').prepend(legend([[T('Cada bajada'), '#3987e5'], [T('Tu récord hasta ese día'), HIGHLIGHT]]));
+  if (left) $('progressChart').append(node('p', {className: 'help', textContent:
+    T('No se ven {n} bajada(s) con paradas largas (más de {time}).', {n: left, time: formatMs(record * 1.5)})}));
   if (!p.sectors) return;
   lineChart($('progressSectors'), {height: 170, xFormat, zero: true, yFormat: v => '+' + v.toFixed(0) + ' s',
     series: Array.from({length: p.sectors}, (_, i) => ({label: 'S' + (i + 1), color: SECTOR_COLORS[i % SECTOR_COLORS.length],
@@ -502,22 +509,22 @@ function notePlace() {
   if (!circuit) return null;
   if (d && clip) {
     const ms = (video().currentTime - clip.start) * 1000;
-    if (ms >= 0 && ms <= endOf(clip, d)) return {metres: runAt(seen(clip, d), ms).s, attempt: d.run.id, where: 'donde va el vídeo'};
+    if (ms >= 0 && ms <= endOf(clip, d)) return {metres: runAt(seen(clip, d), ms).s, attempt: d.run.id, where: T('donde va el vídeo')};
   }
   if (mapSelection?.circuitId === circuit.id) {
-    if (mapSelection.kind === 'point') return {metres: mapSelection.metres, where: 'en el punto elegido'};
-    if (mapSelection.kind === 'zone') return {metres: mapSelection.from, where: 'al principio del tramo elegido'};
-    if (mapSelection.kind === 'segment') return {metres: mapSelection.index ? gatesOf(circuit)[mapSelection.index - 1] : 0, where: 'al principio del sector elegido'};
+    if (mapSelection.kind === 'point') return {metres: mapSelection.metres, where: T('en el punto elegido')};
+    if (mapSelection.kind === 'zone') return {metres: mapSelection.from, where: T('al principio del tramo elegido')};
+    if (mapSelection.kind === 'segment') return {metres: mapSelection.index ? gatesOf(circuit)[mapSelection.index - 1] : 0, where: T('al principio del sector elegido')};
   }
   // With a video the replay follows it: before its start or after its finish there is no place yet.
   if (current && replayShown() && !(d && clip)) return {metres: runAt(current.reference.profile, Math.min(replay.ms, current.reference.run.elapsed_ms)).s,
-    attempt: current.reference.run.id, where: 'donde va la repetición'};
+    attempt: current.reference.run.id, where: T('donde va la repetición')};
   return null;
 }
 function showNotePlace() {
   const place = notePlace();
-  say($('noteWhere'), place ? 'Se guardará en el metro ' + Math.round(place.metres) + ' (' + place.where + ').' :
-    'Elige antes dónde: lleva el vídeo o la repetición a ese sitio, o pulsa un punto en una gráfica.', place ? '' : 'warning');
+  say($('noteWhere'), place ? T('Se guardará en el metro {m} ({where}).', {m: Math.round(place.metres), where: place.where}) :
+    T('Elige antes dónde: lleva el vídeo o la repetición a ese sitio, o pulsa un punto en una gráfica.'), place ? '' : 'warning');
 }
 function renderNotes() {
   const circuit = circuitOf($('circuitSelect').value);
@@ -527,35 +534,35 @@ function renderNotes() {
   const distances = distanceSeries(circuit.points);
   notesLayer = L.layerGroup(notes.map(n => L.marker(circuitPosition(circuit.points, distances, n.metres), {
     icon: L.divIcon({html: '<div class="note-pin">📝</div>', className: '', iconSize: [24, 24], iconAnchor: [12, 22]}),
-    pane: 'videoNow'}).bindTooltip('Metro ' + Math.round(n.metres) + ': ' + n.text, {direction: 'top', offset: [0, -18]}))).addTo(view.map);
+    pane: 'videoNow'}).bindTooltip(T('Metro {m}', {m: Math.round(n.metres)}) + ': ' + n.text, {direction: 'top', offset: [0, -18]}))).addTo(view.map);
   $('notesList').replaceChildren(...(notes.length ? notes.map(n => {
-    const go = node('button', {type: 'button', className: 'text-btn', textContent: 'Ir'});
+    const go = node('button', {type: 'button', className: 'text-btn', textContent: T('Ir')});
     go.addEventListener('click', () => {
       selectPoint(circuit, n.metres / 1000, {reveal: true});
       seekVideo(n.metres);
     });
-    const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: '✕', title: 'Borrar la nota'});
+    const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: '✕', title: T('Borrar la nota')});
     remove.addEventListener('click', async () => {
       try {await shell.api.deleteTrainingNote(n.id); await loadNotes(circuit, true); renderMarks();}
-      catch (err) {say($('noteWhere'), 'No se pudo borrar: ' + err.message, 'error');}
+      catch (err) {say($('noteWhere'), T('No se pudo borrar: {error}', {error: err.message}), 'error');}
     });
-    return node('div', {className: 'item note-item'}, [node('span', {}, [node('b', {textContent: 'Metro ' + Math.round(n.metres)}),
+    return node('div', {className: 'item note-item'}, [node('span', {}, [node('b', {textContent: T('Metro {m}', {m: Math.round(n.metres)})}),
       node('span', {textContent: ' · ' + n.text}), node('small', {textContent: ' · ' + day(n.created_at)})]),
       node('span', {className: 'row-actions'}, [go, remove])]);
-  }) : [node('p', {className: 'placeholder', textContent: 'Todavía no tienes notas en este circuito.'})]));
+  }) : [node('p', {className: 'placeholder', textContent: T('Todavía no tienes notas en este circuito.')})]));
 }
 async function addNote() {
   const circuit = circuitOf($('circuitSelect').value), text = $('noteText').value.trim(), place = notePlace();
-  if (!circuit) return say($('noteWhere'), 'Elige antes un circuito.', 'error');
-  if (!text) return say($('noteWhere'), 'Escribe la nota.', 'error');
+  if (!circuit) return say($('noteWhere'), T('Elige antes un circuito.'), 'error');
+  if (!text) return say($('noteWhere'), T('Escribe la nota.'), 'error');
   if (!place) return showNotePlace();
   try {
     await shell.api.addTrainingNote({circuit_id: circuit.id, attempt_id: place.attempt || null, metres: Math.max(0, place.metres), text});
     $('noteText').value = '';
-    say($('noteWhere'), 'Nota guardada en el metro ' + Math.round(place.metres) + '. La verás en el mapa y en la barra del vídeo de todas tus bajadas.', 'success');
+    say($('noteWhere'), T('Nota guardada en el metro {m}. La verás en el mapa y en la barra del vídeo de todas tus bajadas.', {m: Math.round(place.metres)}), 'success');
     await loadNotes(circuit, true);
     renderMarks();
-  } catch (err) {say($('noteWhere'), 'No se pudo guardar: ' + err.message, 'error');}
+  } catch (err) {say($('noteWhere'), T('No se pudo guardar: {error}', {error: err.message}), 'error');}
 }
 $('addNote').addEventListener('click', addNote);
 $('noteText').addEventListener('keydown', e => {if (e.key === 'Enter') addNote();});
@@ -583,17 +590,17 @@ function renderMarks() {
   };
   const bounds = [0, ...gatesOf(circuit)];
   const sectors = bounds.map((m, i) => {
-    const b = mark('mark-sector', at(i ? timeAt(track, m) : 0), 'Sector S' + (i + 1), m, 0);
+    const b = mark('mark-sector', at(i ? timeAt(track, m) : 0), T('Sector S{n}', {n: i + 1}), m, 0);
     b.textContent = 'S' + (i + 1);
     return b;
   });
   const brakes = brakingZones(d.profile, {speed: d.speed}).map(z => {
     const from = timeAt(track, z.from), to = timeAt(track, z.to);
-    return mark('mark-brake', at(from), 'Frenada ' + zoneText(z) + ' (metro ' + Math.round(z.from) + ')', z.from, 1.5,
+    return mark('mark-brake', at(from), T('Frenada {zone} (metro {m})', {zone: zoneText(z), m: Math.round(z.from)}), z.from, 1.5,
       'max(4px, ' + ((to - from) / span * 100).toFixed(2) + '%)');
   });
   const flags = notesCircuit === circuit.id ? notes.map(n => {
-    const b = mark('mark-note', at(timeAt(track, n.metres)), 'Nota en el metro ' + Math.round(n.metres) + ': ' + n.text, n.metres, 2);
+    const b = mark('mark-note', at(timeAt(track, n.metres)), T('Nota en el metro {m}', {m: Math.round(n.metres)}) + ': ' + n.text, n.metres, 2);
     b.textContent = '📝';
     return b;
   }) : [];
@@ -615,7 +622,7 @@ function moveMarks() {
 
 async function loadFriends() {
   const {friends, incoming, outgoing} = await shell.api.friends();
-  $('friendsCount').textContent = friends.length ? friends.length + ' AMIGO(S)' : '';
+  $('friendsCount').textContent = friends.length ? T('{n} AMIGO(S)', {n: friends.length}) : '';
   const button = (text, className, action) => {
     const b = node('button', {type: 'button', className, textContent: text});
     b.addEventListener('click', () => action().catch(err => say($('friendFeedback'), err.message, 'error')));
@@ -629,25 +636,25 @@ async function loadFriends() {
     if (message) say($('friendFeedback'), message, 'success');
   };
   const items = [
-    ...incoming.map(f => row(f.name, 'quiere ser tu amigo', [
-      button('Aceptar', 'btn outline small', async () => {await shell.api.acceptFriend(f.id); await refresh('Ahora ' + f.name + ' y tú veis vuestras bajadas.');}),
-      button('Rechazar', 'text-btn danger', async () => {await shell.api.removeFriend(f.id); await refresh();})])),
-    ...friends.map(f => row(f.name, '', [button('Quitar', 'text-btn danger', async () => {
-      if (!window.confirm('¿Dejar de compartir bajadas con ' + f.name + '?')) return;
-      await shell.api.removeFriend(f.id); await refresh('Ya no compartís bajadas.');})])),
-    ...outgoing.map(f => row(f.name, 'solicitud enviada', [
-      button('Cancelar', 'text-btn danger', async () => {await shell.api.removeFriend(f.id); await refresh();})])),
+    ...incoming.map(f => row(f.name, T('quiere ser tu amigo'), [
+      button(T('Aceptar'), 'btn outline small', async () => {await shell.api.acceptFriend(f.id); await refresh(T('Ahora {name} y tú veis vuestras bajadas.', {name: f.name}));}),
+      button(T('Rechazar'), 'text-btn danger', async () => {await shell.api.removeFriend(f.id); await refresh();})])),
+    ...friends.map(f => row(f.name, '', [button(T('Quitar'), 'text-btn danger', async () => {
+      if (!window.confirm(T('¿Dejar de compartir bajadas con {name}?', {name: f.name}))) return;
+      await shell.api.removeFriend(f.id); await refresh(T('Ya no compartís bajadas.'));})])),
+    ...outgoing.map(f => row(f.name, T('solicitud enviada'), [
+      button(T('Cancelar'), 'text-btn danger', async () => {await shell.api.removeFriend(f.id); await refresh();})])),
   ];
-  $('friendsList').replaceChildren(...(items.length ? items : [node('p', {className: 'placeholder', textContent: 'Todavía no tienes amigos en la app.'})]));
+  $('friendsList').replaceChildren(...(items.length ? items : [node('p', {className: 'placeholder', textContent: T('Todavía no tienes amigos en la app.')})]));
 }
 async function inviteFriend() {
   const name = $('friendName').value.trim();
-  if (!name) return say($('friendFeedback'), 'Escribe el nombre de piloto de tu amigo.', 'error');
+  if (!name) return say($('friendFeedback'), T('Escribe el nombre de piloto de tu amigo.'), 'error');
   try {
     const result = await shell.api.addFriend(name);
     $('friendName').value = '';
-    say($('friendFeedback'), result.status === 'accepted' ? 'Ya sois amigos con ' + result.name + '.' :
-      'Solicitud enviada a ' + result.name + '. Cuando la acepte, veréis vuestras bajadas.', 'success');
+    say($('friendFeedback'), result.status === 'accepted' ? T('Ya sois amigos con {name}.', {name: result.name}) :
+      T('Solicitud enviada a {name}. Cuando la acepte, veréis vuestras bajadas.', {name: result.name}), 'success');
     await Promise.all([loadFriends(), loadRuns()]);
   } catch (err) {say($('friendFeedback'), err.message, 'error');}
 }
@@ -664,50 +671,51 @@ $('clearMapSelection').addEventListener('click', () => {
 // A route that passes a circuit's start and finish without following it in between (like on the
 // way to other trails) is not a run of it, as in a time trial.
 function skippedMessage(s) {
-  return 'Pasas por «' + s.circuit_name + '», pero ' + s.reason + ': no cuenta como bajada.';
+  return T('Pasas por «{circuit}», pero {reason}: no cuenta como bajada.', {circuit: s.circuit_name, reason: tServer(s.reason)});
 }
 // Where the new runs leave the rider in each circuit's records (Récords), with a link to the table.
 function recordLines(result) {
   return (result.records || []).map(r => {
-    const name = result.found.find(f => f.circuit_id === r.circuit_id)?.circuit_name || 'el circuito';
-    const text = !r.visible ? (r.rank === null && r.not_counted ? 'En ' + name + ' tu bajada no cuenta para los récords: el archivo parece editado o copiado.' :
-        'En ' + name + ' no sales en los récords: lo elegiste en Récords.') :
-      r.rank === null ? 'En ' + name + ' tu bajada no cuenta para los récords: el archivo parece editado o copiado.' :
-      r.hot_seat && r.new_best ? '🔥 ¡Hot seat en ' + name + '! Tu ' + formatMs(r.elapsed_ms) + ' es el mejor tiempo' +
-        (r.next ? ': le sacas ' + formatDelta(r.next.gap_ms).replace('+', '') + ' a ' + r.next.pilot + '.' : '.') :
-      r.hot_seat ? 'Sigues en el hot seat de ' + name + ' con ' + formatMs(r.elapsed_ms) + '.' :
-      r.rank === 1 ? 'En ' + name + ' empatas con el mejor tiempo (' + formatMs(r.elapsed_ms) + '), pero el hot seat sigue siendo de quien lo marcó antes.' :
-      (r.new_best ? 'Nuevo récord tuyo en ' + name + ': ' : 'En ' + name + ' sigues ') + r.rank + 'º de ' + r.riders +
-        ', a ' + formatDelta(r.gap_ms) + ' del hot seat' + (r.new_best ? '' : ' (tu mejor: ' + formatMs(r.elapsed_ms) + ')') + '.';
-    return node('p', {className: 'report-line'}, [text + ' ', node('a', {href: './records.html#' + r.circuit_id, textContent: 'Ver récords'})]);
+    const name = result.found.find(f => f.circuit_id === r.circuit_id)?.circuit_name || T('el circuito');
+    const it = {circuit: name, time: formatMs(r.elapsed_ms), place: ordinal(r.rank), n: r.riders, delta: formatDelta(r.gap_ms)};
+    const copied = T('En {circuit} tu bajada no cuenta para los récords: el archivo parece editado o copiado.', it);
+    const text = !r.visible ? (r.rank === null && r.not_counted ? copied : T('En {circuit} no sales en los récords: lo elegiste en Récords.', it)) :
+      r.rank === null ? copied :
+      r.hot_seat && r.new_best ? '🔥 ' + T('¡Hot seat en {circuit}! Tu {time} es el mejor tiempo', it) +
+        (r.next ? T(': le sacas {delta} a {name}.', {delta: formatDelta(r.next.gap_ms).replace('+', ''), name: r.next.pilot}) : '.') :
+      r.hot_seat ? T('Sigues en el hot seat de {circuit} con {time}.', it) :
+      r.rank === 1 ? T('En {circuit} empatas con el mejor tiempo ({time}), pero el hot seat sigue siendo de quien lo marcó antes.', it) :
+      r.new_best ? T('Nuevo récord tuyo en {circuit}: {place} de {n}, a {delta} del hot seat.', it) :
+      T('En {circuit} sigues {place} de {n}, a {delta} del hot seat (tu mejor: {time}).', it);
+    return node('p', {className: 'report-line'}, [text + ' ', node('a', {href: './records.html#' + r.circuit_id, textContent: T('Ver récords')})]);
   });
 }
 // Why a route gave no run: it rides part of a circuit, or the nearest circuit is somewhere else.
 function noCircuitMessage(nearest) {
-  if (!nearest) return 'Todavía no hay circuitos en la aplicación.';
-  if (nearest.passes) return 'Pasas por «' + nearest.circuit_name + '», pero no hay una bajada completa de su salida a su meta.';
-  return 'No contiene ningún circuito. El más cercano, «' + nearest.circuit_name + '», queda a ' +
-    (nearest.distance_m >= 1000 ? km(nearest.distance_m) : nearest.distance_m + ' m') + ' de tu ruta.';
+  if (!nearest) return T('Todavía no hay circuitos en la aplicación.');
+  if (nearest.passes) return T('Pasas por «{circuit}», pero no hay una bajada completa de su salida a su meta.', {circuit: nearest.circuit_name});
+  return T('No contiene ningún circuito. El más cercano, «{circuit}», queda a {distance} de tu ruta.', {circuit: nearest.circuit_name,
+    distance: nearest.distance_m >= 1000 ? km(nearest.distance_m) : nearest.distance_m + ' m'});
 }
 async function loadRoutes() {
   const routes = await shell.api.trainingRoutes();
-  $('routesCount').textContent = routes.length ? routes.length + ' RUTA(S)' : '';
+  $('routesCount').textContent = routes.length ? T('{n} RUTA(S)', {n: routes.length}) : '';
   $('routes').replaceChildren(...(routes.length ? routes.map(r => {
-    const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: 'Borrar'});
+    const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: T('Borrar')});
     remove.addEventListener('click', async () => {
-      if (!window.confirm('¿Borrar la ruta «' + r.filename + '» y sus bajadas de entrenamiento?')) return;
-      try {await shell.api.deleteTrainingRoute(r.id); await Promise.all([loadRoutes(), loadRuns()]); status('Ruta borrada.', 'success');}
+      if (!window.confirm(T('¿Borrar la ruta «{name}» y sus bajadas de entrenamiento?', {name: r.filename}))) return;
+      try {await shell.api.deleteTrainingRoute(r.id); await Promise.all([loadRoutes(), loadRuns()]); status(T('Ruta borrada.'), 'success');}
       catch (err) {status(err.message, 'error');}
     });
     return node('div', {className: 'item'}, [node('span', {}, [node('b', {textContent: r.filename}),
       node('small', {textContent: ' · ' + dateText(r.recorded_at || r.created_at) + ' · ' + (r.distance_m ? km(r.distance_m) + ' · ' : '') +
-        (r.runs ? r.runs + ' bajada(s)' : 'ningún circuito')})]), remove]);
-  }) : [node('p', {className: 'placeholder', textContent: 'Todavía no has subido rutas.'})]));
+        (r.runs ? T('{n} bajada(s)', {n: r.runs}) : T('ningún circuito'))})]), remove]);
+  }) : [node('p', {className: 'placeholder', textContent: T('Todavía no has subido rutas.')})]));
 }
 
 $('routeFile').addEventListener('change', e => {
   const file = e.target.files[0];
-  $('routeName').textContent = file ? file.name + ' · ' + Math.round(file.size / 1024) + ' KB' : 'Una salida completa: encontraremos las bajadas';
+  $('routeName').textContent = file ? file.name + ' · ' + Math.round(file.size / 1024) + ' KB' : T('Una salida completa: encontraremos las bajadas');
   // Chosen from «Subir ruta» at the top: analysed right away, and the page goes to the result below.
   if (file && quickUpload) {
     quickUpload = false;
@@ -719,33 +727,33 @@ let quickUpload = false;
 $('quickUpload').addEventListener('click', () => {quickUpload = true; $('routeFile').click();});
 $('analyze').addEventListener('click', async () => {
   const file = $('routeFile').files[0];
-  if (!file) return status('Elige primero un archivo GPX o TCX.', 'error');
+  if (!file) return status(T('Elige primero un archivo GPX o TCX.'), 'error');
   const btn = $('analyze');
   btn.disabled = true;
-  status('Buscando circuitos en ' + file.name + '…');
+  status(T('Buscando circuitos en {file}…', {file: file.name}));
   try {
     const result = await shell.api.uploadTrainingRoute(file);
     $('found').replaceChildren(...(result.found.length ? result.found.map(f => {
-      const see = node('button', {type: 'button', className: 'btn outline small', textContent: 'Comparar'});
+      const see = node('button', {type: 'button', className: 'btn outline small', textContent: T('Comparar')});
       see.addEventListener('click', () => loadRuns(f.circuit_id).catch(err => status(err.message, 'error')));
       return node('div', {className: 'item'}, [node('span', {}, [node('b', {textContent: f.circuit_name}),
-        node('small', {textContent: ' · ' + f.runs + ' bajada(s)'})]), see]);
+        node('small', {textContent: ' · ' + T('{n} bajada(s)', {n: f.runs})})]), see]);
     }) : []), ...(result.skipped || []).map(s => node('p', {className: 'placeholder', textContent: skippedMessage(s)})),
       ...(result.found.length || result.skipped?.length ? [] : [node('p', {className: 'placeholder', textContent: noCircuitMessage(result.nearest)})]));
     const notCounted = (result.skipped || []).map(skippedMessage).join(' ');
-    status(result.found.length ? 'Encontrado: ' + result.found.map(f => f.circuit_name + ' (' + f.runs + ')').join(', ') + '.' + (notCounted ? ' ' + notCounted : '') :
-      'Ruta guardada. ' + (notCounted || noCircuitMessage(result.nearest)), result.found.length ? 'success' : '');
-    $('routeFile').value = ''; $('routeName').textContent = 'Una salida completa: encontraremos las bajadas';
+    status(result.found.length ? T('Encontrado: {list}.', {list: result.found.map(f => f.circuit_name + ' (' + f.runs + ')').join(', ')}) + (notCounted ? ' ' + notCounted : '') :
+      T('Ruta guardada.') + ' ' + (notCounted || noCircuitMessage(result.nearest)), result.found.length ? 'success' : '');
+    $('routeFile').value = ''; $('routeName').textContent = T('Una salida completa: encontraremos las bajadas');
     await Promise.all([loadRoutes(), loadRuns(result.found[0]?.circuit_id)]);
     // What each new run says against your earlier ones, without having to read the charts.
     const lines = await Promise.all((result.runs || []).slice(0, 4).map(r => runs.find(x => x.id === r.id)).filter(Boolean)
       .map(r => reportText(r).catch(() => null)));
     $('found').prepend(...recordLines(result), ...lines.filter(Boolean).map(text => node('p', {className: 'report-line', textContent: text})));
-  } catch (err) {status('No se pudo analizar la ruta: ' + err.message, 'error');}
+  } catch (err) {status(T('No se pudo analizar la ruta: {error}', {error: err.message}), 'error');}
   finally {btn.disabled = false;}
 });
 $('circuitSelect').addEventListener('change', pickDefault);
-$('loginButton').addEventListener('click', () => shell.askLogin('Entra o crea tu cuenta para guardar tus rutas.'));
+$('loginButton').addEventListener('click', () => shell.askLogin(T('Entra o crea tu cuenta para guardar tus rutas.')));
 // ---- GoPro video, played from the rider's own device and kept in step with the map and charts ----
 let clip = null, clipB = null, referenceId = null;
 // loop: a stretch played over and over; anchor: both runs' times where the two videos started playing
@@ -756,14 +764,13 @@ const pair = {loop: null, anchor: null, joint: false, moved: true, recapture: fa
 const LOSS = '#ff5c5c', GAIN = '#3fd0c9';
 // The video's dots go above everything else on the map, numbered braking pins included.
 view.map.createPane('videoNow').style.zIndex = 640;
-const clock = s => Math.floor(s / 60) + ':' + (s % 60).toFixed(1).padStart(4, '0').replace('.', ',');
-const madrid = ms => new Date(ms).toLocaleString('es-ES', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+const clock = s => Math.floor(s / 60) + ':' + dec(s % 60).padStart(4, '0');
+const madrid = ms => new Date(ms).toLocaleString(locale, {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 const videoSay = (message, type = '') => say($('videoInfo'), message, type);
 const linked = () => current?.data.find(d => d.run.id === clip?.runId) || null;
 const linkedB = () => current?.data.find(d => d.run.id === clipB?.runId) || null;
 const sayB = (message, type = '') => say($('videoInfoB'), message, type);
 const shortLabel = r => (r.mine === false ? r.pilot + ' · ' : '') + when(r.started_at);
-const decimal = (x, n = 1) => x.toFixed(n).replace('.', ',');
 
 const runAt = positionAt;
 // The run as its video shows it (videoTrack): on the frames' clock, where the camera's GPS saw it. The
@@ -805,12 +812,13 @@ function placePair() {
 }
 // What the camera's GPS changed, in the rider's words.
 function syncNote(c, d) {
-  if (!c.track) return ' El GPS de la cámara no ha servido para ajustar el vídeo a la bajada: lo que se ve puede ir unos segundos ' +
-    'desfasado de los datos. Si es así, ajústalo a ojo con los botones.';
-  const end = endOf(c, d), official = d.run.elapsed_ms;
-  return ' Ajustado con el GPS de la cámara' + (Math.abs(c.shift) >= 0.3 ? ': los datos del reloj iban ' + decimal(Math.abs(c.shift)) + ' s ' +
-    (c.shift > 0 ? 'adelantados' : 'atrasados') + ' respecto a la imagen en la salida' : '') +
-    (Math.abs(end - official) >= 1000 ? '. En el vídeo la bajada dura ' + formatMs(end) + ' (el reloj dice ' + formatMs(official) + ')' : '') + '.';
+  if (!c.track) return ' ' + T('El GPS de la cámara no ha servido para ajustar el vídeo a la bajada: lo que se ve puede ir unos segundos ' +
+    'desfasado de los datos. Si es así, ajústalo a ojo con los botones.');
+  const end = endOf(c, d), official = d.run.elapsed_ms, s = dec(Math.abs(c.shift));
+  return ' ' + T('Ajustado con el GPS de la cámara') + (Math.abs(c.shift) < 0.3 ? '' : c.shift > 0 ?
+      T(': los datos del reloj iban {s} s adelantados respecto a la imagen en la salida', {s}) :
+      T(': los datos del reloj iban {s} s atrasados respecto a la imagen en la salida', {s})) +
+    (Math.abs(end - official) >= 1000 ? T('. En el vídeo la bajada dura {video} (el reloj dice {watch})', {video: formatMs(end), watch: formatMs(official)}) : '') + '.';
 }
 // The run whose time the video covers most: yours first, then your friends'.
 function runInVideo(t, accept = () => true) {
@@ -826,15 +834,15 @@ async function linkVideo() {
   if (!run) {
     clip.runId = null;
     syncVideo();
-    const upload = node('button', {type: 'button', className: 'btn outline', textContent: 'Usar el GPS de la GoPro'});
-    upload.addEventListener('click', () => uploadGoproGps().catch(err => videoSay('No se pudo subir el GPS de la GoPro: ' + err.message, 'error')));
+    const upload = node('button', {type: 'button', className: 'btn outline', textContent: T('Usar el GPS de la GoPro')});
+    upload.addEventListener('click', () => uploadGoproGps().catch(err => videoSay(T('No se pudo subir el GPS de la GoPro: {error}', {error: err.message}), 'error')));
     $('videoActions').replaceChildren(upload);
     $('videoActions').hidden = false;
     $('secondVideo').hidden = false;
     $('videoTools').hidden = false;
     renderMarks();
-    return videoSay('El vídeo es del ' + madrid(t.lag * 1000) + ' (' + clock(t.seconds) + ') y no tienes ninguna bajada de ese momento. ' +
-      'Sube la ruta de tu reloj de ese día, o usa el GPS de la propia GoPro: lo subimos como una ruta de entrenamiento y, si sigue un circuito, aparece la bajada.');
+    return videoSay(T('El vídeo es del {date} ({length}) y no tienes ninguna bajada de ese momento. Sube la ruta de tu reloj de ese día, o usa ' +
+      'el GPS de la propia GoPro: lo subimos como una ruta de entrenamiento y, si sigue un circuito, aparece la bajada.', {date: madrid(t.lag * 1000), length: clock(t.seconds)}));
   }
   clip.runId = run.id;
   // A second video of another circuit no longer makes sense.
@@ -860,11 +868,13 @@ async function linkVideo() {
   const started = (clip.start + t.lag) * 1000, when = Date.parse(run.started_at);
   clip.gps = cameraGps(t, clip.start, clip.start + endOf(clip, d) / 1000,
     ms => ms < started || ms > started + endOf(clip, d) ? null : runAt(seen(clip, d), ms - started));
-  videoSay('Vídeo de la bajada ' + (run.mine === false ? 'de ' + run.pilot + ' ' : '') + 'del ' + madrid(when) +
-    ' en ' + run.circuit_name + ': la salida está en el ' + clock(Math.max(0, clip.start)) + ' del vídeo y la meta en el ' +
-    clock(clip.start + endOf(clip, d) / 1000) + '.' + syncNote(clip, d) + footageNote(clip, d, 'el vídeo') + (clip.gps.ok ? '' : ' El GPS de la cámara iba mal en esta bajada (' +
-    (clip.gps.offM > 20 ? 'a unos ' + Math.round(clip.gps.offM) + ' m de la ruta' : 'precisión ' + decimal(clip.gps.dop)) +
-    '): la velocidad y las frenadas salen de la ruta, y las paradas, de cómo se mueve la cámara. La hora del vídeo sí es exacta.'),
+  const about = {name: run.pilot, date: madrid(when), circuit: run.circuit_name, start: clock(Math.max(0, clip.start)),
+    finish: clock(clip.start + endOf(clip, d) / 1000)};
+  videoSay((run.mine === false ? T('Vídeo de la bajada de {name} del {date} en {circuit}: la salida está en el {start} del vídeo y la meta en el {finish}.', about) :
+    T('Vídeo de la bajada del {date} en {circuit}: la salida está en el {start} del vídeo y la meta en el {finish}.', about)) +
+    syncNote(clip, d) + footageNote(clip, d, T('el vídeo')) + (clip.gps.ok ? '' : ' ' + T('El GPS de la cámara iba mal en esta bajada ({how}): la velocidad y ' +
+    'las frenadas salen de la ruta, y las paradas, de cómo se mueve la cámara. La hora del vídeo sí es exacta.', {how: clip.gps.offM > 20 ?
+      T('a unos {m} m de la ruta', {m: Math.round(clip.gps.offM)}) : T('precisión {dop}', {dop: dec(clip.gps.dop)})})),
     clip.gps.ok ? 'success' : 'warning');
   if (video().paused && video().currentTime < 0.1) video().currentTime = Math.max(0, clip.start - 2);
   renderMoments();
@@ -881,21 +891,22 @@ function renderMoments() {
   const of = kind => all.filter(m => m.kind === kind);
   const still = of('stop').reduce((sum, m) => sum + m.seconds, 0);
   const counts = [
-    of('stop').length ? of('stop').length + ' parada(s), ' + decimal(still) + ' s quieto' : 'sin paradas',
-    ...gps ? [of('brake').length + ' frenada(s) fuertes'] : [], of('shock').length + ' golpe(s) de 4 g o más',
-    of('air').length ? of('air').length + ' salto(s)' : 'ningún salto'];
+    of('stop').length ? T('{n} parada(s), {s} s quieto', {n: of('stop').length, s: dec(still)}) : T('sin paradas'),
+    ...gps ? [T('{n} frenada(s) fuertes', {n: of('brake').length})] : [], T('{n} golpe(s) de 4 g o más', {n: of('shock').length}),
+    of('air').length ? T('{n} salto(s)', {n: of('air').length}) : T('ningún salto')];
   // Every stop, braking and jump; of the shocks, the five strongest.
   const strongest = of('shock').sort((a, b) => b.g - a.g).slice(0, 5);
   const shown = all.filter(m => m.kind !== 'shock' || strongest.includes(m));
   const text = m => ({
-    stop: () => 'Parada de ' + decimal(m.seconds) + ' s',
-    brake: () => 'Frenada de ' + Math.round(m.fromKmh) + ' a ' + Math.round(m.toKmh) + ' km/h en ' + decimal(m.until - m.t) + ' s (hasta ' + decimal(m.peak) + ' m/s²)',
-    shock: () => 'Golpe de ' + decimal(m.g) + ' g',
-    air: () => 'Salto: ' + decimal(m.seconds, 2) + ' s en el aire'})[m.kind]();
+    stop: () => T('Parada de {s} s', {s: dec(m.seconds)}),
+    brake: () => T('Frenada de {from} a {to} km/h en {s} s (hasta {peak} m/s²)', {from: Math.round(m.fromKmh), to: Math.round(m.toKmh),
+      s: dec(m.until - m.t), peak: dec(m.peak)}),
+    shock: () => T('Golpe de {g} g', {g: dec(m.g)}),
+    air: () => T('Salto: {s} s en el aire', {s: dec(m.seconds, 2)})})[m.kind]();
   box.replaceChildren(
-    node('p', {className: 'moments-summary', textContent: 'En esta bajada: ' + counts.join(', ') + '.' +
-      (still >= 1 ? ' Sin las paradas habrías tardado unos ' + decimal(d.run.elapsed_ms / 1000 - still) + ' s.' : '') +
-      (gps ? '' : ' Las frenadas, en «Frenadas»: salen de la ruta, porque el GPS de la cámara no era fiable.')}),
+    node('p', {className: 'moments-summary', textContent: T('En esta bajada: {list}.', {list: counts.join(', ')}) +
+      (still >= 1 ? ' ' + T('Sin las paradas habrías tardado unos {s} s.', {s: dec(d.run.elapsed_ms / 1000 - still)}) : '') +
+      (gps ? '' : ' ' + T('Las frenadas, en «Frenadas»: salen de la ruta, porque el GPS de la cámara no era fiable.'))}),
     ...shown.map(m => {
       const at = runAt(seen(clip, d), (m.t - clip.start) * 1000);
       const button = node('button', {type: 'button', className: 'moment moment-' + m.kind}, [
@@ -924,8 +935,8 @@ function syncVideo() {
   hudSecond();
   showPairGap();
   if (!clip || !d) {
-    hud.textContent = !clip ? '' : clip.telemetry?.good ? 'Vídeo grabado el ' + madrid(clip.telemetry.lag * 1000) + ' · ' + clock(video().currentTime) :
-      'Vídeo sin GPS · ' + clock(video().currentTime);
+    hud.textContent = !clip ? '' : (clip.telemetry?.good ? T('Vídeo grabado el {date}', {date: madrid(clip.telemetry.lag * 1000)}) : T('Vídeo sin GPS')) +
+      ' · ' + clock(video().currentTime);
     return;
   }
   const ms = (video().currentTime - clip.start) * 1000;
@@ -935,13 +946,13 @@ function syncVideo() {
   repeatStretch(d, ms);
   moveMarks();
   if (ms < 0 || ms > endOf(clip, d)) {
-    setHud(hud, d, ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(d.run.elapsed_ms));
+    setHud(hud, d, ms < 0 ? T('Antes de la salida: faltan {time}', {time: clock(-ms / 1000)}) : T('Después de la meta') + ' · ' + formatMs(d.run.elapsed_ms));
     return;
   }
   const at = runAt(seen(clip, d), ms), speed = speedAt(clip, d, video().currentTime, at.s);
   const ref = current.reference;
   // With a second video the comparison is under both; alone, against the reference run.
-  const race = ref !== d && !linkedB() ? ' · ' + formatDelta(ms - timeAt(ref.profile, at.s)) + ' frente a ' + shortLabel(ref.run) : '';
+  const race = ref !== d && !linkedB() ? ' · ' + T('{delta} frente a {run}', {delta: formatDelta(ms - timeAt(ref.profile, at.s)), run: shortLabel(ref.run)}) : '';
   setHud(hud, d, formatMs(ms) + ' · ' + speedText(speed) + ' · ' + Math.round(at.s) + ' m' + race);
 }
 // The camera's own speed at this frame (its GPS measures it ten times a second) when it can be trusted,
@@ -978,8 +989,8 @@ function seekBoth(metres, lead = 0) {
     const want = (pair.place && a ? pair.place(clip.start + timeAt(seen(clip, a), metres) / 1000) : clipB.start + timeAt(seen(clipB, b), metres) / 1000) - lead;
     const end = videoB().duration || clipB.telemetry?.seconds || Infinity;
     videoB().currentTime = Math.max(0, Math.min(end, want));
-    if (want < -0.5 || want > end) toolsHint('El vídeo 2 no tiene imagen en el metro ' + Math.round(metres) + ': su cámara ' +
-      (want < 0 ? 'empezó a grabar más tarde.' : 'dejó de grabar antes.'));
+    if (want < -0.5 || want > end) toolsHint(want < 0 ? T('El vídeo 2 no tiene imagen en el metro {m}: su cámara empezó a grabar más tarde.', {m: Math.round(metres)}) :
+      T('El vídeo 2 no tiene imagen en el metro {m}: su cámara dejó de grabar antes.', {m: Math.round(metres)}));
   }
 }
 // Play both from where they are (once both can, so they start together) or pause both.
@@ -1049,10 +1060,10 @@ setInterval(() => {
 function hudSecond() {
   const v = videoB(), b = linkedB(), hud = $('videoHudB');
   if (!clipB?.url) return;
-  if (!b) return hud.replaceChildren((youtube ? 'YouTube' : 'Vídeo 2') + ' · ' + clock(v.currentTime));
+  if (!b) return hud.replaceChildren((youtube ? 'YouTube' : T('Vídeo 2')) + ' · ' + clock(v.currentTime));
   const ms = runMs(clipB, v);
   if (ms < 0 || ms > endOf(clipB, b))
-    return setHud(hud, b, ms < 0 ? 'Antes de la salida: faltan ' + clock(-ms / 1000) : 'Después de la meta · ' + formatMs(b.run.elapsed_ms));
+    return setHud(hud, b, ms < 0 ? T('Antes de la salida: faltan {time}', {time: clock(-ms / 1000)}) : T('Después de la meta') + ' · ' + formatMs(b.run.elapsed_ms));
   const here = runAt(seen(clipB, b), ms);
   setHud(hud, b, formatMs(ms) + ' · ' + speedText(speedAt(clipB, b, v.currentTime, here.s)) + ' · ' + Math.round(here.s) + ' m');
 }
@@ -1074,22 +1085,22 @@ function showPairGap() {
     const parts = [];
     if (a && b) {
       const here = runAt(seen(clip, a), Math.max(0, msA)).s, there = runAt(seen(clipB, b), Math.max(0, msB)).s, apart = Math.round(Math.abs(there - here));
-      parts.push('Vídeo 1 en el metro ' + Math.round(here) + ', vídeo 2 en el metro ' + Math.round(there) +
-        (apart > 25 && !pair.base ? ': no están en el mismo sitio. Llévalos a un mismo punto con sus botones, o pulsa un sector o una frenada.' : '.'));
+      parts.push(T('Vídeo 1 en el metro {a}, vídeo 2 en el metro {b}', {a: Math.round(here), b: Math.round(there)}) +
+        (apart > 25 && !pair.base ? T(': no están en el mismo sitio. Llévalos a un mismo punto con sus botones, o pulsa un sector o una frenada.') : '.'));
     }
     if (pair.base) {
       const took = (msB - pair.base.msB) - (msA - pair.base.msA);
-      parts.push(Math.abs(took) < 50 ? 'Si ahora los dos están en el mismo sitio, desde donde los alineaste van igual (medido en la imagen).' :
-        'Si ahora los dos están en el mismo sitio, desde donde los alineaste el vídeo ' + (took > 0 ? '1' : '2') + ' le saca ' +
-        seconds(Math.abs(took)) + ' al ' + (took > 0 ? '2' : '1') + ' (medido en la imagen, al fotograma).');
-    } else parts.push('Ponlos en el mismo sitio con sus botones y dale a ▶ Reproducir.');
+      parts.push(Math.abs(took) < 50 ? T('Si ahora los dos están en el mismo sitio, desde donde los alineaste van igual (medido en la imagen).') :
+        T('Si ahora los dos están en el mismo sitio, desde donde los alineaste el vídeo {ahead} le saca {time} al {behind} (medido en la imagen, al fotograma).',
+          {ahead: took > 0 ? 1 : 2, behind: took > 0 ? 2 : 1, time: seconds(Math.abs(took))}));
+    } else parts.push(T('Ponlos en el mismo sitio con sus botones y dale a ▶ Reproducir.'));
     box.replaceChildren(parts.join(' '));
     return;
   }
   if (!a || !b) {
     markLeader();
-    box.replaceChildren('Juntos desde donde los alineaste. Para ver cuánto le saca uno al otro, páralos cuando uno llegue a un sitio que ' +
-      'reconozcas y lleva el otro allí con sus botones: lo dice la imagen, al fotograma.');
+    box.replaceChildren(T('Juntos desde donde los alineaste. Para ver cuánto le saca uno al otro, páralos cuando uno llegue a un sitio que ' +
+      'reconozcas y lleva el otro allí con sus botones: lo dice la imagen, al fotograma.'));
     return;
   }
   // The same metres from each one's starting point (lined up by eye, the two days' GPS may put that point a
@@ -1110,28 +1121,28 @@ function showPairGap() {
   const chip = d => Object.assign(node('i', {className: 'chip'}), {style: 'background:' + d.color});
   const level = Math.abs(gained) < LEVEL_MS;
   markLeader(level ? null : gained > 0 ? 1 : 2, seconds(Math.abs(gained)));
-  const start = fromA < 5 && fromB < 5 ? 'Desde la salida' : Math.abs(fromA - fromB) <= 5 ? 'Desde el metro ' + Math.round(fromA) :
-    'Desde donde empezaron (metro ' + Math.round(fromA) + ' y ' + Math.round(fromB) + ')';
+  const start = fromA < 5 && fromB < 5 ? T('Desde la salida') : Math.abs(fromA - fromB) <= 5 ? T('Desde el metro {m}', {m: Math.round(fromA)}) :
+    T('Desde donde empezaron (metro {a} y {b})', {a: Math.round(fromA), b: Math.round(fromB)});
   box.replaceChildren(node('span', {textContent: start + ': '}),
-    ...(level ? [node('b', {textContent: 'van igual'})] : [chip(gained > 0 ? a : b),
-      node('b', {textContent: 'el vídeo ' + (gained > 0 ? '1' : '2') + ' le saca ' + seconds(Math.abs(gained)) + ' al ' + (gained > 0 ? '2' : '1')})]),
-    node('span', {textContent: ' · ' + (apart < 1 ? 'a la par' : apart + ' m entre ellos')}));
+    ...(level ? [node('b', {textContent: T('van igual')})] : [chip(gained > 0 ? a : b),
+      node('b', {textContent: T('el vídeo {ahead} le saca {time} al {behind}', {ahead: gained > 0 ? 1 : 2, behind: gained > 0 ? 2 : 1, time: seconds(Math.abs(gained))})})]),
+    node('span', {textContent: ' · ' + (apart < 1 ? T('a la par') : T('{m} m entre ellos', {m: apart}))}));
 }
 // The video that goes ahead since both were played together gets a green frame, with how much it gains.
 function markLeader(lead = null, gain = '') {
   [[$('videoDock'), 1], [$('videoDockB'), 2]].forEach(([dock, which]) => {
     dock.classList.toggle('leading', lead === which);
-    dock.dataset.lead = lead === which ? gain : '';
+    dock.dataset.lead = lead === which ? T('DELANTE {gain}', {gain}) : '';
   });
 }
 // Where a video starts and ends along its run, when the camera was switched on after the start or off
 // before the finish ('' when it films the whole run).
 function footageNote(c, d, which) {
   const begins = -c.start * 1000, ends = (c.telemetry.seconds - c.start) * 1000, notes = [];
-  if (begins > 1000) notes.push('empieza ' + Math.round(begins / 1000) + ' s después de la salida, en el metro ' + Math.round(runAt(seen(c, d), begins).s) +
-    ' (antes no hay imagen)');
-  if (ends < endOf(c, d) - 1000) notes.push('acaba antes de la meta, en el metro ' + Math.round(runAt(seen(c, d), ends).s) + ' (después no hay imagen)');
-  return notes.length ? ' Ojo: ' + which + ' ' + notes.join(' y ') + '.' : '';
+  if (begins > 1000) notes.push(T('empieza {s} s después de la salida, en el metro {m} (antes no hay imagen)',
+    {s: Math.round(begins / 1000), m: Math.round(runAt(seen(c, d), begins).s)}));
+  if (ends < endOf(c, d) - 1000) notes.push(T('acaba antes de la meta, en el metro {m} (después no hay imagen)', {m: Math.round(runAt(seen(c, d), ends).s)}));
+  return notes.length ? ' ' + T('Ojo: {which} {what}.', {which, what: notes.join(T(' y '))}) : '';
 }
 function showSecond() {
   const dock = $('videoDockB');
@@ -1139,7 +1150,7 @@ function showSecond() {
   // was made first in the dock): an iframe moved in the page loads again and stops saying when it plays.
   dock.querySelector('.own-controls')?.remove();
   $('videoB').hidden = !!youtube;
-  dock.append(...(youtube ? [] : [videoB()]), ownControls(videoB(), 'vídeo 2'), $('videoHudB'));
+  dock.append(...(youtube ? [] : [videoB()]), ownControls(videoB(), T('vídeo 2')), $('videoHudB'));
   videoB().hidden = false;
   $('videoDockB').hidden = false;
   $('mapDuo').classList.add('two');
@@ -1156,13 +1167,13 @@ async function linkSecond() {
     clipB.runId = null;
     $('pairGap').hidden = true;
     markLeader();
-    if (youtube) sayB('Vídeo de YouTube' + (youtube.title ? ': «' + youtube.title + '»' : '') + '. YouTube le quita el GPS, así que no tiene ' +
+    if (youtube) sayB(T('Vídeo de YouTube') + (youtube.title ? ': «' + youtube.title + '»' : '') + '. ' + T('YouTube le quita el GPS, así que no tiene ' +
       'tiempo ni velocidad: ponlos los dos en el mismo punto (la salida, o una curva o una piedra que se reconozca) con los botones ' +
-      'de cada uno y dale a ▶ Reproducir. Arrancan a la vez y cada uno sigue a su ritmo.' +
-      (linked() ? ' El mapa y la información siguen al vídeo 1.' : ''), 'success');
-    else sayB((!t ? 'Este vídeo no lleva la telemetría de una GoPro.' : !t.good ? 'Este vídeo no tiene señal GPS.' :
-      !a ? 'El vídeo 1 no está enlazado con ninguna bajada.' : 'En este vídeo no hay otra bajada de ' + a.run.circuit_name + ', tuya ni de tus amigos.') +
-      ' Puedes verlos juntos igual: ponlos en el mismo punto con sus barras y dale a ▶.', 'warning');
+      'de cada uno y dale a ▶ Reproducir. Arrancan a la vez y cada uno sigue a su ritmo.') +
+      (linked() ? ' ' + T('El mapa y la información siguen al vídeo 1.') : ''), 'success');
+    else sayB((!t ? T('Este vídeo no lleva la telemetría de una GoPro.') : !t.good ? T('Este vídeo no tiene señal GPS.') :
+      !a ? T('El vídeo 1 no está enlazado con ninguna bajada.') : T('En este vídeo no hay otra bajada de {circuit}, tuya ni de tus amigos.', {circuit: a.run.circuit_name})) +
+      ' ' + T('Puedes verlos juntos igual: ponlos en el mismo punto con sus barras y dale a ▶.'), 'warning');
     hudSecond();
     return;
   }
@@ -1175,18 +1186,20 @@ async function linkSecond() {
   const started = (clipB.start + t.lag) * 1000, when = Date.parse(run.started_at);
   clipB.gps = cameraGps(t, clipB.start, clipB.start + endOf(clipB, b) / 1000,
     ms => ms < started || ms > started + endOf(clipB, b) ? null : runAt(seen(clipB, b), ms - started));
-  const diff = run.elapsed_ms - a.run.elapsed_ms, note = footageNote(clipB, b, 'el vídeo 2');
-  sayB('Vídeo 2: la bajada ' + (run.mine === false ? 'de ' + run.pilot + ' ' : '') + 'del ' + madrid(when) + ', ' + formatMs(run.elapsed_ms) +
-    ' (' + formatDelta(diff) + ' frente al vídeo 1). Dale a ▶, o llévalos a la vez a un sector o una frenada con la barra de debajo del vídeo 1.' +
+  const diff = run.elapsed_ms - a.run.elapsed_ms, note = footageNote(clipB, b, T('el vídeo 2'));
+  const about = {name: run.pilot, date: madrid(when), time: formatMs(run.elapsed_ms), delta: formatDelta(diff)};
+  sayB((run.mine === false ? T('Vídeo 2: la bajada de {name} del {date}, {time} ({delta} frente al vídeo 1).', about) :
+    T('Vídeo 2: la bajada del {date}, {time} ({delta} frente al vídeo 1).', about)) + ' ' +
+    T('Dale a ▶, o llévalos a la vez a un sector o una frenada con la barra de debajo del vídeo 1.') +
     syncNote(clipB, b) + note, note || !clipB.track ? 'warning' : 'success');
   placePair();
-  if (pair.place) sayB($('videoInfoB').textContent + ' Cuánto le saca uno al otro sale de los baches del camino, que las dos cámaras ' +
-    'notan igual: más preciso que el GPS.', $('videoInfoB').className.includes('warning') ? 'warning' : 'success');
+  if (pair.place) sayB($('videoInfoB').textContent + ' ' + T('Cuánto le saca uno al otro sale de los baches del camino, que las dos cámaras ' +
+    'notan igual: más preciso que el GPS.'), $('videoInfoB').className.includes('warning') ? 'warning' : 'success');
   // Both where both have footage: at the start, or where the later camera began recording.
   const begins = (c, d) => c.start < 0 ? runAt(seen(c, d), -c.start * 1000 + 500).s : 0, first = Math.max(begins(clip, a), begins(clipB, b));
   pauseBoth();
   seekBoth(first, first ? 0 : 2);
-  if (first) toolsHint('Están los dos en el metro ' + Math.round(first) + ', donde empieza la imagen de los dos.');
+  if (first) toolsHint(T('Están los dos en el metro {m}, donde empieza la imagen de los dos.', {m: Math.round(first)}));
   syncVideo();
 }
 function dropYoutube() {
@@ -1209,7 +1222,7 @@ function dropSecond() {
   $('pairGap').hidden = true;
   markLeader();
   $('mapDuo').classList.remove('two');
-  $('videoNameB').textContent = 'Otra bajada del mismo circuito: tuya de otro día o de un amigo que te pase su vídeo';
+  $('videoNameB').textContent = T('Otra bajada del mismo circuito: tuya de otro día o de un amigo que te pase su vídeo');
   fitVideo();
 }
 // The telemetry of a GoPro, or null for any other MP4 (still fine to watch next to another).
@@ -1220,8 +1233,8 @@ async function readTelemetry(file) {
 $('videoFileB').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
-  $('videoNameB').textContent = file.name + ' · ' + (file.size / 1e9).toFixed(1).replace('.', ',') + ' GB';
-  sayB('Leyendo la telemetría de ' + file.name + '…');
+  $('videoNameB').textContent = file.name + ' · ' + dec(file.size / 1e9) + ' GB';
+  sayB(T('Leyendo la telemetría de {file}…', {file: file.name}));
   try {
     const telemetry = await readTelemetry(file);
     dropYoutube();
@@ -1230,14 +1243,14 @@ $('videoFileB').addEventListener('change', async e => {
     videoB().src = clipB.url;
     await linkSecond();
     $('mapDuo').scrollIntoView({behavior: 'smooth', block: 'start'});
-  } catch (err) {sayB('No se puede usar este vídeo: ' + err.message, 'error');}
+  } catch (err) {sayB(T('No se puede usar este vídeo: {error}', {error: err.message}), 'error');}
 });
 // A YouTube video instead of a file: its link, and the same place and buttons as a file.
 $('youtubeForm').addEventListener('submit', async event => {
   event.preventDefault();
   const link = youtubeLink($('youtubeUrl').value);
-  if (!link) return sayB('Eso no es el enlace de un vídeo de YouTube. En YouTube: Compartir → Copiar enlace, y pégalo aquí.', 'error');
-  sayB('Cargando el vídeo de YouTube…');
+  if (!link) return sayB(T('Eso no es el enlace de un vídeo de YouTube. En YouTube: Compartir → Copiar enlace, y pégalo aquí.'), 'error');
+  sayB(T('Cargando el vídeo de YouTube…'));
   const holder = node('div', {className: 'yt-frame'}), dock = $('videoDockB'), was = dock.hidden;
   // The player is made in the page, where it will be seen.
   dock.prepend(holder);
@@ -1257,7 +1270,7 @@ $('youtubeForm').addEventListener('submit', async event => {
   } catch (err) {
     holder.remove();
     if (!clipB) {dock.hidden = was; $('mapDuo').classList.remove('two'); fitVideo();}
-    sayB('No se puede usar ese vídeo de YouTube: ' + err.message, 'error');
+    sayB(T('No se puede usar ese vídeo de YouTube: {error}', {error: err.message}), 'error');
   }
 });
 // Each video plays and pauses on its own (only ▶ Reproducir plays both); moving one, or playing it on
@@ -1271,7 +1284,7 @@ function listenSecond(v) {
   v.addEventListener('seeking', movedOrJumped);
   v.addEventListener('timeupdate', () => {hudSecond(); showPairGap(); if (video().paused) drawReplay();});
   v.addEventListener('error', () => {
-    if (clipB) sayB(v === youtube ? youtube.error : 'Este navegador no puede mostrar el segundo vídeo (H.265). Prueba con Safari, o con Chrome o Edge al día.', 'error');
+    if (clipB) sayB(v === youtube ? youtube.error : T('Este navegador no puede mostrar el segundo vídeo (H.265). Prueba con Safari, o con Chrome o Edge al día.'), 'error');
   });
 }
 listenSecond($('videoB'));
@@ -1313,7 +1326,7 @@ beepAtGates(videoB(), () => clipB, linkedB);
 ['pointerdown', 'keydown'].forEach(type => document.addEventListener(type, () => {if (beeps && clip) unlockSound();}, {passive: true}));
 const showBeeps = () => {
   $('beepToggle').setAttribute('aria-pressed', String(beeps));
-  $('beepToggle').textContent = (beeps ? '🔊' : '🔇') + ' Pitidos';
+  $('beepToggle').textContent = (beeps ? '🔊' : '🔇') + ' ' + T('Pitidos');
 };
 $('beepToggle').addEventListener('click', () => {
   beeps = !beeps;
@@ -1337,10 +1350,10 @@ function ownControls(v, which) {
     v.pause();
     v.currentTime = Math.max(0, Math.min(v.duration || Infinity, v.currentTime + seconds));
   };
-  const play = button('▶', 'Reproducir o parar solo este vídeo', () => {v.playbackRate = replay.speed; v.paused ? v.play().catch(() => {}) : v.pause();});
+  const play = button('▶', T('Reproducir o parar solo este vídeo'), () => {v.playbackRate = replay.speed; v.paused ? v.play().catch(() => {}) : v.pause();});
   play.className = 'own-play';
-  return node('div', {className: 'own-controls'}, [button('−1s', 'Un segundo atrás', move(-1)), button('−0,1', 'Una décima atrás', move(-0.1)),
-    play, button('+0,1', 'Una décima adelante', move(0.1)), button('+1s', 'Un segundo adelante', move(1))]);
+  return node('div', {className: 'own-controls'}, [button('−1s', T('Un segundo atrás'), move(-1)), button('−' + dec(0.1), T('Una décima atrás'), move(-0.1)),
+    play, button('+' + dec(0.1), T('Una décima adelante'), move(0.1)), button('+1s', T('Un segundo adelante'), move(1))]);
 }
 const ownLabel = v => {const b = v.parentElement?.querySelector('.own-play'); if (b) b.textContent = v.paused ? '▶' : '❚❚';};
 // Moving a video by hand starts counting again; a jump while both play together (a loop) keeps
@@ -1362,14 +1375,14 @@ function selectedStretch() {
 function setLoop(stretch) {
   pair.loop = stretch;
   $('loopStretch').setAttribute('aria-pressed', String(!!stretch));
-  toolsHint(stretch ? 'Repitiendo de ' + Math.round(stretch.from) + ' a ' + Math.round(stretch.to) + ' m' : '');
+  toolsHint(stretch ? T('Repitiendo de {from} a {to} m', {from: Math.round(stretch.from), to: Math.round(stretch.to)}) : '');
 }
 $('loopStretch').addEventListener('click', () => {
   const d = linked();
-  if (!d) return toolsHint('Carga antes un vídeo con su bajada.');
+  if (!d) return toolsHint(T('Carga antes un vídeo con su bajada.'));
   if (pair.loop) return setLoop(null);
   const stretch = selectedStretch();
-  if (!stretch) return toolsHint('Elige antes un tramo: un sector de la tabla, una frenada o un tramo donde pierdes.');
+  if (!stretch) return toolsHint(T('Elige antes un tramo: un sector de la tabla, una frenada o un tramo donde pierdes.'));
   setLoop(stretch);
   seekBoth(stretch.from, 1.5);
   playBoth();
@@ -1402,7 +1415,7 @@ function drawReplay() {
   if (!current?.data.length || !replayShown()) {
     replayDots.forEach(dot => view.map.removeLayer(dot));
     replayDots.clear();
-    $('replayBoard').replaceChildren(node('p', {className: 'placeholder', textContent: 'Pulsa ▶ para ver las bajadas a la vez en el mapa, como si hubieran salido juntas.'}));
+    $('replayBoard').replaceChildren(node('p', {className: 'placeholder', textContent: T('Pulsa ▶ para ver las bajadas a la vez en el mapa, como si hubieran salido juntas.')}));
     $('replayTime').value = 0; $('replayClock').textContent = formatMs(0);
     return;
   }
@@ -1429,8 +1442,8 @@ function drawReplay() {
     const chip = node('i', {className: 'chip'});
     chip.style.background = r.d.color;
     return node('div', {className: 'replay-row'}, [chip, node('span', {textContent: r.d.label}),
-      node('small', {textContent: r.done ? 'en meta' : Math.round(r.at.s) + ' m'}),
-      node('b', {className: r.gap === null ? '' : r.gap > 0 ? 'behind' : 'ahead', textContent: r.gap === null ? 'referencia' : formatDelta(r.gap)})]);
+      node('small', {textContent: r.done ? T('en meta') : Math.round(r.at.s) + ' m'}),
+      node('b', {className: r.gap === null ? '' : r.gap > 0 ? 'behind' : 'ahead', textContent: r.gap === null ? T('referencia') : formatDelta(r.gap)})]);
   }));
   $('replayTime').value = ms;
   $('replayClock').textContent = formatMs(ms);
@@ -1453,11 +1466,11 @@ function stopReplay() {
 const playButton = () => {
   // With a video loaded (with a run or not) the button plays the video; else the replay.
   const running = clip?.url ? !video().paused : replay.playing;
-  $('replayPlay').textContent = running ? '❚❚ Pausa' : '▶ Reproducir';
+  $('replayPlay').textContent = running ? '❚❚ ' + T('Pausa') : '▶ ' + T('Reproducir');
 };
 $('replayPlay').addEventListener('click', () => {
   if (clip?.url) return video().paused ? playBoth() : pauseBoth();
-  if (!current?.data.length) return status('Elige primero las bajadas que quieres ver.', 'error');
+  if (!current?.data.length) return status(T('Elige primero las bajadas que quieres ver.'), 'error');
   if (replay.playing) return stopReplay();
   if (replay.ms >= replayEnd()) replay.ms = 0;
   replay.playing = true;
@@ -1481,24 +1494,24 @@ $('referenceSelect').addEventListener('change', e => {
   compare().catch(err => status(err.message, 'error'));
 });
 async function uploadGoproGps() {
-  const t = clip.telemetry, name = clip.name.replace(/\.(mp4|lrv)$/i, '') + ' (GPS de la GoPro).gpx';
-  videoSay('Subiendo el GPS de la GoPro como ruta…');
+  const t = clip.telemetry, name = clip.name.replace(/\.(mp4|lrv)$/i, '') + ' (' + T('GPS de la GoPro') + ').gpx';
+  videoSay(T('Subiendo el GPS de la GoPro como ruta…'));
   const result = await shell.api.uploadTrainingRoute(new File([telemetryGpx(t, name)], name, {type: 'application/gpx+xml'}));
   await Promise.all([loadRoutes(), loadRuns()]);
   if (result.found.length) return linkVideo();
-  videoSay('Ruta guardada, pero no cuenta como bajada: ' + ((result.skipped || []).map(skippedMessage).join(' ') ||
-    noCircuitMessage(result.nearest)) + ' El GPS de la GoPro suele ser menos preciso que el de un reloj.', 'error');
+  videoSay(T('Ruta guardada, pero no cuenta como bajada:') + ' ' + ((result.skipped || []).map(skippedMessage).join(' ') ||
+    noCircuitMessage(result.nearest)) + ' ' + T('El GPS de la GoPro suele ser menos preciso que el de un reloj.'), 'error');
 }
 $('videoFile').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
-  $('videoName').textContent = file.name + ' · ' + (file.size / 1e9).toFixed(1).replace('.', ',') + ' GB';
-  videoSay('Leyendo la telemetría de ' + file.name + '…');
+  $('videoName').textContent = file.name + ' · ' + dec(file.size / 1e9) + ' GB';
+  videoSay(T('Leyendo la telemetría de {file}…', {file: file.name}));
   try {
     const telemetry = await readTelemetry(file);
     if (clip?.url) URL.revokeObjectURL(clip.url);
     clip = {file, name: file.name, telemetry, url: URL.createObjectURL(file), runId: null, start: 0};
-    $('videoTag').textContent = (telemetry?.camera || 'VÍDEO').toUpperCase();
+    $('videoTag').textContent = (telemetry?.camera || T('VÍDEO')).toUpperCase();
     video().src = clip.url;
     $('videoBox').hidden = false;
     dockVideo();
@@ -1509,19 +1522,19 @@ $('videoFile').addEventListener('change', async e => {
       $('videoTools').hidden = false;
       $('videoMoments').replaceChildren();
       renderMarks();
-      videoSay((telemetry ? 'Este vídeo no tiene señal GPS' : 'Este vídeo no lleva la telemetría de una GoPro') +
-        ': no se puede enlazar con una bajada. Puedes verlo y compararlo con otro sincronizándolos a mano.', 'warning');
+      videoSay((telemetry ? T('Este vídeo no tiene señal GPS') : T('Este vídeo no lleva la telemetría de una GoPro')) +
+        T(': no se puede enlazar con una bajada. Puedes verlo y compararlo con otro sincronizándolos a mano.'), 'warning');
       syncVideo();
     }
     $('mapDuo').scrollIntoView({behavior: 'smooth', block: 'start'});
-  } catch (err) {videoSay('No se puede usar este vídeo: ' + err.message, 'error');}
+  } catch (err) {videoSay(T('No se puede usar este vídeo: {error}', {error: err.message}), 'error');}
 });
 // The video goes next to the map, both sized to be seen at once without scrolling: a vertical video
 // beside it as tall as fits on the screen; a horizontal one beside it on a wide screen, and above it
 // on a phone.
 function dockVideo() {
   const dock = $('videoDock');
-  dock.append(video(), dock.querySelector('.own-controls') || ownControls(video(), 'vídeo 1'), $('videoMarks'), $('videoHud'));
+  dock.append(video(), dock.querySelector('.own-controls') || ownControls(video(), T('vídeo 1')), $('videoMarks'), $('videoHud'));
   $('videoDock').hidden = false;
   $('mapDuo').classList.add('with-video');
   fitVideo();
@@ -1574,8 +1587,8 @@ video().addEventListener('play', () => {
   step();
 });
 // GoPro films in H.265: not every browser can show it. The map and the charts still follow the time.
-video().addEventListener('error', () => videoSay('Este navegador no puede mostrar el vídeo (la GoPro graba en H.265). Prueba con Safari, ' +
-  'o con Chrome o Edge al día, o con el archivo .LRV de la tarjeta, más ligero. La telemetría sí se ha leído.', 'error'));
+video().addEventListener('error', () => videoSay(T('Este navegador no puede mostrar el vídeo (la GoPro graba en H.265). Prueba con Safari, ' +
+  'o con Chrome o Edge al día, o con el archivo .LRV de la tarjeta, más ligero. La telemetría sí se ha leído.'), 'error'));
 
 let resizeTimer;
 window.addEventListener('resize', () => {
@@ -1589,7 +1602,7 @@ window.addEventListener('resize', () => {
 
 async function start() {
   shell = await startShell('entrenamiento');
-  if (!shell.api) {$('needLogin').hidden = false; $('needLogin').textContent = 'Esta página necesita el servidor de DH Trails.'; return;}
+  if (!shell.api) {$('needLogin').hidden = false; $('needLogin').textContent = T('Esta página necesita el servidor de DH Trails.'); return;}
   const show = async () => {
     $('needLogin').hidden = !!shell.me;
     $('workspace').hidden = !shell.me;
@@ -1610,12 +1623,12 @@ async function receiveShared() {
   // Under the upload button: the page's own status line is soon taken by the comparison.
   const box = shell.me ? $('found') : $('needLogin').querySelector('.panel-content');
   if (shared.missing) return box.prepend(node('p', {className: 'status error', textContent:
-    'No ha llegado ningún archivo. Vuelve a compartirlo, o elígelo con «Importar GPX / TCX».'}));
+    T('No ha llegado ningún archivo. Vuelve a compartirlo, o elígelo con «Importar GPX / TCX».')}));
   const open = shell.me ? (await shell.api.tournaments().catch(() => [])).filter(t => t.state === 'activo') : [];
-  box.prepend(node('p', {className: 'status success', textContent: 'Has compartido ' + shared.file.name + '. ' + (shell.me ?
-    'Pulsa «Buscar circuitos» para subirla a tus entrenamientos' + (open.length ? ', o envíala al time trial:' : '.') :
-    'Entra con tu cuenta para subirla.')}),
-    ...open.slice(0, 1).map(t => node('a', {className: 'btn outline small', href: './index.html?compartido', textContent: 'Enviar al time trial «' + t.name + '»'})));
+  box.prepend(node('p', {className: 'status success', textContent: T('Has compartido {file}.', {file: shared.file.name}) + ' ' + (!shell.me ?
+    T('Entra con tu cuenta para subirla.') : open.length ? T('Pulsa «Buscar circuitos» para subirla a tus entrenamientos, o envíala al time trial:') :
+    T('Pulsa «Buscar circuitos» para subirla a tus entrenamientos.'))}),
+    ...open.slice(0, 1).map(t => node('a', {className: 'btn outline small', href: './index.html?compartido', textContent: T('Enviar al time trial «{name}»', {name: t.name})})));
   (shell.me ? $('analyze') : box).scrollIntoView({behavior: 'smooth', block: 'center'});
 }
 start().catch(err => status('Error: ' + err.message, 'error'));

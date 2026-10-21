@@ -1,15 +1,16 @@
 // DH Trails Local v0.8 — browser client for the FastAPI server.
 // Same-origin when the page is served by FastAPI (this PC or the public server).
+import {T, tServer} from './i18n.mjs';
 const ENDPOINT_CONFIG='dhtrailslocal:api:url';
 
 export function validateApiUrl(raw) {
   const url=new URL(String(raw||'').trim());
   const local=['localhost','127.0.0.1','[::1]'].includes(url.hostname);
   if(url.protocol!=='https:' && !(url.protocol==='http:'&&local)) {
-    throw new Error('El servidor debe usar HTTPS, salvo localhost/127.0.0.1 en desarrollo.');
+    throw new Error(T('El servidor debe usar HTTPS, salvo localhost/127.0.0.1 en desarrollo.'));
   }
   if(url.username||url.password||url.search||url.hash||url.pathname!=='/'&&url.pathname!=='') {
-    throw new Error('Introduce solo la URL del servidor, sin rutas ni credenciales.');
+    throw new Error(T('Introduce solo la URL del servidor, sin rutas ni credenciales.'));
   }
   return {url:url.origin};
 }
@@ -51,12 +52,16 @@ export function createCloudApi(config) {
     let response;
     try{response=await fetch(url+'/api'+path,{
       method,headers,body:body===undefined?undefined:form?body:JSON.stringify(body)
-    })}catch(e){throw new Error('No se puede acceder a FastAPI en '+url+'. ¿Está arrancado python run.py?')}
+    })}catch(e){throw new Error(T('No se puede acceder a FastAPI en {url}. ¿Está arrancado python run.py?',{url}))}
     if(!response.ok){
       let info;try{info=await response.json()}catch{}
-      if(response.status===401&&!path.startsWith('/auth/'))throw new Error('Sesión caducada. Vuelve a iniciar sesión.');
+      if(response.status===401&&!path.startsWith('/auth/'))throw new Error(T('Sesión caducada. Vuelve a iniciar sesión.'));
+      // The server writes in Spanish: its messages in the page's language.
       const detail=info?.detail;
-      throw new Error(typeof detail==='string'?detail:JSON.stringify(detail||response.statusText));
+      // A form the server refused (FastAPI's 422): what is wrong in each field.
+      if(Array.isArray(detail)&&detail.length&&detail.every(d=>typeof d?.msg==='string'))
+        throw new Error(detail.map(d=>tServer(d.msg.replace(/^Value error, /,''))).join('; '));
+      throw new Error(typeof detail==='string'?tServer(detail):JSON.stringify(detail||response.statusText));
     }
     if(response.status===204)return null;
     if(path.endsWith('/file'))return response.blob();

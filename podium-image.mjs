@@ -1,6 +1,7 @@
 // DH Trails — the podium of a tournament as a picture to share (1080 × 1350, the size Instagram and
 // WhatsApp show whole). Drawn on a canvas in the browser; nothing is sent anywhere.
 import {formatMs} from './sector-comparison.mjs';
+import {T, locale} from './i18n.mjs';
 
 const W = 1080, H = 1350;
 const INK = '#071423', BLUE = '#45b8ff', TEXT = '#f0f6ff', MUTED = '#a4b9cd';
@@ -46,12 +47,12 @@ export async function podiumImage({tournament, circuit, rows, final, site}) {
   for (const line of lines(ctx, tournament.name.toUpperCase(), W - 160).slice(0, 2)) {ctx.fillText(line, 80, y); y += 92;}
   ctx.fillStyle = MUTED;
   ctx.font = `600 30px ${body}`;
-  ctx.fillText(circuit.name + ' · ' + new Date(tournament.ends_on).toLocaleDateString('es-ES', {month: 'long', year: 'numeric'}), 80, y + 10);
+  ctx.fillText(circuit.name + ' · ' + new Date(tournament.ends_on).toLocaleDateString(locale, {month: 'long', year: 'numeric'}), 80, y + 10);
 
   y += 110;
   ctx.fillStyle = final ? MEDALS[0] : MUTED;
   ctx.font = `800 26px ${body}`;
-  ctx.fillText(final ? 'PODIO FINAL' : 'RESULTADO PROVISIONAL', 80, y);
+  ctx.fillText(final ? T('PODIO FINAL') : T('RESULTADO PROVISIONAL'), 80, y);
   y += 40;
   rows.slice(0, 3).forEach((row, i) => {
     const top = y + i * 190, mid = top + 85;
@@ -72,17 +73,17 @@ export async function podiumImage({tournament, circuit, rows, final, site}) {
     ctx.fillText(formatMs(row.elapsed_ms), W - 120, mid + 8);
     ctx.fillStyle = MUTED;
     ctx.font = `600 24px ${body}`;
-    ctx.fillText(i ? row.gapText : 'Mejor tiempo', W - 120, mid + 48);
+    ctx.fillText(i ? row.gapText : T('Mejor tiempo'), W - 120, mid + 48);
     ctx.textAlign = 'left';
     ctx.fillStyle = TEXT;
     fit(ctx, row.pilot, 470, 800, 60, head);
     ctx.fillText(row.pilot, 250, mid + 8);
     ctx.fillStyle = row.verified ? '#7df0be' : MUTED;
     ctx.font = `600 24px ${body}`;
-    ctx.fillText(row.verified ? '✓ Verificado' : 'Sin verificar', 250, mid + 48);
+    ctx.fillText(row.verified ? '✓ ' + T('Verificado') : T('Sin verificar'), 250, mid + 48);
   });
   ctx.fillStyle = MUTED;
   ctx.font = `600 24px ${body}`;
-  ctx.fillText('Tiempos calculados a partir del GPS de cada bajada · ' + site, 80, H - 70);
+  ctx.fillText(T('Tiempos calculados a partir del GPS de cada bajada') + ' · ' + site, 80, H - 70);
   return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
