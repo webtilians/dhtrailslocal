@@ -2,17 +2,17 @@
 import {formatMs} from './sector-comparison.mjs';
 import {$, node, say, startShell, km, dateText} from './app-shell.mjs';
 import {distanceSeries} from './gps-engine.mjs';
+import {T, locale, tServer} from './i18n.mjs';
 
 let shell = null, tournaments = [], selected = null;
 const status = (message, type = '') => say($('status'), message, type);
-const STATE = {activo: ['En curso', 'ok'], proximo: ['Próximo', ''], terminado: ['Terminado', 'muted']};
-const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const STATE = {activo: [T('En curso'), 'ok'], proximo: [T('Próximo'), ''], terminado: [T('Terminado'), 'muted']};
 const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-const ENTRY = {approved: ['En la clasificación', 'ok'], pending: ['En revisión', ''], rejected: ['Rechazada', 'bad']};
+const ENTRY = {approved: [T('En la clasificación'), 'ok'], pending: [T('En revisión'), ''], rejected: [T('Rechazada'), 'bad']};
 
 // The form filled for a whole calendar month (this one by default).
 function defaults(month = new Date()) {
-  $('tName').value = 'Torneo de ' + MONTHS[month.getMonth()] + ' ' + month.getFullYear();
+  $('tName').value = T('Torneo de {month} {year}', {month: month.toLocaleDateString(locale, {month: 'long'}), year: month.getFullYear()});
   $('tStart').value = iso(new Date(month.getFullYear(), month.getMonth(), 1));
   $('tEnd').value = iso(new Date(month.getFullYear(), month.getMonth() + 1, 0));
 }
@@ -21,7 +21,7 @@ function prepareNext(t) {
   const end = new Date(t.ends_on + 'T00:00:00');
   defaults(new Date(end.getFullYear(), end.getMonth() + 1, 1));
   if ([...$('tCircuit').options].some(o => o.value === t.circuit_id)) $('tCircuit').value = t.circuit_id;
-  say($('createFeedback'), 'Formulario listo para el mes siguiente: elige el circuito del mes y pulsa «Crear torneo».', 'success');
+  say($('createFeedback'), T('Formulario listo para el mes siguiente: elige el circuito del mes y pulsa «Crear torneo».'), 'success');
   $('newTournament').scrollIntoView({behavior: 'smooth', block: 'start'});
   $('tCircuit').focus();
 }
@@ -30,38 +30,38 @@ async function loadCircuits() {
   // Only approved circuits go into a tournament (riders' ones wait in Circuitos for an organizer).
   const circuits = (await shell.api.listCircuits()).filter(c => c.approved);
   $('tCircuit').replaceChildren(...(circuits.length ? circuits.map(c => node('option', {value: c.id,
-    textContent: c.name + ' · ' + km(distanceSeries(c.points).at(-1)) + ' · ' + (c.sectors.length + 1) + ' segmentos'})) :
-    [node('option', {value: '', textContent: 'Primero guarda o aprueba un circuito en la pestaña Circuitos'})]));
+    textContent: c.name + ' · ' + km(distanceSeries(c.points).at(-1)) + ' · ' + T('{n} segmentos', {n: c.sectors.length + 1})})) :
+    [node('option', {value: '', textContent: T('Primero guarda o aprueba un circuito en la pestaña Circuitos')})]));
 }
 
 async function loadTournaments() {
   tournaments = await shell.api.tournaments();
-  $('tCount').textContent = tournaments.length ? tournaments.length + ' EN TOTAL' : '';
+  $('tCount').textContent = tournaments.length ? T('{n} EN TOTAL', {n: tournaments.length}) : '';
   $('tList').replaceChildren(...(tournaments.length ? tournaments.map(t => {
     const [label, tone] = STATE[t.state];
-    const open = node('button', {type: 'button', className: 'btn outline small', textContent: 'Ver bajadas'});
+    const open = node('button', {type: 'button', className: 'btn outline small', textContent: T('Ver bajadas')});
     open.addEventListener('click', () => openTournament(t));
-    const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: 'Borrar'});
+    const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: T('Borrar')});
     remove.addEventListener('click', () => removeTournament(t));
-    const next = node('button', {type: 'button', className: 'text-btn', textContent: 'Preparar el siguiente'});
+    const next = node('button', {type: 'button', className: 'text-btn', textContent: T('Preparar el siguiente')});
     next.addEventListener('click', () => prepareNext(t));
     return node('div', {className: 'item' + (selected?.id === t.id ? ' selected' : '')}, [
       node('span', {}, [node('b', {textContent: t.name}),
-        node('small', {textContent: ' · ' + t.circuit_name + ' · del ' + dateText(t.starts_on) + ' al ' + dateText(t.ends_on) +
-          ' · mínimo ' + Math.round(t.min_match * 100) + ' % · ' + t.riders + ' piloto(s) en la clasificación'})]),
+        node('small', {textContent: ' · ' + t.circuit_name + ' · ' + T('del {from} al {to} · mínimo {match} % · {n} piloto(s) en la clasificación',
+          {from: dateText(t.starts_on), to: dateText(t.ends_on), match: Math.round(t.min_match * 100), n: t.riders})})]),
       node('span', {className: 'row-actions'}, [node('span', {className: 'badge ' + tone, textContent: label}),
-        ...(t.pending ? [node('span', {className: 'badge', textContent: t.pending + ' por revisar'})] : []), open, next, remove])]);
-  }) : [node('p', {className: 'placeholder', textContent: 'Todavía no hay torneos.'})]));
+        ...(t.pending ? [node('span', {className: 'badge', textContent: T('{n} por revisar', {n: t.pending})})] : []), open, next, remove])]);
+  }) : [node('p', {className: 'placeholder', textContent: T('Todavía no hay torneos.')})]));
 }
 
 async function removeTournament(t) {
-  if (!window.confirm('¿Borrar el torneo «' + t.name + '»? Solo se puede si nadie ha subido bajadas.')) return;
+  if (!window.confirm(T('¿Borrar el torneo «{name}»? Solo se puede si nadie ha subido bajadas.', {name: t.name}))) return;
   try {
     await shell.api.deleteTournament(t.id);
     if (selected?.id === t.id) {selected = null; $('entriesPanel').hidden = true;}
     await loadTournaments(); await loadCircuits();
-    status('Torneo borrado.', 'success');
-  } catch (err) {status('No se pudo borrar: ' + err.message, 'error');}
+    status(T('Torneo borrado.'), 'success');
+  } catch (err) {status(T('No se pudo borrar: {error}', {error: err.message}), 'error');}
 }
 
 async function openTournament(t) {
@@ -69,15 +69,15 @@ async function openTournament(t) {
   $('entriesPanel').hidden = false;
   $('entriesTitle').textContent = t.name;
   const entries = await shell.api.tournamentEntries(t.id);
-  $('entriesCount').textContent = entries.length + ' BAJADA(S)';
+  $('entriesCount').textContent = T('{n} BAJADA(S)', {n: entries.length});
   await loadTournaments();
-  if (!entries.length) return $('entries').replaceChildren(node('p', {className: 'placeholder', textContent: 'Nadie ha subido bajadas todavía.'}));
-  const head = node('tr', {}, ['Piloto', 'Tiempo', 'Coincidencia', 'Estado', ''].map(text => node('th', {textContent: text})));
+  if (!entries.length) return $('entries').replaceChildren(node('p', {className: 'placeholder', textContent: T('Nadie ha subido bajadas todavía.')}));
+  const head = node('tr', {}, [T('Piloto'), T('Tiempo'), T('Coincidencia'), T('Estado'), ''].map(text => node('th', {textContent: text})));
   const rows = entries.flatMap(e => {
     const decide = (decision, text) => {
       const b = node('button', {type: 'button', className: 'btn outline small', textContent: text});
       b.addEventListener('click', async () => {
-        const note = decision === 'rejected' ? window.prompt('Motivo del rechazo (lo verá el piloto):', '') : '';
+        const note = decision === 'rejected' ? window.prompt(T('Motivo del rechazo (lo verá el piloto):'), '') : '';
         if (note === null) return;
         try {await shell.api.reviewEntry(e.id, decision, note); await openTournament(t);}
         catch (err) {status(err.message, 'error');}
@@ -85,13 +85,13 @@ async function openTournament(t) {
       return b;
     };
     const [label, tone] = ENTRY[e.review_status] || ENTRY.rejected;
-    const actions = e.review_status === 'pending' ? [decide('approved', 'Aceptar'), decide('rejected', 'Rechazar')] :
-      [e.review_status === 'approved' ? decide('rejected', 'Rechazar') : decide('approved', 'Aceptar')];
+    const actions = e.review_status === 'pending' ? [decide('approved', T('Aceptar')), decide('rejected', T('Rechazar'))] :
+      [e.review_status === 'approved' ? decide('rejected', T('Rechazar')) : decide('approved', T('Aceptar'))];
     const file = node('button', {type: 'button', className: 'text-btn', textContent: 'GPX'});
     file.addEventListener('click', async () => {
       try {
         const url = URL.createObjectURL(await shell.api.entryFile(e.id));
-        const a = node('a', {href: url, download: e.source_filename || 'bajada.gpx'});
+        const a = node('a', {href: url, download: e.source_filename || T('bajada') + '.gpx'});
         document.body.append(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 30000);
       } catch (err) {status(err.message, 'error');}
@@ -99,11 +99,11 @@ async function openTournament(t) {
     // Why it is out or under review, and what looked edited or copied (for the organization only: the
     // rider sees «En revisión»), on a row of its own that stays in view on a phone.
     const details = [
-      ...(e.review_note ? [node('small', {className: 'reason', textContent: e.review_note})] : []),
-      ...(e.checks?.length ? [node('ul', {className: 'checks'}, e.checks.map(c => node('li', {textContent: c})))] : []),
-      ...(e.reviewed_by_hand ? [node('small', {className: 'reason by-hand', textContent: 'Decidido a mano por la organización'})] : [])];
+      ...(e.review_note ? [node('small', {className: 'reason', textContent: tServer(e.review_note)})] : []),
+      ...(e.checks?.length ? [node('ul', {className: 'checks'}, e.checks.map(c => node('li', {textContent: tServer(c)})))] : []),
+      ...(e.reviewed_by_hand ? [node('small', {className: 'reason by-hand', textContent: T('Decidido a mano por la organización')})] : [])];
     return [node('tr', {className: details.length ? 'has-detail' : ''}, [
-      node('td', {textContent: e.pilot || 'Piloto'}),
+      node('td', {textContent: e.pilot || T('Piloto')}),
       node('td', {className: 'time', textContent: formatMs(e.elapsed_ms)}),
       node('td', {textContent: e.match === null ? '—' : Math.round(e.match * 100) + ' %'}),
       node('td', {}, [node('span', {className: 'badge ' + tone, textContent: label})]),
@@ -115,13 +115,13 @@ async function openTournament(t) {
 
 $('newTournament').addEventListener('submit', async event => {
   event.preventDefault();
-  if (!$('tCircuit').value) return say($('createFeedback'), 'Primero guarda un circuito en la pestaña Circuitos.', 'error');
+  if (!$('tCircuit').value) return say($('createFeedback'), T('Primero guarda un circuito en la pestaña Circuitos.'), 'error');
   try {
     const t = await shell.api.createTournament({name: $('tName').value, circuit_id: $('tCircuit').value,
       starts_on: $('tStart').value, ends_on: $('tEnd').value, min_match: Number($('tMatch').value) / 100});
-    say($('createFeedback'), 'Torneo «' + t.name + '» creado. Ya aparece en Time trial.', 'success');
+    say($('createFeedback'), T('Torneo «{name}» creado. Ya aparece en Time trial.', {name: t.name}), 'success');
     await loadTournaments(); await loadCircuits();
-  } catch (err) {say($('createFeedback'), 'No se pudo crear: ' + err.message, 'error');}
+  } catch (err) {say($('createFeedback'), T('No se pudo crear: {error}', {error: err.message}), 'error');}
 });
 
 async function start() {
@@ -131,7 +131,7 @@ async function start() {
     const ok = !!shell.me?.organizer;
     $('workspace').hidden = !ok;
     $('notAllowed').hidden = ok;
-    if (!ok && shell.api && !shell.me) shell.askLogin('Entra con tu cuenta de organizador para crear torneos.');
+    if (!ok && shell.api && !shell.me) shell.askLogin(T('Entra con tu cuenta de organizador para crear torneos.'));
     return ok;
   };
   shell.onUser(() => {if (allowed()) Promise.all([loadCircuits(), loadTournaments()]).catch(err => status(err.message, 'error'));});

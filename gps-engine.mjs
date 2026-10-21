@@ -1,5 +1,7 @@
 // DH Trails Local v0.2 — pure GPS geometry and timing engine.
 // Browser XML parsing is kept separate from the deterministic geometry functions.
+import {T} from './i18n.mjs';
+
 export function haversine(a, b) {
   const rad = Math.PI / 180;
   const p = (a.lat ?? a[0]) * rad, q = (b.lat ?? b[0]) * rad;
@@ -9,20 +11,20 @@ export function haversine(a, b) {
   return 6371000 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
 }
 export function parseGps(xml, extension) {
-  if (typeof DOMParser === 'undefined') throw new Error('El lector XML necesita un navegador.');
+  if (typeof DOMParser === 'undefined') throw new Error(T('El lector XML necesita un navegador.'));
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
-  if (doc.getElementsByTagName('parsererror').length) throw new Error('XML no válido.');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error(T('XML no válido.'));
   const root = doc.documentElement.localName.toLowerCase();
   const type = String(extension).toLowerCase();
   if (!((type === 'gpx' && root === 'gpx') || (type === 'tcx' && root === 'trainingcenterdatabase'))) {
-    throw new Error('El archivo no corresponde a GPX o TCX.');
+    throw new Error(T('El archivo no corresponde a GPX o TCX.'));
   }
   const all = (el, name) => [...el.getElementsByTagNameNS('*', name)];
   const one = (el, name) => el?.getElementsByTagNameNS('*', name)[0]?.textContent?.trim() ?? null;
   const number = x => x === null || x === '' || !Number.isFinite(Number(x)) ? null : Number(x);
   let nodes = all(doc, type === 'gpx' ? 'trkpt' : 'Trackpoint');
   if (!nodes.length && type === 'gpx') nodes = all(doc, 'rtept');
-  if (nodes.length > 80000) throw new Error('Archivo demasiado grande: máximo 80.000 puntos.');
+  if (nodes.length > 80000) throw new Error(T('Archivo demasiado grande: máximo 80.000 puntos.'));
   const pts = nodes.map(el => {
     const position = type === 'gpx' ? el : all(el, 'Position')[0];
     const lat = number(type === 'gpx' ? el.getAttribute('lat') : one(position, 'LatitudeDegrees'));
@@ -32,7 +34,7 @@ export function parseGps(xml, extension) {
     const ms = value ? Date.parse(value) : NaN;
     return {lat, lon, ele, time: Number.isFinite(ms) ? ms : null};
   }).filter(p => p.lat !== null && p.lon !== null && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180);
-  if (pts.length < 2) throw new Error('Necesitamos al menos dos puntos GPS válidos.');
+  if (pts.length < 2) throw new Error(T('Necesitamos al menos dos puntos GPS válidos.'));
   return pts;
 }
 export function distanceSeries(points) {
@@ -61,18 +63,18 @@ export function nearestTrackIndex(points, location, min = 0, max = points.length
   return best;
 }
 export function buildCircuit(name, route, start, finish, sectors, weakZones = []) {
-  if (!name || !name.trim()) throw new Error('Escribe un nombre para el circuito.');
+  if (!name || !name.trim()) throw new Error(T('Escribe un nombre para el circuito.'));
   if (!Number.isInteger(start) || !Number.isInteger(finish) || start < 0 || finish >= route.length || finish - start < 15) {
-    throw new Error('Marca primero una salida y una meta, separadas por al menos 15 puntos.');
+    throw new Error(T('Marca primero una salida y una meta, separadas por al menos 15 puntos.'));
   }
-  if (finish - start + 1 > 12000) throw new Error('Circuito demasiado largo para almacenamiento local (12.000 puntos máximo).');
+  if (finish - start + 1 > 12000) throw new Error(T('Circuito demasiado largo para almacenamiento local (12.000 puntos máximo).'));
   const gates = [...sectors].sort((a,b) => a.index - b.index);
   if (gates.some((g,i) => g.index <= start || g.index >= finish || (i && g.index <= gates[i - 1].index + 1))) {
-    throw new Error('Los sectores deben estar entre salida y meta, en orden y sin superponerse.');
+    throw new Error(T('Los sectores deben estar entre salida y meta, en orden y sin superponerse.'));
   }
   const zones = weakZones.map(z => ({from: z.from - start, to: z.to - start, name: (z.name || 'Zona de GPS débil').slice(0,70)}));
   if (zones.some(z => z.from < 0 || z.to >= finish - start + 1 || z.to <= z.from)) {
-    throw new Error('Las zonas de cobertura débil deben quedar dentro del circuito.');
+    throw new Error(T('Las zonas de cobertura débil deben quedar dentro del circuito.'));
   }
   const points = route.slice(start, finish + 1).map(p => [Number(p.lat.toFixed(7)), Number(p.lon.toFixed(7)), p.ele ?? null]);
   return {id: 'dh-' + Date.now() + '-' + Math.random().toString(36).slice(2,8), version: 2,

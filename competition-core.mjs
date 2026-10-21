@@ -1,5 +1,6 @@
 // DH Trails Local v0.6 — pure helpers for the monthly standings (no DOM, tested in Node).
 import {formatDelta} from './sector-comparison.mjs';
+import {T} from './i18n.mjs';
 
 const MONTHS=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 export const REVIEW_LABELS={pending:'Pendiente de revisión',approved:'Aprobada',rejected:'Rechazada'};
@@ -11,14 +12,14 @@ export function monthLabel(month) {
 }
 // Sector i runs from gate i to gate i+1; each gate keeps the name given in the editor.
 export function sectorLabels(circuit) {
-  const gates=['Salida',...(circuit?.sectors||[]).map((s,i)=>s.name||'Límite '+(i+1)),'Meta'];
+  const gates=[T('Salida'),...(circuit?.sectors||[]).map((s,i)=>s.name||T('Límite {n}',{n:i+1})),T('Meta')];
   return gates.slice(1).map((to,i)=>({short:'S'+(i+1),long:gates[i]+' → '+to}));
 }
 export function standingsRows(board) {
   const best=board?.best_sectors_ms||[];
   return (board?.rows||[]).map(row=>({
     ...row,
-    gapText:row.gap_ms===0?'Líder':formatDelta(row.gap_ms),
+    gapText:row.gap_ms===0?T('Líder'):formatDelta(row.gap_ms),
     sectors:(row.sector_splits_ms||[]).map((ms,i)=>({ms,best:ms!==null&&ms===best[i]}))
   }));
 }

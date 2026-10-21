@@ -1,5 +1,6 @@
 // DH Trails v0.8 — shared shell: tabs, account dialog and map helpers for every page.
 import {discoverApi, createCloudApi} from './api-client.mjs';
+import {T, dec, lang, locale, setLang, tServer, translatePage} from './i18n.mjs';
 
 export const $ = id => document.getElementById(id);
 export function node(tag, props = {}, children = []) {
@@ -19,15 +20,16 @@ const INSTALLED = window.matchMedia?.('(display-mode: standalone)').matches || n
 // Time trial, training and circuits are for everyone (riders draw the circuits of their area too);
 // tournaments only for the organization.
 const TABS = [
-  {href: './index.html', label: 'Time trial', page: 'timetrial'},
-  {href: './entrenamiento.html', label: 'Entrenamiento', page: 'entrenamiento'},
-  {href: './records.html', label: 'Récords', page: 'records'},
-  {href: './circuitos.html', label: 'Circuitos', page: 'circuitos'},
-  {href: './torneos.html', label: 'Torneos', page: 'torneos', admin: true},
+  {href: './index.html', label: T('Time trial'), page: 'timetrial'},
+  {href: './entrenamiento.html', label: T('Entrenamiento'), page: 'entrenamiento'},
+  {href: './records.html', label: T('Récords'), page: 'records'},
+  {href: './circuitos.html', label: T('Circuitos'), page: 'circuitos'},
+  {href: './torneos.html', label: T('Torneos'), page: 'torneos', admin: true},
 ];
 
 export async function startShell(page) {
   const shell = {api: null, me: null, health: null, listeners: []};
+  translatePage();
   // Installed on a phone, the app can receive GPX files shared from other apps (sw.js).
   if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('./sw.js').catch(() => {});
   // Chrome and Edge can install it: then a button for it, instead of their own banner.
@@ -43,6 +45,13 @@ export async function startShell(page) {
   const nav = $('appNav');
   const tabs = node('div', {className: 'navlinks'});
   const account = node('div', {className: 'account'});
+  // ES | EN: the app's language on this device.
+  const languages = node('div', {className: 'lang-switch', role: 'group', ariaLabel: T('Idioma')}, ['es', 'en'].map(code => {
+    const button = node('button', {type: 'button', textContent: code.toUpperCase(), className: code === lang ? 'selected' : '',
+      title: {es: 'Español', en: 'English'}[code]});
+    button.addEventListener('click', () => {if (code !== lang) setLang(code);});
+    return button;
+  }));
   nav.className = 'nav';
   nav.append(node('a', {className: 'logo', href: './index.html'}, [
     node('div', {className: 'flag', textContent: '▦', ariaHidden: 'true'}),
@@ -54,27 +63,27 @@ export async function startShell(page) {
   const draw = () => {
     tabs.replaceChildren(...TABS.filter(t => !t.admin || shell.me?.organizer).map(t =>
       node('a', {href: t.href, textContent: t.label, className: t.page === page ? 'selected' : ''})));
-    account.replaceChildren();
+    account.replaceChildren(languages);
     if (installPrompt) {
-      const install = node('button', {type: 'button', className: 'btn outline', textContent: 'Instalar app',
-        title: 'Como una app en el móvil o el ordenador; en Android aparece al compartir un GPX desde otra app'});
+      const install = node('button', {type: 'button', className: 'btn outline', textContent: T('Instalar app'),
+        title: T('Como una app en el móvil o el ordenador; en Android aparece al compartir un GPX desde otra app')});
       install.addEventListener('click', async () => {const prompt = installPrompt; installPrompt = null; draw(); await prompt.prompt();});
       account.append(install);
     } else if (iosHelp) {
-      const install = node('button', {type: 'button', className: 'btn outline', textContent: 'Instalar app'});
+      const install = node('button', {type: 'button', className: 'btn outline', textContent: T('Instalar app')});
       install.addEventListener('click', () => iosHelp.showModal());
       account.append(install);
     }
     if (!shell.api) return;
     if (shell.me) {
-      account.append(node('span', {className: 'who', textContent: shell.me.local ? 'Este PC' : shell.me.display_name || shell.me.email}));
+      account.append(node('span', {className: 'who', textContent: shell.me.local ? T('Este PC') : shell.me.display_name || shell.me.email}));
       if (!shell.me.local) {
-        const out = node('button', {type: 'button', className: 'text-btn', textContent: 'Salir'});
+        const out = node('button', {type: 'button', className: 'text-btn', textContent: T('Salir')});
         out.addEventListener('click', async () => {await shell.api.signOut(); shell.setUser(null);});
         account.append(out);
       }
     } else {
-      const enter = node('button', {type: 'button', className: 'btn outline', textContent: 'Entrar'});
+      const enter = node('button', {type: 'button', className: 'btn outline', textContent: T('Entrar')});
       enter.addEventListener('click', () => shell.askLogin());
       account.append(enter);
     }
@@ -115,14 +124,14 @@ export async function takeShared(input) {
 }
 
 function iosInstallDialog() {
-  const done = node('button', {type: 'button', className: 'btn primary full', textContent: 'Entendido'});
+  const done = node('button', {type: 'button', className: 'btn primary full', textContent: T('Entendido')});
   const dialog = node('dialog', {className: 'auth'}, [node('div', {className: 'auth-form'}, [
-    node('h2', {className: 'dialog-title', textContent: 'Instalar DH Trails en el iPhone'}),
+    node('h2', {className: 'dialog-title', textContent: T('Instalar DH Trails en el iPhone')}),
     node('ol', {className: 'steps'}, [
-      node('li', {textContent: 'Pulsa Compartir en el navegador: el cuadrado con una flecha hacia arriba (en Safari, abajo).'}),
-      node('li', {textContent: 'Baja y elige «Añadir a pantalla de inicio».'}),
-      node('li', {textContent: 'Pulsa «Añadir». Aparece el icono de DH Trails y la app se abre a pantalla completa.'})]),
-    node('p', {className: 'help', textContent: 'Para subir una ruta desde el iPhone, guarda antes el GPX en Archivos y elígelo con «Importar GPX / TCX».'}),
+      node('li', {textContent: T('Pulsa Compartir en el navegador: el cuadrado con una flecha hacia arriba (en Safari, abajo).')}),
+      node('li', {textContent: T('Baja y elige «Añadir a pantalla de inicio».')}),
+      node('li', {textContent: T('Pulsa «Añadir». Aparece el icono de DH Trails y la app se abre a pantalla completa.')})]),
+    node('p', {className: 'help', textContent: T('Para subir una ruta desde el iPhone, guarda antes el GPX en Archivos y elígelo con «Importar GPX / TCX».')}),
     done])]);
   done.addEventListener('click', () => dialog.close());
   return dialog;
@@ -130,23 +139,23 @@ function iosInstallDialog() {
 
 function authDialog(shell) {
   const field = (label, input) => node('label', {className: 'field'}, [node('span', {className: 'field-title', textContent: label}), input]);
-  const name = node('input', {autocomplete: 'nickname', maxLength: 30, placeholder: 'Ej. Rider Uno'});
-  const email = node('input', {type: 'email', autocomplete: 'email', placeholder: 'correo@ejemplo.com'});
+  const name = node('input', {autocomplete: 'nickname', maxLength: 30, placeholder: T('Ej. Rider Uno')});
+  const email = node('input', {type: 'email', autocomplete: 'email', placeholder: T('correo@ejemplo.com')});
   const password = node('input', {type: 'password', autocomplete: 'current-password', minLength: 8});
-  const invite = node('input', {autocomplete: 'off', placeholder: 'Te lo da la organización'});
+  const invite = node('input', {autocomplete: 'off', placeholder: T('Te lo da la organización')});
   const note = node('p', {className: 'auth-note help'});
   const feedback = node('p', {className: 'save-feedback', role: 'status'});
   feedback.dataset.base = 'save-feedback';
-  const nameField = field('Nombre de piloto (sale en la clasificación)', name);
-  const inviteField = node('div', {className: 'invite'}, [field('Código de invitación', invite)]);
+  const nameField = field(T('Nombre de piloto (sale en la clasificación)'), name);
+  const inviteField = node('div', {className: 'invite'}, [field(T('Código de invitación'), invite)]);
   let mode = 'login';
-  const login = node('button', {type: 'button', className: 'tab-btn selected', textContent: 'Entrar'});
-  const signup = node('button', {type: 'button', className: 'tab-btn', textContent: 'Crear cuenta'});
-  const submit = node('button', {type: 'submit', className: 'btn primary full', textContent: 'Entrar'});
-  const cancel = node('button', {type: 'button', className: 'text-btn', textContent: 'Cancelar'});
+  const login = node('button', {type: 'button', className: 'tab-btn selected', textContent: T('Entrar')});
+  const signup = node('button', {type: 'button', className: 'tab-btn', textContent: T('Crear cuenta')});
+  const submit = node('button', {type: 'submit', className: 'btn primary full', textContent: T('Entrar')});
+  const cancel = node('button', {type: 'button', className: 'text-btn', textContent: T('Cancelar')});
   // A forgotten password: the mail gets a link to choose a new one (only when the server can send mail).
-  const forgot = node('button', {type: 'button', className: 'text-btn forgot', textContent: '¿Has olvidado la contraseña?'});
-  const passwordField = field('Contraseña (mínimo 8 caracteres)', password);
+  const forgot = node('button', {type: 'button', className: 'text-btn forgot', textContent: T('¿Has olvidado la contraseña?')});
+  const passwordField = field(T('Contraseña (mínimo 8 caracteres)'), password);
   const setMode = next => {
     mode = next;
     login.classList.toggle('selected', mode !== 'signup');
@@ -155,15 +164,15 @@ function authDialog(shell) {
     passwordField.hidden = mode === 'forgot';
     inviteField.classList.toggle('off', mode !== 'signup');
     forgot.hidden = mode !== 'login' || !shell.health?.password_reset;
-    submit.textContent = {login: 'Entrar', signup: 'Crear cuenta', forgot: 'Enviar el enlace'}[mode];
+    submit.textContent = {login: T('Entrar'), signup: T('Crear cuenta'), forgot: T('Enviar el enlace')}[mode];
     password.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
-    say(feedback, mode === 'forgot' ? 'Escribe el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.' : '');
+    say(feedback, mode === 'forgot' ? T('Escribe el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.') : '');
   };
   forgot.addEventListener('click', () => {setMode('forgot'); email.focus();});
   login.addEventListener('click', () => setMode('login'));
   signup.addEventListener('click', () => setMode('signup'));
   const form = node('form', {method: 'dialog', className: 'auth-form'}, [
-    node('div', {className: 'tab-row'}, [login, signup]), note, nameField, field('Correo electrónico', email),
+    node('div', {className: 'tab-row'}, [login, signup]), note, nameField, field(T('Correo electrónico'), email),
     passwordField, forgot, inviteField, feedback, submit, cancel]);
   const dialog = node('dialog', {className: 'auth'}, [form]);
   cancel.addEventListener('click', () => dialog.close());
@@ -171,12 +180,12 @@ function authDialog(shell) {
   dialog.addEventListener('close', () => {if (mode === 'forgot') setMode('login');});
   form.addEventListener('submit', async event => {
     event.preventDefault();
-    if (!shell.api) return say(feedback, 'No hay conexión con el servidor.', 'error');
+    if (!shell.api) return say(feedback, T('No hay conexión con el servidor.'), 'error');
     submit.disabled = true;
     try {
       if (mode === 'forgot') {
         const sent = await shell.api.forgotPassword(email.value.trim());
-        return say(feedback, sent.detail, 'success');
+        return say(feedback, tServer(sent.detail), 'success');
       }
       const result = mode === 'login'
         ? await shell.api.signIn(email.value.trim(), password.value)
@@ -194,24 +203,24 @@ function authDialog(shell) {
 
 // ---- Map helpers shared by every page
 // Base maps: OpenStreetMap with the trails, or Esri satellite imagery with place names on top.
-// The last choice is remembered on this device.
+// The last choice is remembered on this device (by its Spanish name, in either language).
 const BASE_MAP_KEY = 'dhtrailslocal:map:base';
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/';
 export function createMap(id) {
   const map = L.map(id, {zoomControl: true}).setView([36.76, -4.46], 12);
   const bases = {
-    'Mapa': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'}),
-    'Satélite': L.layerGroup([
+    [T('Mapa')]: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'}),
+    [T('Satélite')]: L.layerGroup([
       L.tileLayer(ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, maxNativeZoom: 18,
-        attribution: 'Imágenes &copy; Esri, Maxar, Earthstar Geographics'}),
+        attribution: T('Imágenes') + ' &copy; Esri, Maxar, Earthstar Geographics'}),
       L.tileLayer(ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, maxNativeZoom: 18}),
     ]),
   };
   let base = 'Mapa';
-  try {if (bases[localStorage.getItem(BASE_MAP_KEY)]) base = localStorage.getItem(BASE_MAP_KEY);} catch {}
-  bases[base].addTo(map);
+  try {if (localStorage.getItem(BASE_MAP_KEY) === 'Satélite') base = 'Satélite';} catch {}
+  bases[T(base)].addTo(map);
   L.control.layers(bases, null, {position: 'topright', collapsed: false}).addTo(map);
-  map.on('baselayerchange', e => {try {localStorage.setItem(BASE_MAP_KEY, e.name);} catch {}});
+  map.on('baselayerchange', e => {try {localStorage.setItem(BASE_MAP_KEY, e.name === T('Satélite') ? 'Satélite' : 'Mapa');} catch {}});
   const layers = [];
   return {
     map,
@@ -222,7 +231,8 @@ export function createMap(id) {
 }
 const MARKER_COLORS = {start: '#1fd68c', finish: '#f85d74', gate: '#f2c34f'};
 export function pin(view, latlon, kind, label, onDrop) {
-  const glyph = {start: 'S', finish: 'M', gate: '◆'}[kind];
+  // The start's and the finish's initials, in the page's language.
+  const glyph = {start: T('Salida')[0], finish: T('Meta')[0], gate: '◆'}[kind];
   const html = '<div class="pin" style="background:' + MARKER_COLORS[kind] + '">' + glyph + '</div>';
   const marker = view.add(L.marker(latlon, {draggable: !!onDrop, bubblingMouseEvents: false,
     icon: L.divIcon({html, className: '', iconSize: [28, 28], iconAnchor: [14, 14]})}));
@@ -234,11 +244,11 @@ export function pin(view, latlon, kind, label, onDrop) {
 export function drawCircuit(view, circuit, {fit = true, color = '#229fff', weight = 6} = {}) {
   const pts = circuit.points.map(p => [p[0], p[1]]);
   view.add(L.polyline(pts, {color, weight, opacity: .9}));
-  pin(view, pts[0], 'start', 'Salida');
-  circuit.sectors.forEach((s, i) => pin(view, pts[s.index], 'gate', 'Segmento ' + (i + 1) + (s.name ? ' · ' + s.name : '')));
-  pin(view, pts.at(-1), 'finish', 'Meta');
+  pin(view, pts[0], 'start', T('Salida'));
+  circuit.sectors.forEach((s, i) => pin(view, pts[s.index], 'gate', T('Segmento {n}', {n: i + 1}) + (s.name ? ' · ' + s.name : '')));
+  pin(view, pts.at(-1), 'finish', T('Meta'));
   if (fit) view.fit(pts);
   return pts;
 }
-export const km = metres => (metres / 1000).toFixed(2).replace('.', ',') + ' km';
-export const dateText = iso => iso ? new Date(iso).toLocaleDateString('es-ES', {day: 'numeric', month: 'short', year: 'numeric'}) : '—';
+export const km = metres => dec(metres / 1000, 2) + ' km';
+export const dateText = iso => iso ? new Date(iso).toLocaleDateString(locale, {day: 'numeric', month: 'short', year: 'numeric'}) : '—';

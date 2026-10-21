@@ -1,6 +1,7 @@
 // A YouTube video as the second video, through YouTube's own embedded player (its privacy mode), with the
 // few things the training page uses of a <video>: its time, play and pause, its speed and its events.
 // YouTube drops a camera's GPS when the video is uploaded, so it is lined up by hand.
+import {T} from './i18n.mjs';
 
 // The video and the second it starts at, from a YouTube link as copied from the app or the browser
 // (youtu.be/…, watch?v=…, shorts/…, embed/…, live/…, with or without https and &t=1m30s), or null.
@@ -21,11 +22,11 @@ export function youtubeLink(text) {
 }
 
 const WHY = {
-  2: 'El enlace no es de un vídeo de YouTube válido.',
-  5: 'YouTube no puede reproducir ese vídeo aquí.',
-  100: 'Ese vídeo no existe, es privado o lo han quitado.',
-  101: 'Su autor no deja verlo dentro de otras webs: solo se puede ver en YouTube.',
-  150: 'Su autor no deja verlo dentro de otras webs: solo se puede ver en YouTube.'};
+  2: T('El enlace no es de un vídeo de YouTube válido.'),
+  5: T('YouTube no puede reproducir ese vídeo aquí.'),
+  100: T('Ese vídeo no existe, es privado o lo han quitado.'),
+  101: T('Su autor no deja verlo dentro de otras webs: solo se puede ver en YouTube.'),
+  150: T('Su autor no deja verlo dentro de otras webs: solo se puede ver en YouTube.')};
 
 let api = null;
 function loadApi() {
@@ -35,7 +36,7 @@ function loadApi() {
     window.onYouTubeIframeAPIReady = () => {before?.(); resolve(window.YT);};
     const script = document.createElement('script');
     script.src = 'https://www.youtube.com/iframe_api';
-    script.onerror = () => {api = null; reject(new Error('No se puede cargar el reproductor de YouTube. ¿Hay conexión?'));};
+    script.onerror = () => {api = null; reject(new Error(T('No se puede cargar el reproductor de YouTube. ¿Hay conexión?')));};
     document.head.append(script);
   });
   return api;
@@ -84,7 +85,7 @@ export class YouTubeVideo extends EventTarget {
           },
           onStateChange: event => this.changed(event.data),
           onError: event => {
-            this.error = WHY[event.data] || 'YouTube no puede reproducir ese vídeo aquí.';
+            this.error = WHY[event.data] || WHY[5];
             if (this.ready) this.emit('error');
             else reject(new Error(this.error));
           },

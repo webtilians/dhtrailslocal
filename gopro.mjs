@@ -3,6 +3,7 @@
 // GPS9 (HERO11 and later: 10 points a second, each with its UTC time) and GPS5 (earlier cameras:
 // 18 a second, the UTC time once per sample) are both read. The camera's clock follows the GPS, so
 // the UTC time of any moment of a run gives the second of the video where it happens.
+import {T} from './i18n.mjs';
 
 async function bytes(file, start, end) {
   return new DataView(await file.slice(start, end).arrayBuffer());
@@ -130,11 +131,11 @@ const median = values => {const v = [...values].sort((a, b) => a - b); return v.
 // speed is the GPS's own (Doppler) measure, ten times a second: much finer than positions a second apart.
 export async function readGoproTelemetry(file) {
   const moovBox = (await topBoxes(file)).find(b => b.type === 'moov');
-  if (!moovBox) throw new Error('No es un vídeo MP4.');
+  if (!moovBox) throw new Error(T('No es un vídeo MP4.'));
   const view = await bytes(file, moovBox.start, moovBox.end);
   const tracks = boxes(view, 0, view.byteLength).filter(b => b.type === 'trak').map(b => track(view, b)).filter(Boolean);
   const meta = tracks.find(t => t.format === 'gpmd'), video = tracks.find(t => t.handler === 'vide');
-  if (!meta) throw new Error('Este vídeo no lleva la telemetría de GoPro (GPS).');
+  if (!meta) throw new Error(T('Este vídeo no lleva la telemetría de GoPro (GPS).'));
   const points = [], accel = {t: [], g: []};
   let camera = '';
   for (const sample of samples(view, meta)) {
