@@ -12,5 +12,8 @@
     "allowMixedContent": false,
     "useLegacyBridge": true,
     "adjustMarginsForEdgeToEdge": "auto"
+  },
+  "ios": {
+    "contentInset": "automatic"
   }
 }
