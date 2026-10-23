@@ -95,8 +95,12 @@ function finish(e) {
 
 // ---- What the screen says while recording
 function show() {
-  const recording = !!stopWatch;
+  const recording = !!stopWatch, signedIn = !!shell?.me;
   $('startRec').hidden = recording;
+  // A ride is recorded to go to the rider's Entrenamiento: first, the account.
+  $('startRec').textContent = signedIn ? '● ' + T('Empezar a grabar') : T('Entra para grabar');
+  if (!recording && !fixes.length) $('state').textContent = signedIn ? T('Pulsa «Empezar a grabar» cuando estés listo.') :
+    T('Entra con tu cuenta para grabar: tus bajadas se guardan en tu Entrenamiento.');
   $('stopRec').hidden = !recording && !fixes.length;
   $('discard').hidden = !fixes.length;
   $('stopRec').textContent = recording ? '■ ' + T('Terminar y guardar') : T('Guardar la grabación');
@@ -125,6 +129,7 @@ function tick() {
 
 // ---- Start, stop, save
 $('startRec').addEventListener('click', async () => {
+  if (!shell?.me) return shell?.askLogin(T('Entra con tu cuenta para grabar: tus bajadas se guardan en tu Entrenamiento.'));
   unlockSound();
   if (!native && !navigator.geolocation) return status(T('Este navegador no da acceso al GPS.'), 'error');
   fixes = kept();
@@ -214,7 +219,7 @@ async function start() {
   if (shell.api) catalog = await shell.api.circuitCatalog().catch(() => []);
   $('circuit').append(...catalog.map(c => node('option', {value: c.id, textContent: c.name})));
   $('circuit').addEventListener('change', () => {circuit = null; timer = null; if (lastFix) pickCircuit(lastFix); show();});
-  shell.onUser(() => {if (fixes.length && !stopWatch) status(T('Ya puedes guardar la grabación.'), 'success');});
+  shell.onUser(() => {show(); if (fixes.length && !stopWatch) status(T('Ya puedes guardar la grabación.'), 'success');});
   // A recording not saved (the page was closed or reloaded): it can be saved or recorded on.
   fixes = kept();
   if (fixes.length) status(T('Hay una grabación sin guardar de las {time} ({n} puntos): guárdala, sigue grabando o descártala.',
