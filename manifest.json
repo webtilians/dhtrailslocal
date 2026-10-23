@@ -21,7 +21,7 @@
     "params": {
       "files": [{
         "name": "file",
-        "accept": [".gpx", ".tcx", "application/gpx+xml", "application/vnd.garmin.tcx+xml", "application/xml", "text/xml", "application/octet-stream"]
+        "accept": [".gpx", ".tcx", ".fit", "application/gpx+xml", "application/vnd.ant.fit", "application/vnd.garmin.tcx+xml", "application/xml", "text/xml", "application/octet-stream"]
       }]
     }
   }

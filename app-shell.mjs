@@ -31,6 +31,15 @@ const TABS = [
 export async function startShell(page) {
   const shell = {api: null, me: null, health: null, listeners: []};
   translatePage();
+  // In the app for Android, a route shared to it goes to the training page, which takes it; a page that
+  // would take it itself (the time trial) is left before it does.
+  if (nativeShare) {
+    nativeShare.onShared(() => location.assign('./entrenamiento.html?compartido'));
+    if (page !== 'entrenamiento' && (await nativeShare.peek())) {
+      location.assign('./entrenamiento.html?compartido');
+      await new Promise(() => {});
+    }
+  }
   // Installed on a phone, the app can receive GPX files shared from other apps (sw.js).
   if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('./sw.js').catch(() => {});
   // Chrome and Edge can install it: then a button for it, instead of their own banner.
@@ -105,17 +114,33 @@ export async function startShell(page) {
   return shell;
 }
 
-// A GPX or TCX shared to the installed app from another one: the service worker keeps it, and a page
-// opened with ?compartido puts it in its file input. {file}, {missing: true} when it did not arrive,
-// or null when nothing was shared.
+// The app for Android keeps a file shared to it (Share → DH Trails) until a page takes it; through the
+// bridge Capacitor puts in the page (the page comes from the server, without Capacitor's own JavaScript).
+const cap = typeof window === 'undefined' ? null : window.Capacitor;
+const nativeShare = cap?.isNativePlatform?.() && cap.PluginHeaders?.some(p => p.name === 'SharedFile') ? {
+  peek: () => cap.nativePromise('SharedFile', 'peek', {}).then(r => !!r?.pending).catch(() => false),
+  take: () => cap.nativePromise('SharedFile', 'take', {}).catch(() => null),
+  onShared: fn => cap.nativeCallback('SharedFile', 'addListener', {eventName: 'shared'}, fn),
+} : null;
+
+// A GPX, TCX or FIT shared to the installed app from another one: the app keeps it, or in the web the
+// service worker does and a page opened with ?compartido takes it. It goes into the page's file input.
+// {file}, {missing: true} when it did not arrive, or null when nothing was shared.
 export async function takeShared(input) {
-  if (!new URLSearchParams(location.search).has('compartido')) return null;
-  history.replaceState(null, '', location.pathname);  // a reload does not take it again
+  const asked = new URLSearchParams(location.search).has('compartido');
+  if (!asked && !nativeShare) return null;
+  if (asked) history.replaceState(null, '', location.pathname);  // a reload does not take it again
   try {
-    const kept = await (await caches.open('dh-compartido')).match(new URL('./compartido', location.href).href);
-    if (!kept) return {missing: true};
-    const file = new File([await kept.blob()], decodeURIComponent(kept.headers.get('X-File-Name') || 'ruta.gpx'),
-      {type: kept.headers.get('Content-Type') || ''});
+    let file = null;
+    const native = nativeShare ? await nativeShare.take() : null;
+    if (native?.data) file = new File([Uint8Array.from(atob(native.data), c => c.charCodeAt(0))], native.name || 'ruta');
+    else if (!asked) return null;
+    else {
+      const kept = await (await caches.open('dh-compartido')).match(new URL('./compartido', location.href).href);
+      if (!kept) return {missing: true};
+      file = new File([await kept.blob()], decodeURIComponent(kept.headers.get('X-File-Name') || 'ruta.gpx'),
+        {type: kept.headers.get('Content-Type') || ''});
+    }
     const chosen = new DataTransfer();
     chosen.items.add(file);
     input.files = chosen.files;

@@ -4,6 +4,7 @@ import {sectorLabels, standingsRows, idealMs, asAttempt} from './competition-cor
 import {podiumImage} from './podium-image.mjs';
 import {$, node, say, startShell, takeShared, createMap, drawCircuit, km, dateText} from './app-shell.mjs';
 import {T, tServer} from './i18n.mjs';
+import {asGpsFile} from './fit.mjs';
 
 const view = createMap('map');
 let shell = null, tournaments = [], board = null;
@@ -191,7 +192,7 @@ $('submitEntry').addEventListener('click', async () => {
   btn.disabled = true;
   account(T('Buscando tu bajada en {circuit}…', {circuit: t.circuit_name}));
   try {
-    const entry = await shell.api.submitEntry(t.id, file);
+    const entry = await shell.api.submitEntry(t.id, await asGpsFile(file));
     $('entryResult').replaceChildren(entryBox(entry));
     const time = formatMs(entry.elapsed_ms);
     account(entry.review_status === 'approved' ? T('Bajada aceptada: {time}. Ya estás en la clasificación.', {time}) :
