@@ -12,6 +12,7 @@ import {runGates, gatesPassed, beep, unlockSound} from './gate-sounds.mjs';
 import {youtubeLink, YouTubeVideo} from './youtube.mjs';
 import {shakeSeries, matchBumps, samePlace} from './bumps.mjs';
 import {T, dec, locale, ordinal, tServer} from './i18n.mjs';
+import {asGpsFile} from './fit.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -732,7 +733,7 @@ $('analyze').addEventListener('click', async () => {
   btn.disabled = true;
   status(T('Buscando circuitos en {file}…', {file: file.name}));
   try {
-    const result = await shell.api.uploadTrainingRoute(file);
+    const result = await shell.api.uploadTrainingRoute(await asGpsFile(file));
     $('found').replaceChildren(...(result.found.length ? result.found.map(f => {
       const see = node('button', {type: 'button', className: 'btn outline small', textContent: T('Comparar')});
       see.addEventListener('click', () => loadRuns(f.circuit_id).catch(err => status(err.message, 'error')));

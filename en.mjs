@@ -100,7 +100,7 @@ export const EN = {
   "Último cambio deshecho.": "Last change undone.",
   "El archivo supera los 20 MB.": "The file is over 20 MB.",
   "El archivo no es un circuito de DH Trails.": "The file is not a DH Trails track.",
-  "Usa un archivo GPX, TCX o un circuito .json.": "Use a GPX or TCX file, or a track .json.",
+  "Usa un archivo GPX, TCX, FIT o un circuito .json.": "Use a GPX, TCX or FIT file, or a track .json.",
   "{n} puntos": "{n} points",
   "Circuito cargado: revisa los puntos y pulsa Guardar ruta.": "Track loaded: check the points and press Save track.",
   "Ruta cargada. Marca la salida sobre la línea.": "Ride loaded. Mark the start on the line.",
@@ -796,6 +796,10 @@ export const EN = {
   "En el navegador, deja la pantalla encendida y esta página delante: si bloqueas el móvil, el GPS se para. Con la app instalada para Android o iPhone sí graba con la pantalla apagada.": "In the browser, keep the screen on and this page in front: if you lock your phone, the GPS stops. The app for Android or iPhone does record with the screen off.",
   "Ya puedes guardar la grabación.": "You can save the recording now.",
   "Hay una grabación sin guardar de las {time} ({n} puntos): guárdala, sigue grabando o descártala.": "There's an unsaved recording from {time} ({n} points): save it, keep recording or discard it.",
+
+  // ---- FIT files (Garmin, Wahoo, Coros…)
+  "El archivo no es un FIT válido.": "The file is not a valid FIT.",
+  "El archivo FIT no tiene puntos con posición y hora.": "The FIT file has no points with a position and a time.",
 
   // ---- A circuit from a saved route
   "Cargando {file}…": "Loading {file}…",

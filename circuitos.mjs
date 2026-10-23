@@ -4,6 +4,7 @@ import {formatMs} from './sector-comparison.mjs';
 import {circuitChecks} from './circuit-checks.mjs';
 import {$, node, say, startShell, createMap, pin, drawCircuit, km, dateText} from './app-shell.mjs';
 import {T, dec} from './i18n.mjs';
+import {asGpsFile} from './fit.mjs';
 
 const view = createMap('map');
 const blank = () => ({start: null, finish: null, gates: []});
@@ -168,6 +169,7 @@ async function importFile(file) {
   if (!file) return;
   savedNote = false;
   try {
+    file = await asGpsFile(file);
     if (file.size > 20 * 1024 * 1024) throw Error(T('El archivo supera los 20 MB.'));
     const ext = file.name.split('.').at(-1).toLowerCase();
     if (ext === 'json') {
@@ -180,7 +182,7 @@ async function importFile(file) {
       source = parseGps(await file.text(), ext);
       draft = blank();
       setTool('start');
-    } else throw Error(T('Usa un archivo GPX, TCX o un circuito .json.'));
+    } else throw Error(T('Usa un archivo GPX, TCX, FIT o un circuito .json.'));
     history = [];
     $('sourceName').textContent = file.name + ' · ' + T('{n} puntos', {n: source.length});
     redraw();
