@@ -47,6 +47,8 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSMotionUsageDescription</key>
+	<string>DH Trails graba los baches, saltos y la altura del barómetro de tus bajadas. / DH Trails records the bumps, jumps and barometer height of your runs.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>DH Trails usa el GPS para grabar tus bajadas y darte el tiempo en cada circuito. / DH Trails uses the GPS to record your runs and time them on each track.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

@@ -108,7 +108,9 @@ def store_activity(db:Session,p:Pilot,filename:str,ext:str,data:bytes,fixes,dige
     return activity
 
 def remove_file(owner_id:uuid.UUID,storage_name:str):
-    (config.GPS_STORAGE_DIR/str(owner_id)/storage_name).unlink(missing_ok=True)
+    path=config.GPS_STORAGE_DIR/str(owner_id)/storage_name
+    path.unlink(missing_ok=True)
+    path.with_suffix(".sensores").unlink(missing_ok=True)   # the phone's sensors recorded with it, if any
 
 async def read_gps_upload(file:UploadFile):
     filename=Path(file.filename or "bajada.gpx").name[:200]

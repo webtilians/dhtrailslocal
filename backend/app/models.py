@@ -75,6 +75,10 @@ class Activity(Base):
     recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    # The phone's sensors recorded with the ride (app/sensors.py), next to the GPS file; what they hold.
+    sensors_name: Mapped[str | None] = mapped_column(String(100))
+    sensors_bytes: Mapped[int | None] = mapped_column(Integer)
+    sensors_summary: Mapped[dict | None] = mapped_column(JSONB)
     __table_args__=(CheckConstraint("format IN ('gpx','tcx')", name="activity_format"),)
 
 class Friendship(Base):

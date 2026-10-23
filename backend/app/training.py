@@ -11,12 +11,14 @@ and so are the runs of accepted friends (only runs on circuits, never their whol
 import math
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from . import config
+from . import config, sensors
 from .competition import public_circuit, read_gps_upload, remove_file, run_attempt, store_activity
 from .database import SessionLocal, get_db
 from .friends import friend_ids
@@ -30,6 +32,7 @@ from .timing import GpsError, detect_attempts, haversine, parse_gps
 
 router=APIRouter(prefix="/api/training")
 route_limit=RateLimit(60,3600)
+sensors_limit=RateLimit(60,3600)
 note_limit=RateLimit(120,3600)
 MAX_NOTES=500  # per rider
 NEAR_ROUTE_M=200  # a circuit is only searched when its start lies this close to the route's area
@@ -186,7 +189,35 @@ def my_routes(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
         .order_by(Activity.created_at.desc()).limit(200)).all()
     return [{"id":str(a.id),"filename":a.filename,"distance_m":a.distance_m,
              "recorded_at":a.recorded_at.isoformat() if a.recorded_at else None,
-             "created_at":a.created_at.isoformat(),"runs":counts.get(a.id,0)} for a in activities]
+             "created_at":a.created_at.isoformat(),"runs":counts.get(a.id,0),"sensors":a.sensors_summary} for a in activities]
+
+def own_route(db:Session,activity_id:uuid.UUID,p:Pilot)->Activity:
+    a=db.scalar(select(Activity).where(Activity.id==activity_id,Activity.owner_id==p.id))
+    if not a:raise HTTPException(404,"Ruta no encontrada")
+    return a
+
+@router.post("/routes/{activity_id}/sensors")
+async def upload_sensors(activity_id:uuid.UUID,file:UploadFile=File(...),db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    """The phone's sensors recorded with a ride saved from Grabar (app/sensors.py): checked, then kept
+    next to its GPS file as they came. A second upload replaces the first."""
+    sensors_limit.hit(str(p.id))
+    a=own_route(db,activity_id,p)
+    data=await file.read(sensors.MAX_UPLOAD+1)
+    if not data or len(data)>sensors.MAX_UPLOAD:raise HTTPException(413,"Archivo de sensores vacío o demasiado grande")
+    try:info=sensors.summary(sensors.decode(data))
+    except sensors.SensorError as exc:raise HTTPException(422,"Archivo de sensores no válido") from exc
+    path=(config.GPS_STORAGE_DIR/str(p.id)/a.storage_name).with_suffix(".sensores")
+    path.write_bytes(data)
+    a.sensors_name,a.sensors_bytes,a.sensors_summary=path.name,len(data),info
+    db.commit()
+    return {"sensors":info}
+
+@router.get("/routes/{activity_id}/sensors")
+def download_sensors(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    a=own_route(db,activity_id,p)
+    path=config.GPS_STORAGE_DIR/str(p.id)/(a.sensors_name or "")
+    if not a.sensors_name or not path.is_file():raise HTTPException(404,"Esta ruta no tiene sensores")
+    return FileResponse(path,filename=Path(a.filename).stem+".dhs",media_type="application/octet-stream")
 
 @router.delete("/routes/{activity_id}",status_code=204)
 def delete_route(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
