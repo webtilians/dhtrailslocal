@@ -153,6 +153,8 @@ export function createCloudApi(config) {
     },
     async trainingRoutes(){return request('/training/routes')},
     async deleteTrainingRoute(id){return request('/training/routes/'+encodeURIComponent(id),{method:'DELETE'})},
+    // The file of one of the rider's routes, as uploaded (a Blob)
+    async activityFile(id){return request('/activities/'+encodeURIComponent(id)+'/file')},
     async trainingRuns(circuitId,{friends=false}={}){
       const query=[circuitId?'circuit_id='+encodeURIComponent(circuitId):'',friends?'friends=true':''].filter(Boolean).join('&');
       return request('/training/runs'+(query?'?'+query:''));

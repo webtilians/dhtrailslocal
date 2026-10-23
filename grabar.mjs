@@ -196,7 +196,9 @@ async function upload() {
       node('p', {className: 'help', textContent: result.runs.length ? T('Guardada en Entrenamiento con {n} bajada(s):', {n: result.runs.length}) :
         T('Guardada en Entrenamiento, pero no hay en ella ninguna bajada completa de un circuito.')}),
       ...lines, ...send,
-      node('a', {className: 'btn outline full', href: './entrenamiento.html', textContent: T('Ver en Entrenamiento')}));
+      node('a', {className: 'btn outline full', href: './entrenamiento.html', textContent: T('Ver en Entrenamiento')}),
+      node('a', {className: 'btn outline full', href: './circuitos.html?ruta=' + encodeURIComponent(result.activity.id),
+        textContent: T('Crear un circuito con esta ruta')}));
     $('resultPanel').hidden = false;
     status(T('Grabación guardada.'), 'success');
     $('resultPanel').scrollIntoView({behavior: 'smooth', block: 'start'});

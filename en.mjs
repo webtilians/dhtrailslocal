@@ -794,6 +794,12 @@ export const EN = {
   "Ya puedes guardar la grabación.": "You can save the recording now.",
   "Hay una grabación sin guardar de las {time} ({n} puntos): guárdala, sigue grabando o descártala.": "There's an unsaved recording from {time} ({n} points): save it, keep recording or discard it.",
 
+  // ---- A circuit from a saved route
+  "Cargando {file}…": "Loading {file}…",
+  "…o una ruta tuya ya guardada (grabada con la app o subida en Entrenamiento)": "…or one of your saved rides (recorded with the app or uploaded in Training)",
+  "Usar": "Use",
+  "Crear un circuito con esta ruta": "Create a track from this ride",
+
   // ---- The app: download and install
   "Instalar la app": "Install the app",
   "La app | DH Trails Local": "The app | DH Trails Local",
