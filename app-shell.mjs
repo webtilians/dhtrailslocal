@@ -15,7 +15,9 @@ export function say(el, message, type = '') {
 
 // iPhone and iPad (an iPad says it is a Mac, but a Mac has no touch screen).
 const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-const INSTALLED = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
+// Inside the app for Android or iPhone (Capacitor) there is nothing to install.
+const INSTALLED = !!window.Capacitor?.isNativePlatform?.() || window.matchMedia?.('(display-mode: standalone)').matches ||
+  navigator.standalone === true;
 
 // Time trial, training, recording and circuits are for everyone (riders draw the circuits of their area too);
 // tournaments only for the organization.
