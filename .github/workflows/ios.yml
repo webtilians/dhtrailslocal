@@ -1,7 +1,8 @@
-# The iPhone app (movil/ios), built on one of GitHub's Macs. Every change to movil/ is compiled, unsigned,
-# to check it. By hand (Actions → iPhone → Run workflow) it is signed and sent to TestFlight with the App
-# Store Connect key kept in the repository's secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8 (the .p8 file's
-# text) and APPLE_TEAM_ID.
+# The iPhone app (movil/ios), built on one of GitHub's Macs with Xcode 26 (App Store Connect takes nothing
+# older). Every change to movil/ is compiled, unsigned, to check it. By hand (Actions → iPhone → Run workflow)
+# it is signed and sent to TestFlight, with the repository's secrets: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8
+# (the App Store Connect key, the .p8 file's text), APPLE_TEAM_ID, and CERTIFICATE_PRIVATE_KEY (the private
+# key of the distribution certificate, kept with the Android key: the same certificate is reused each time).
 name: iPhone
 on:
   push:
@@ -24,6 +25,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$XCODE" ] || { echo "::error::No hay Xcode 26 en este Mac de GitHub"; ls -d /Applications/Xcode*.app; exit 1; }
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
       - run: npm ci
       - run: npx cap sync ios
 
@@ -33,44 +40,36 @@ jobs:
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release
           -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO build -quiet
 
-      # The archive is built unsigned; the export signs it for the App Store with Apple's cloud signing,
-      # which needs no registered iPhone (a new account has none) and no certificate kept here. On a failure,
-      # the lines that say why come out as the run's annotations.
+      # Signed while it is built, with the distribution certificate and an App Store profile, made through
+      # the App Store Connect API the first time and reused after (Codemagic's command line tools). Neither
+      # needs a registered iPhone. On a failure, the lines that say why come out as the run's annotations.
       - name: Firmar y subir a TestFlight
         if: github.event_name == 'workflow_dispatch' && inputs.testflight
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          APP_STORE_CONNECT_KEY_IDENTIFIER: ${{ secrets.ASC_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.ASC_KEY_P8 }}
+          CERTIFICATE_PRIVATE_KEY: ${{ secrets.CERTIFICATE_PRIVATE_KEY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           BUILD: ${{ github.run_number }}
         run: |
           fail() {
-            grep -iE "error|failed|no profiles|no signing|denied|not found|unable|invalid" "$1" | head -25 |
+            grep -iE "error|failed|no profiles|no signing|denied|not found|unable|invalid|exception" "$1" | head -25 |
               while IFS= read -r line; do echo "::error::$line"; done
             exit 1
           }
-          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 APPLE_TEAM_ID; do
-            [ -n "${!name}" ] || { echo "::error::Falta el secreto $name"; exit 1; }
+          for name in APP_STORE_CONNECT_KEY_IDENTIFIER APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_PRIVATE_KEY CERTIFICATE_PRIVATE_KEY APPLE_TEAM_ID; do
+            [ -n "${!name}" ] || { echo "::error::Falta un secreto ($name)"; exit 1; }
           done
-          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
-          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
-          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/App.xcarchive" archive CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
-            CURRENT_PROJECT_VERSION="$BUILD" > "$RUNNER_TEMP/archive.log" 2>&1 || fail "$RUNNER_TEMP/archive.log"
-          cat > "$RUNNER_TEMP/export.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0"><dict>
-            <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
-            <key>teamID</key><string>$APPLE_TEAM_ID</string>
-            <key>signingStyle</key><string>automatic</string>
-            <key>uploadSymbols</key><true/>
-          </dict></plist>
-          PLIST
-          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
-            -exportPath "$RUNNER_TEMP/export" "${AUTH[@]}" > "$RUNNER_TEMP/export.log" 2>&1 || fail "$RUNNER_TEMP/export.log"
-          tail -5 "$RUNNER_TEMP/export.log"
-          rm -f "$KEY"
+          LOG="$RUNNER_TEMP/firma.log"
+          pipx install codemagic-cli-tools > "$LOG" 2>&1 || fail "$LOG"
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*;/CURRENT_PROJECT_VERSION = $BUILD;/" ios/App/App.xcodeproj/project.pbxproj
+          {
+            keychain initialize &&
+            app-store-connect fetch-signing-files es.dhtrails.app --type IOS_APP_STORE --create &&
+            keychain add-certificates &&
+            xcode-project use-profiles --project ios/App/App.xcodeproj &&
+            xcode-project build-ipa --project ios/App/App.xcodeproj --scheme App --config Release &&
+            app-store-connect publish --path build/ios/ipa/App.ipa
+          } >> "$LOG" 2>&1 || fail "$LOG"
+          tail -5 "$LOG"
