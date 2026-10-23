@@ -357,3 +357,4 @@ main.wide-page{max-width:1900px}
 .recorder .steps{margin:14px 0 6px;padding-left:20px;line-height:1.55;font-size:14px;color:#cfe6f8}
 a.btn{text-decoration:none;text-align:center}a.btn.full{display:block}
 .saved-routes{margin-top:14px}.saved-routes select{flex:2;min-width:0}
+.recorder .steps a,.recorder .help a{color:#74c7ff}
