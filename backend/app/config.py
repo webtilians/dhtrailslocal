@@ -13,6 +13,8 @@ SECRET_KEY = os.getenv("SECRET_KEY", "")
 CORS_ORIGINS = [x.strip() for x in os.getenv("CORS_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000").split(",") if x.strip()]
 GPS_STORAGE_DIR = Path(os.getenv("GPS_STORAGE_DIR", str(BACKEND_DIR / "data" / "activities"))).resolve()
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+# The app for Android (an APK built from movil/, not kept in git), downloaded from /descargas/.
+DOWNLOADS_DIR = Path(os.getenv("DOWNLOADS_DIR", str(GPS_STORAGE_DIR.parent / "descargas"))).resolve()
 API_HOST = os.getenv("API_HOST", "127.0.0.1")
 API_PORT = int(os.getenv("API_PORT", "8000"))
 

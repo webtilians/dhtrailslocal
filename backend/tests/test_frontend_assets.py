@@ -11,7 +11,8 @@ _HTML_REF=re.compile(r'(?:src|href)="\./([^"/?#]+)"')
 _MODULE_REF=re.compile(r"""from\s+['"]\./([^'"/]+)['"]""")
 
 def local_assets():
-    found,pending=set(),["index.html","entrenamiento.html","circuitos.html","torneos.html","editor.html","competicion.html"]
+    found,pending=set(),["index.html","entrenamiento.html","circuitos.html","torneos.html","editor.html","competicion.html",
+           "records.html","contrasena.html","grabar.html","app.html"]
     while pending:
         name=pending.pop()
         if name in found:continue

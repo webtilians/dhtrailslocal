@@ -350,3 +350,9 @@ main.wide-page{max-width:1900px}
 .recorder .text-btn{display:block;margin:12px auto 0}
 .recorder select{width:100%}
 .status:empty{display:none}
+/* La app: download and QR to pass it on */
+.share-app{text-align:center}
+.qr{width:210px;margin:0 auto 10px;background:#fff;padding:8px;border-radius:8px}
+.qr svg{display:block;width:100%;height:auto}
+.recorder .steps{margin:14px 0 6px;padding-left:20px;line-height:1.55;font-size:14px;color:#cfe6f8}
+a.btn{text-decoration:none;text-align:center}a.btn.full{display:block}
