@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DH Trails</string>
+    <string name="title_activity_main">DH Trails</string>
+    <string name="package_name">es.dhtrails.app</string>
+    <string name="custom_url_scheme">es.dhtrails.app</string>
+    <!-- The notification while the GPS records with the screen off (background-geolocation plugin). -->
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_dh</string>
+    <string name="capacitor_background_geolocation_notification_color">#24A9FF</string>
+</resources>

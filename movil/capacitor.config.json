@@ -1,0 +1,13 @@
+{
+  "appId": "es.dhtrails.app",
+  "appName": "DH Trails",
+  "webDir": "www",
+  "server": {
+    "url": "https://dh.178-105-103-4.sslip.io/grabar.html",
+    "allowNavigation": ["dh.178-105-103-4.sslip.io"]
+  },
+  "android": {
+    "allowMixedContent": false,
+    "useLegacyBridge": true
+  }
+}

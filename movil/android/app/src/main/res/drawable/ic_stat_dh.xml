@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The small white icon of the notification while recording: a chequered flag. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M4,3h2v18h-2z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M7,4h4v4h-4zM15,4h4v4h-4zM11,8h4v4h-4zM7,12h4v4h-4zM15,12h4v4h-4z"/>
+</vector>

@@ -337,3 +337,16 @@ main.wide-page{max-width:1900px}
 .help.error{color:#ffa3a3}
 .help.success{color:#84e6bc}
 .help.warning{color:#ffc28c}
+
+/* Grabar: a ride recorded with the phone */
+.recorder{display:grid;gap:18px;max-width:640px}
+.rec-live{margin:14px 0;text-align:center}
+.rec-state{font:700 16px Inter,system-ui,sans-serif;color:#cfe6f8;line-height:1.45;margin:6px 0 10px}
+.rec-clock{font:900 64px 'Barlow Condensed',sans-serif;color:#fff;letter-spacing:1px;font-variant-numeric:tabular-nums;line-height:1}
+.rec-splits{display:flex;flex-direction:column;gap:4px;margin:10px 0}
+.rec-split{display:grid;grid-template-columns:3em 1fr 1fr;gap:8px;font-size:14px;padding:6px 10px;background:#0c2538;border-radius:5px;text-align:left}
+.rec-split span{font-weight:800;color:#7df0be}.rec-split small{color:#98afc8;text-align:right}
+.rec-button{font-size:15px;padding:18px 15px;margin-top:8px}
+.recorder .text-btn{display:block;margin:12px auto 0}
+.recorder select{width:100%}
+.status:empty{display:none}
