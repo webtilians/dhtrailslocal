@@ -4,10 +4,13 @@
   "webDir": "www",
   "server": {
     "url": "https://dh.178-105-103-4.sslip.io/grabar.html",
-    "allowNavigation": ["dh.178-105-103-4.sslip.io"]
+    "allowNavigation": [
+      "dh.178-105-103-4.sslip.io"
+    ]
   },
   "android": {
     "allowMixedContent": false,
-    "useLegacyBridge": true
+    "useLegacyBridge": true,
+    "adjustMarginsForEdgeToEdge": "auto"
   }
 }

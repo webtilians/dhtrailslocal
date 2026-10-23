@@ -43,7 +43,8 @@ export function liveTimer(circuit, {radius = 18, minSpeed = 1.5} = {}) {
     get nextGate() {return next;},
     gates,
     add(fix) {
-      const speed = Number.isFinite(fix.speed) ? fix.speed :
+      // The GPS's own speed; some phones give 0 or none when they do not know it: then from the last fix.
+      const speed = fix.speed > 0 ? fix.speed :
         previous && fix.time > previous.time ? haversine(previous, fix) / ((fix.time - previous.time) / 1000) : 0;
       previous = fix;
       const events = [];

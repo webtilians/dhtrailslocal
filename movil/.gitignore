@@ -1,3 +1,5 @@
 node_modules/
 # The release key's passwords: never in the repository
 android/keystore.properties
+# Built apps (the APK is handed over, not kept in git)
+salida/
