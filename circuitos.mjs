@@ -2,7 +2,7 @@
 import {parseGps, nearestTrackIndex, buildCircuit, distanceSeries, summarize, detectAttempts, referenceStops, withoutStops} from './gps-engine.mjs';
 import {formatMs} from './sector-comparison.mjs';
 import {circuitChecks} from './circuit-checks.mjs';
-import {$, node, say, startShell, createMap, pin, drawCircuit, km} from './app-shell.mjs';
+import {$, node, say, startShell, createMap, pin, drawCircuit, km, dateText} from './app-shell.mjs';
 import {T, dec} from './i18n.mjs';
 
 const view = createMap('map');
@@ -158,8 +158,13 @@ $('undo').addEventListener('click', () => {
 });
 
 // A GPX/TCX starts from scratch; a circuit file (.json) comes with its start, segments and finish.
+// The route: a file of the device, or one of the rider's saved routes (a ride recorded with Grabar or
+// uploaded to Entrenamiento), which the server keeps.
 $('routeFile').addEventListener('change', async e => {
-  const file = e.target.files[0];
+  await importFile(e.target.files[0]);
+  e.target.value = '';
+});
+async function importFile(file) {
   if (!file) return;
   savedNote = false;
   try {
@@ -182,8 +187,22 @@ $('routeFile').addEventListener('change', async e => {
     view.fit(source.map(latlon), 25);
     status(ext === 'json' ? T('Circuito cargado: revisa los puntos y pulsa Guardar ruta.') : T('Ruta cargada. Marca la salida sobre la línea.'), 'success');
   } catch (err) {status(err.message, 'error');}
-  e.target.value = '';
-});
+}
+async function useSavedRoute(id) {
+  const route = savedRoutes.find(r => r.id === id);
+  if (!route) return;
+  status(T('Cargando {file}…', {file: route.filename}));
+  try {await importFile(new File([await shell.api.activityFile(id)], route.filename));}
+  catch (err) {status(err.message, 'error');}
+}
+let savedRoutes = [];
+async function loadSavedRoutes() {
+  savedRoutes = await shell.api.trainingRoutes();
+  $('savedRoutes').hidden = !savedRoutes.length;
+  $('savedRoute').replaceChildren(...savedRoutes.map(r => node('option', {value: r.id, textContent: r.filename + ' · ' +
+    dateText(r.recorded_at || r.created_at) + (r.distance_m ? ' · ' + km(r.distance_m) : '')})));
+}
+$('useRoute').addEventListener('click', () => useSavedRoute($('savedRoute').value));
 
 // A watch keeps recording during a stop: the stop is cut out of the line, and a clean run of the
 // same file is offered first when there is one.
@@ -342,8 +361,14 @@ async function start() {
     if (!ok && shell.api && !shell.me) shell.askLogin(T('Entra con tu cuenta para crear los circuitos de tu zona.'));
     return ok;
   };
-  shell.onUser(() => {if (allowed()) loadSaved().catch(err => status(err.message, 'error'));});
+  shell.onUser(() => {if (allowed()) Promise.all([loadSaved(), loadSavedRoutes()]).catch(err => status(err.message, 'error'));});
   if (!shell.api) {$('workspace').hidden = true; $('notAllowed').hidden = false; $('notAllowed').textContent = T('Esta página necesita el servidor de DH Trails.'); return;}
-  if (allowed()) {await loadSaved(); view.map.invalidateSize();}
+  if (allowed()) {
+    await Promise.all([loadSaved(), loadSavedRoutes()]);
+    view.map.invalidateSize();
+    // Sent here from Grabar with the ride just saved (?ruta=its id).
+    const asked = new URLSearchParams(location.search).get('ruta');
+    if (asked) {window.history.replaceState(null, '', location.pathname); await useSavedRoute(asked);}
+  }
 }
 start().catch(err => status('Error: ' + err.message, 'error'));
