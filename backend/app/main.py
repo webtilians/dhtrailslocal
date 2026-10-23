@@ -333,7 +333,7 @@ def delete_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Dep
 _PUBLIC_FILES={"index.html","entrenamiento.html","circuitos.html","torneos.html","app.css","app-shell.mjs",
                "timetrial.mjs","entrenamiento.mjs","circuitos.mjs","torneos.mjs","telemetry.mjs","charts.mjs",
                "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs","circuit-checks.mjs","insights.mjs","gate-sounds.mjs",
-               "records.html","records.mjs","contrasena.html","contrasena.mjs","youtube.mjs","bumps.mjs","i18n.mjs","en.mjs","grabar.html","grabar.mjs","recorder.mjs",
+               "records.html","records.mjs","contrasena.html","contrasena.mjs","youtube.mjs","bumps.mjs","i18n.mjs","en.mjs","grabar.html","grabar.mjs","recorder.mjs","app.html","app.mjs",
                "editor.html","competicion.html",  # these two only redirect old links
                "manifest.json","sw.js","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"}
 # Pages and modules change together on every update: browsers must check before reusing a copy.
@@ -344,6 +344,15 @@ _REVALIDATE={"Cache-Control":"no-cache"}
 @app.post("/compartir",include_in_schema=False)
 def shared_without_worker():
     return RedirectResponse("./entrenamiento.html?compartido",status_code=303)
+
+# The app for Android, to install without the Play Store (app.html says how). Only APK files of that
+# folder; a new build replaces the file and is downloaded again.
+@app.get("/descargas/{name}",include_in_schema=False)
+def download(name:str):
+    path=(config.DOWNLOADS_DIR/name).resolve()
+    if path.parent!=config.DOWNLOADS_DIR or path.suffix.lower()!=".apk" or not path.is_file():
+        raise HTTPException(404,"Recurso no encontrado")
+    return FileResponse(path,media_type="application/vnd.android.package-archive",filename=name,headers=_REVALIDATE)
 
 @app.get("/",include_in_schema=False)
 def home():

@@ -208,6 +208,7 @@ async function start() {
   shell = await startShell('grabar');
   $('screenNote').textContent = native ? T('Puedes bloquear el móvil y guardarlo: la app sigue grabando y lo verás en la notificación.') :
     T('En el navegador, deja la pantalla encendida y esta página delante: si bloqueas el móvil, el GPS se para. Con la app instalada para Android o iPhone sí graba con la pantalla apagada.');
+  if (!native) $('screenNote').append(' ', node('a', {href: './app.html', textContent: T('Instalar la app')}));
   if (shell.api) catalog = await shell.api.circuitCatalog().catch(() => []);
   $('circuit').append(...catalog.map(c => node('option', {value: c.id, textContent: c.name})));
   $('circuit').addEventListener('change', () => {circuit = null; timer = null; if (lastFix) pickCircuit(lastFix); show();});
