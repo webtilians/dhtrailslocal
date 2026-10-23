@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<title>Grabar | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main>
+<header class="heading">
+  <div><div class="kicker">DH / GRABAR</div><h1>Graba tu bajada. <span>Con el GPS del móvil.</span></h1>
+  <p>Sin reloj ni Strava: el móvil graba tu ruta, pita al pasar por la salida, los sectores y la meta, y te da el tiempo al momento. Al terminar se guarda en Entrenamiento y, si hay un torneo abierto en ese circuito, puedes enviarla al time trial.</p></div>
+</header>
+<div class="recorder">
+  <section class="panel">
+    <div class="panel-title"><h2><span>Circuito</span></h2><span class="caps" id="gpsTag">GPS —</span></div>
+    <div class="panel-content">
+      <select id="circuit" aria-label="Circuito"><option value="">Automático: el más cercano</option></select>
+      <div class="rec-live">
+        <p id="state" class="rec-state">Pulsa «Empezar a grabar» cuando estés listo.</p>
+        <div id="clock" class="rec-clock" hidden>00:00.0</div>
+        <div id="splits" class="rec-splits"></div>
+        <p id="gpsInfo" class="help"></p>
+      </div>
+      <button id="startRec" class="btn primary full rec-button" type="button">● Empezar a grabar</button>
+      <button id="stopRec" class="btn outline full rec-button" type="button" hidden>■ Terminar y guardar</button>
+      <button id="discard" class="text-btn danger" type="button" hidden>Descartar la grabación</button>
+      <p id="screenNote" class="help"></p>
+    </div>
+  </section>
+  <section class="panel" id="resultPanel" hidden>
+    <div class="panel-title"><h2><span>Resultado</span></h2></div>
+    <div class="panel-content" id="result"></div>
+  </section>
+</div>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+</main>
+<script type="module" src="./grabar.mjs"></script>
+</body></html>

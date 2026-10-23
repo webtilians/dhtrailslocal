@@ -20,6 +20,19 @@ Al crear la cuenta se pide el nombre de piloto, que es el que sale en la clasifi
 
 La web está en los dos idiomas: sale en español si el navegador está en español y en inglés si no, y el botón **ES | EN** de la barra la cambia (se recuerda en ese dispositivo). Los textos se escriben en español en las páginas y en el código: el código los pasa por `T()` (`i18n.mjs`), las páginas se traducen al abrirse, y `en.mjs` tiene cada uno en inglés. Los mensajes del servidor llegan en español y la web los traduce: enteros, o por patrón los que llevan un nombre, una fecha o un número (`EN_PATTERNS`). Fechas y decimales siguen el idioma (21 oct / 21 Oct, 1,12 km / 1.12 km). `tests/i18n.test.mjs` comprueba que no quede ningún texto sin traducir: los de `T()`, los de las páginas y los mensajes del servidor. Un texto nuevo se escribe en español con `T('…')` y se añade su inglés en `en.mjs`; con un dato dentro, `T('Gana {name} con {time}', {name, time})`.
 
+## Grabar con el móvil, y la app para Android
+
+**Grabar** (`grabar.html`, `recorder.mjs`) graba la bajada con el GPS del móvil: pita al pasar por la salida, cada sector y la meta del circuito más cercano (o del elegido) y da el tiempo al momento; en meta, el mismo motor que el servidor. Al guardar, la ruta va a Entrenamiento como un GPX con un punto por segundo entero, como el de un reloj, y se puede enviar al time trial abierto en ese circuito. Lo grabado se guarda en el móvil hasta subirlo. En el navegador el GPS solo graba con la pantalla encendida y la página delante (se mantiene encendida mientras graba).
+
+**La app para Android** (`movil/`, Capacitor 7) abre la web del servidor (empieza en Grabar) y añade el GPS con la pantalla apagada: el plugin `@capacitor-community/background-geolocation`, con su notificación mientras graba; Atrás en la primera página la manda al fondo en vez de cerrarla. Como la web viene del servidor, cada despliegue llega a la app sin reinstalarla. Para compilarla hacen falta el SDK de Android y un JDK 21:
+
+```
+cd movil && npm install && npx cap sync android
+cd android && set JAVA_HOME=C:\Users\ENRIQUE\.jdks\jdk-21.0.12.1+1 && gradlew.bat assembleRelease
+```
+
+El APK firmado sale en `android/app/build/outputs/apk/release/`. La clave de firma está fuera del repositorio (`C:\Users\ENRIQUE\DHTrails-claves`, y `android/keystore.properties` apunta a ella): las actualizaciones de la app se tienen que firmar con la misma. La app para iPhone necesita la cuenta de desarrollador de Apple y compilar en un Mac (o un servicio en la nube).
+
 ## En el móvil: instalar la app y compartirle un GPX
 
 La web se instala como una app (`manifest.json`, iconos `icon-*.png`): en Android, con Chrome o Edge, el botón **Instalar app** de la barra o «Instalar aplicación» en el menú; en iPhone, Safari → Compartir → «Añadir a pantalla de inicio». Instalada en Android, aparece entre las apps a las que compartir un archivo: desde Strava, la app del reloj o el gestor de archivos, compartes el GPX o TCX con **DH Trails** y se abre Entrenamiento con el archivo listo para pulsar «Buscar circuitos», o para enviarlo al time trial abierto. Lo recibe `sw.js`, que no hace nada más: no guarda la web para usarla sin conexión, porque la app necesita su servidor. iPhone no deja compartir archivos con apps web: allí se guarda el GPX en Archivos y se elige con «Importar GPX / TCX» (en iOS el selector deja elegir cualquier archivo, porque a veces no reconoce los .gpx); el botón **Instalar app** explica cómo añadirla a la pantalla de inicio.

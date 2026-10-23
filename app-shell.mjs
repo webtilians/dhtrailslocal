@@ -17,11 +17,12 @@ export function say(el, message, type = '') {
 const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const INSTALLED = window.matchMedia?.('(display-mode: standalone)').matches || navigator.standalone === true;
 
-// Time trial, training and circuits are for everyone (riders draw the circuits of their area too);
+// Time trial, training, recording and circuits are for everyone (riders draw the circuits of their area too);
 // tournaments only for the organization.
 const TABS = [
   {href: './index.html', label: T('Time trial'), page: 'timetrial'},
   {href: './entrenamiento.html', label: T('Entrenamiento'), page: 'entrenamiento'},
+  {href: './grabar.html', label: T('Grabar'), page: 'grabar'},
   {href: './records.html', label: T('Récords'), page: 'records'},
   {href: './circuitos.html', label: T('Circuitos'), page: 'circuitos'},
   {href: './torneos.html', label: T('Torneos'), page: 'torneos', admin: true},
