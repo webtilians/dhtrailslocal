@@ -114,6 +114,29 @@ def test_rejects_invalid_files(data, ext):
 def east_degrees(metres):
     return metres / (111195 * math.cos(math.radians(36.74)))
 
+def test_leaving_the_circuit_and_ending_far_past_the_finish_is_not_a_run():
+    # Down to point 60, 150 s riding 300 m to the east, then a few fixes 400 m past the finish, in line with
+    # the circuit's last stretch: the finish is never reached (the line does not go on that far).
+    r = route()
+    t = r[60].time
+    away = [Fix(r[60].lat, r[60].lon + east_degrees(300 * min(1, j / 10)), r[60].ele, t + j * 2000) for j in range(1, 76)]
+    dlat, dlon = r[87].lat - r[86].lat, r[87].lon - r[86].lon
+    past = [Fix(r[87].lat + 60 * dlat + k * dlat, r[87].lon + 60 * dlon, r[87].ele, t + 152000 + k * 2000) for k in range(5)]
+    assert detect_attempts(r[:61] + away + past, circuit()) == []
+
+def test_gps_recording_elsewhere_while_the_line_is_lost_needs_a_review():
+    # From point 50 the rider goes 200 m to the east for a minute and comes back at point 70: a plausible
+    # speed for the stretch, but the GPS was working, somewhere else.
+    r = route()
+    t = r[50].time
+    away = [Fix(r[50].lat - j * 0.0000304, r[50].lon + east_degrees(200 * min(1, j / 5, (30 - j) / 5)), r[50].ele, t + j * 2000)
+            for j in range(1, 30)]
+    back = [Fix(p.lat, p.lon, p.ele, p.time + 20000) for p in r[70:]]
+    run = detect_attempts(r[:51] + away + back, circuit())[0]
+    assert run.status == "revisar"
+    assert any(issue.startswith("entre el km 0.27 y el 0.41 el GPS va por otro sitio, a ") and issue.endswith(" m del circuito: ¿te saliste del trazado?")
+               for issue in run.issues), run.issues
+
 def test_gate_passed_with_gps_35_m_aside_is_timed_at_the_stretch_speed():
     shifted = [Fix(p.lat, p.lon + east_degrees(35), p.ele, p.time) if 55 <= i <= 69 else p for i, p in enumerate(route())]
     run = detect_attempts(shifted, circuit())[0]

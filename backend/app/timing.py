@@ -159,10 +159,13 @@ def _gate_groups(route, gate, start, until, radius):
 # Trails are singletrack: a fix far from the line is GPS error or lost coverage, not another
 # line. Crossings are timed only between reliable fixes, at the average speed of the stretch in
 # between. A stretch without reliable GPS is accepted when that average speed is plausible next
-# to the rider's own pace around it; only an impossible speed (a shortcut) needs a review.
+# to the rider's own pace around it; an impossible speed (a shortcut) needs a review, and so does a
+# stretch where the GPS kept recording but somewhere else (the rider left the circuit).
 START_RADIUS_M = 35      # fixes this close to the start begin a candidate run
 MATCH_CORRIDOR_M = 60    # farther than this from the line, a fix does not move the rider
 RELIABLE_M = 30          # fixes this close to the line time the gates
+LINE_EXTENSION_M = 100   # the line goes on this far before the start and past the finish, no further
+AWAY_M = 120             # in a stretch without reliable GPS, fixes this far from it (median) were elsewhere
 RECOVER_AHEAD_M = 400    # look-ahead when the local match is poor (e.g. a stop drawn into the reference)
 MAX_SPEED_MS = 25        # forward search per second of recording (90 km/h)
 BLIND_GAP_MS = 5000      # reliable fixes further apart than this leave a stretch to check
@@ -186,7 +189,11 @@ def _along_track(pts, d, p, start, end):
         dx, dy = (b[1] - a[1]) * sx, (b[0] - a[0]) * sy
         denom = dx * dx + dy * dy
         u = -(ax * dx + ay * dy) / denom if denom else 0
-        if not (i == 0 and u < 0) and not (i == last and u > 1):
+        if i == 0 and u < 0 or i == last and u > 1:
+            # Before the start or past the finish, but only so far: beyond that the fix is somewhere else.
+            reach = LINE_EXTENSION_M / math.sqrt(denom)
+            u = max(-reach, u) if u < 0 else min(1 + reach, u)
+        else:
             u = max(0, min(1, u))
         lateral = math.hypot(ax + u * dx, ay + u * dy)
         if best is None or lateral < best[1]:
@@ -284,8 +291,9 @@ def _pace_between(route, a, b):
     ta, tb = route[a[0]].time, route[b[0]].time
     return (b[1] - a[1]) / ((tb - ta) / 1000) if _finite(ta) and _finite(tb) and tb - ta >= 1000 else None
 
-def _blind_stretches(route, track, run_pace):
-    """Stretches with no reliable GPS for over 5 s, and whether their average speed is believable."""
+def _blind_stretches(route, pts, d, track, run_pace):
+    """Stretches with no reliable GPS for over 5 s, whether their average speed is believable and how far
+    from that part of the circuit the fixes recorded in between are (median, metres; 0 with fewer than 3)."""
     out = []
     for i in range(1, len(track)):
         a, b = track[i - 1], track[i]
@@ -302,7 +310,11 @@ def _blind_stretches(route, track, run_pace):
         pace = max([0, *around])
         speed = (b[1] - a[1]) / ((tb - ta) / 1000)
         plausible = b[1] - a[1] < 15 or speed <= min(MAX_PLAUSIBLE_MS, PACE_FACTOR * pace + 1 + ENDPOINT_ERROR_M / ((tb - ta) / 1000))
-        out.append({"from": a[1], "to": b[1], "seconds": (tb - ta) / 1000, "speed": speed, "plausible": plausible})
+        lo, hi = max(0, a[1]), min(d[-1], b[1])
+        apart = sorted(m[1] for m in (_along_track(pts, d, f, lo, hi) for f in route[a[0] + 1:b[0]]) if m is not None)
+        away = apart[len(apart) // 2] if len(apart) >= 3 else 0
+        out.append({"from": a[1], "to": b[1], "seconds": (tb - ta) / 1000, "speed": speed, "away": away,
+                    "plausible": plausible and away <= AWAY_M})
     return out
 
 def _whole(x: float) -> int:
@@ -373,7 +385,7 @@ def detect_attempts(route: list[Fix], circuit: dict, radius: float | None = None
         confidence = 1 - outside / sampled if sampled else 0
         timed = _finite(times[0]) and _finite(times[-1])
         seconds = (times[-1] - times[0]) / 1000 if timed and times[-1] >= times[0] else None
-        stretches = _blind_stretches(route, track, length / seconds) if seconds else []
+        stretches = _blind_stretches(route, ref, d_ref, track, length / seconds) if seconds else []
         doubtful = [x for x in stretches if not x["plausible"]]
         accepted = [x for x in stretches if x["plausible"]]
         estimated_start = 0 if start[0] is not None else start[1][1]
@@ -381,8 +393,12 @@ def detect_attempts(route: list[Fix], circuit: dict, radius: float | None = None
         issues, notes = [], []
         if missing: issues.append(f"{missing} puerta(s) de sector sin datos GPS")
         for x in doubtful:
-            issues.append(f"entre el km {_km(x['from'])} y el {_km(x['to'])} irías a {_whole(x['speed'] * 3.6)} km/h "
-                          "de media sin GPS fiable: ¿atajo o fallo del GPS?")
+            if x["away"] > AWAY_M:
+                issues.append(f"entre el km {_km(x['from'])} y el {_km(min(x['to'], length))} el GPS va por otro sitio, "
+                              f"a {_whole(x['away'])} m del circuito: ¿te saliste del trazado?")
+            else:
+                issues.append(f"entre el km {_km(x['from'])} y el {_km(x['to'])} irías a {_whole(x['speed'] * 3.6)} km/h "
+                              "de media sin GPS fiable: ¿atajo o fallo del GPS?")
         if confidence < 0.5: issues.append("el GPS se separa del trazado en más de la mitad de la bajada")
         if estimated_start > 20: issues.append("la salida no aparece en el GPS")
         if not timed: issues.append("no hay marcas de tiempo completas")

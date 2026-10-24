@@ -126,10 +126,13 @@ function gateGroups(route, gate, from, until, radius) {
 // Trails are singletrack: a fix far from the line is GPS error or lost coverage, not another
 // line. Crossings are timed only between reliable fixes, at the average speed of the stretch in
 // between. A stretch without reliable GPS is accepted when that average speed is plausible next
-// to the rider's own pace around it; only an impossible speed (a shortcut) needs a review.
+// to the rider's own pace around it; an impossible speed (a shortcut) needs a review, and so does a
+// stretch where the GPS kept recording but somewhere else (the rider left the circuit).
 const START_RADIUS_M = 35;      // fixes this close to the start begin a candidate run
 const MATCH_CORRIDOR_M = 60;    // farther than this from the line, a fix does not move the rider
 const RELIABLE_M = 30;          // fixes this close to the line time the gates
+const LINE_EXTENSION_M = 100;   // the line goes on this far before the start and past the finish, no further
+const AWAY_M = 120;             // in a stretch without reliable GPS, fixes this far from it (median) were elsewhere
 const RECOVER_AHEAD_M = 400;    // look-ahead when the local match is poor (e.g. a stop drawn into the reference)
 const MAX_SPEED_MS = 25;        // forward search per second of recording (90 km/h)
 const BLIND_GAP_MS = 5000;      // reliable fixes further apart than this leave a stretch to check
@@ -156,7 +159,11 @@ function alongTrack(line, p, from, to) {
     const ax = (a[1] - p.lon) * sx, ay = (a[0] - p.lat) * sy;
     const dx = (b[1] - a[1]) * sx, dy = (b[0] - a[0]) * sy, denom = dx * dx + dy * dy;
     let u = denom ? -(ax * dx + ay * dy) / denom : 0;
-    if (!(i === 0 && u < 0) && !(i === last && u > 1)) u = Math.max(0, Math.min(1, u));
+    if (i === 0 && u < 0 || i === last && u > 1) {
+      // Before the start or past the finish, but only so far: beyond that the fix is somewhere else.
+      const reach = LINE_EXTENSION_M / Math.sqrt(denom);
+      u = u < 0 ? Math.max(-reach, u) : Math.min(1 + reach, u);
+    } else u = Math.max(0, Math.min(1, u));
     const lateral = Math.hypot(ax + u * dx, ay + u * dy);
     if (!best || lateral < best.lateral) best = {s: d[i] + u * (d[i + 1] - d[i]), lateral};
   }
@@ -234,8 +241,9 @@ function paceBetween(route, a, b) {
   const ta = route[a.k].time, tb = route[b.k].time;
   return Number.isFinite(ta) && Number.isFinite(tb) && tb - ta >= 1000 ? (b.s - a.s) / ((tb - ta) / 1000) : null;
 }
-// Stretches with no reliable GPS for over 5 s, and whether their average speed is believable.
-function blindStretches(route, track, runPace) {
+// Stretches with no reliable GPS for over 5 s, whether their average speed is believable and how far from
+// that part of the circuit the fixes recorded in between are (median, metres; 0 with fewer than 3).
+function blindStretches(route, line, track, runPace) {
   const out = [];
   for (let i = 1; i < track.length; i++) {
     const a = track[i - 1], b = track[i], ta = route[a.k].time, tb = route[b.k].time;
@@ -248,7 +256,10 @@ function blindStretches(route, track, runPace) {
     const pace = Math.max(0, ...around);
     const speed = (b.s - a.s) / ((tb - ta) / 1000);
     const plausible = b.s - a.s < 15 || speed <= Math.min(MAX_PLAUSIBLE_MS, PACE_FACTOR * pace + 1 + ENDPOINT_ERROR_M / ((tb - ta) / 1000));
-    out.push({from: a.s, to: b.s, seconds: (tb - ta) / 1000, speed, plausible});
+    const lo = Math.max(0, a.s), hi = Math.min(line.d.at(-1), b.s);
+    const apart = route.slice(a.k + 1, b.k).map(f => alongTrack(line, f, lo, hi)).filter(Boolean).map(m => m.lateral).sort((x, y) => x - y);
+    const away = apart.length >= 3 ? apart[apart.length >> 1] : 0;
+    out.push({from: a.s, to: b.s, seconds: (tb - ta) / 1000, speed, away, plausible: plausible && away <= AWAY_M});
   }
   return out;
 }
@@ -280,13 +291,15 @@ export function detectAttempts(route, circuit, options = {}) {
     const confidence = sampled ? 1 - outside / sampled : 0;
     const timed = Number.isFinite(times[0]) && Number.isFinite(times.at(-1));
     const seconds = timed && times.at(-1) >= times[0] ? (times.at(-1) - times[0]) / 1000 : null;
-    const stretches = seconds ? blindStretches(route, track, length / seconds) : [];
+    const stretches = seconds ? blindStretches(route, line, track, length / seconds) : [];
     const doubtful = stretches.filter(x => !x.plausible), accepted = stretches.filter(x => x.plausible);
     const estimatedStart = start.a ? 0 : start.b.s;
     const ok = timed && missing === 0 && !doubtful.length && confidence >= 0.5 && estimatedStart <= 20;
     const issues = [], notes = [];
     if (missing) issues.push(missing + ' puerta(s) de sector sin datos GPS');
-    for (const x of doubtful) issues.push('entre el km ' + km(x.from) + ' y el ' + km(x.to) + ' irías a ' + Math.round(x.speed * 3.6) + ' km/h de media sin GPS fiable: ¿atajo o fallo del GPS?');
+    for (const x of doubtful) issues.push(x.away > AWAY_M ?
+      'entre el km ' + km(x.from) + ' y el ' + km(Math.min(x.to, length)) + ' el GPS va por otro sitio, a ' + Math.round(x.away) + ' m del circuito: ¿te saliste del trazado?' :
+      'entre el km ' + km(x.from) + ' y el ' + km(x.to) + ' irías a ' + Math.round(x.speed * 3.6) + ' km/h de media sin GPS fiable: ¿atajo o fallo del GPS?');
     if (confidence < 0.5) issues.push('el GPS se separa del trazado en más de la mitad de la bajada');
     if (estimatedStart > 20) issues.push('la salida no aparece en el GPS');
     if (!timed) issues.push('no hay marcas de tiempo completas');

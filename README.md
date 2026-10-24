@@ -64,7 +64,9 @@ Los senderos son de un metro: un punto GPS lejos del trazado es un fallo del GPS
 - Cada bajada se sigue por su posición a lo largo del trazado. Las puertas, la salida y la meta se cronometran solo con puntos **fiables** (a menos de 30 m del trazado).
 - Si se pierden puntos o se desvían, el paso por las puertas de ese tramo se calcula con la **velocidad media** del tramo, entre el último punto fiable y el siguiente.
 - Un tramo sin GPS fiable de más de 5 s **no invalida la bajada** si su velocidad media es creíble: como mucho 1,6 veces tu ritmo justo antes y justo después, más 1 m/s, más el margen de error de los dos puntos de los extremos, y nunca más de 80 km/h. Queda anotado en gris.
-- Solo se marca para revisar si en ese tramo habrías ido más rápido de lo posible, si no hay marcas de tiempo o si más de la mitad de la bajada está fuera del trazado.
+- Pero si en ese tramo el GPS **sí grababa, en otro sitio** (la mitad de sus puntos a más de 120 m de esa parte del circuito), no es una pérdida de señal: te saliste del trazado, y la bajada se marca para revisar. En las 84 bajadas guardadas el 24/10/2026, los puntos de los tramos sin GPS fiable quedaban como mucho a 72 m.
+- Solo se marca para revisar si en ese tramo habrías ido más rápido de lo posible o el GPS iba por otro sitio, si no hay marcas de tiempo o si más de la mitad de la bajada está fuera del trazado.
+- Antes de la salida y después de la meta la línea solo se alarga 100 m: un punto más lejos, aunque caiga en la prolongación del último tramo, no es «pasar la meta» (una bajada que dejaba el circuito a mitad y acababa 1,2 km más allá, en esa línea, contaba como completa).
 - Esperar en la salida o cruzarla varias veces no cuenta: el tiempo empieza en el último cruce antes de bajar.
 
 El motor del navegador (`gps-engine.mjs`) y el del servidor dan exactamente los mismos tiempos. Cada bajada guarda además su **perfil** (posición en el circuito y hora de cada punto fiable, y la velocidad del GPS si el archivo la trae), que usa Entrenamiento para comparar velocidades (`telemetry.mjs`, `charts.mjs`).
