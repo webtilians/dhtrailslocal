@@ -13,6 +13,7 @@ import {youtubeLink, YouTubeVideo} from './youtube.mjs';
 import {shakeSeries, matchBumps, samePlace} from './bumps.mjs';
 import {T, dec, locale, ordinal, tServer} from './i18n.mjs';
 import {asGpsFile} from './fit.mjs';
+import {inflateMotion, readMotion, runMoments, roughness} from './motion.mjs';
 
 // Categorical slots validated for the dark panel surface (CVD-safe in this order, max 4 runs).
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
@@ -157,7 +158,8 @@ async function compare() {
   if (brakingLayer) view.map.removeLayer(brakingLayer);
   selectionLayer = brakingLayer = null;
   view.clear();
-  ['legend', 'speedChart', 'gapChart', 'segments', 'brakingRuns', 'brakingList'].forEach(id => $(id).replaceChildren());
+  ['legend', 'speedChart', 'gapChart', 'segments', 'brakingRuns', 'brakingList', 'motionList', 'roughChart'].forEach(id => $(id).replaceChildren());
+  $('roughChart').hidden = $('roughTitle').hidden = true;
   showSelection(circuit);
   if (!circuit) {$('compareTag').textContent = '—'; return;}
   $('compareTag').textContent = circuit.name.toUpperCase();
@@ -170,6 +172,7 @@ async function compare() {
   if (!chosen.length) {
     $('segments').replaceChildren(node('p', {className: 'placeholder', textContent: T('Elige bajadas para compararlas.')}));
     $('brakingList').replaceChildren(node('p', {className: 'placeholder', textContent: T('Elige una bajada para ver dónde frena.')}));
+    $('motionList').replaceChildren(node('p', {className: 'placeholder', textContent: T('Elige una bajada para ver sus saltos y golpes.')}));
     return;
   }
   const distances = distanceSeries(circuit.points);
@@ -211,6 +214,7 @@ async function compare() {
   const byDefault = [reference, ...data.filter(d => d !== reference)].map(d => d.run.id);
   brakingIds = brakingByHand ? present : byDefault.slice(0, BRAKING_MAX);
   renderBraking();
+  renderMotion().catch(err => say($('motionList'), err.message, 'error'));
   if (clip) renderMoments();
   renderMarks();
   $('replayTime').max = replayEnd();
@@ -307,6 +311,46 @@ function renderBraking() {
     return button;
   }) : [node('p', {className: 'placeholder', textContent: T('No hay frenadas claras, o el GPS no fue fiable donde se frena.')})]));
   showSelection(circuit);
+}
+// The phone's sensors of a run (your own, recorded with the app), read once; null when it has none.
+const motions = new Map();
+let routeSensors = null;   // a promise: each of your routes' sensors summary, by route
+function motionOf(run) {
+  if (!run.activity_id || run.mine === false) return null;
+  routeSensors ??= shell.api.trainingRoutes().then(list => new Map(list.map(r => [r.id, r.sensors])));
+  if (!motions.has(run.activity_id)) motions.set(run.activity_id, routeSensors.then(sensors => sensors.get(run.activity_id) ?
+    shell.api.routeSensors(run.activity_id).then(inflateMotion).then(readMotion) : null));
+  return motions.get(run.activity_id);
+}
+// Jumps and shocks of the runs compared that carry the phone's sensors, and how rough each stretch was.
+async function renderMotion() {
+  const version = comparisonVersion, {circuit, data} = current;
+  const found = (await Promise.all(data.map(async d => ({d, motion: await motionOf(d.run)})))).filter(x => x.motion);
+  if (version !== comparisonVersion) return;
+  if (!found.length) return $('motionList').replaceChildren(node('p', {className: 'placeholder',
+    textContent: T('Ninguna de estas bajadas tiene los sensores del móvil: graba con la app de DH Trails para verlos aquí.')}));
+  const text = m => m.kind === 'air' ? T('Salto: {s} s en el aire', {s: dec(m.seconds, 2)}) : T('Golpe de {g} g', {g: dec(m.g)});
+  $('motionList').replaceChildren(...found.flatMap(({d, motion}) => {
+    const all = runMoments(motion, d.profile, Date.parse(d.run.started_at));
+    const jumps = all.filter(m => m.kind === 'air'), shocks = all.filter(m => m.kind === 'shock').sort((a, b) => b.g - a.g);
+    const longest = Math.max(0, ...jumps.map(m => m.seconds));
+    const summary = [jumps.length ? T('{n} salto(s), el más largo de {s} s', {n: jumps.length, s: dec(longest, 2)}) : T('ningún salto'),
+      shocks.length ? T('{n} golpe(s) de 4 g o más, el más fuerte de {g} g', {n: shocks.length, g: dec(shocks[0].g)}) : T('ningún golpe de 4 g o más')];
+    const chip = node('i', {className: 'chip'});
+    chip.style.background = d.color;
+    // Every jump; of the shocks, the five strongest.
+    return [node('p', {className: 'moments-summary'}, [chip, ' ' + d.label + ': ' + summary.join(', ') + '.']),
+      ...[...jumps, ...shocks.slice(0, 5)].sort((a, b) => a.t - b.t).map(m => {
+        const button = node('button', {type: 'button', className: 'moment moment-' + m.kind}, [
+          node('b', {textContent: clock(m.t)}), node('span', {textContent: text(m)}), node('small', {textContent: Math.round(m.s) + ' m'})]);
+        button.addEventListener('click', () => selectPoint(circuit, m.s / 1000));
+        return button;
+      })];
+  }));
+  $('roughChart').hidden = $('roughTitle').hidden = false;
+  charts.push(lineChart($('roughChart'), {height: 170, series: found.map(({d, motion}) => ({label: d.label, color: d.color,
+    points: roughness(motion, d.profile, Date.parse(d.run.started_at)).map(x => ({x: (x.from + x.to) / 2000, y: x.shake === null ? null : Math.round(x.shake * 100) / 100}))})),
+    yFormat: v => dec(v, 1) + ' g', zero: true, onSelect: (x, options) => selectPoint(circuit, x, options)}));
 }
 // What a run does at a braking point where it has no clear braking of its own.
 function withoutBraking({topKmh, lowKmh, unsure}) {
@@ -700,6 +744,7 @@ function noCircuitMessage(nearest) {
 }
 async function loadRoutes() {
   const routes = await shell.api.trainingRoutes();
+  routeSensors = Promise.resolve(new Map(routes.map(r => [r.id, r.sensors])));
   $('routesCount').textContent = routes.length ? T('{n} RUTA(S)', {n: routes.length}) : '';
   $('routes').replaceChildren(...(routes.length ? routes.map(r => {
     const remove = node('button', {type: 'button', className: 'text-btn danger', textContent: T('Borrar')});

@@ -4,6 +4,7 @@
 // 18 a second, the UTC time once per sample) are both read. The camera's clock follows the GPS, so
 // the UTC time of any moment of a run gives the second of the video where it happens.
 import {T} from './i18n.mjs';
+import {shocksAndAir} from './motion.mjs';
 
 async function bytes(file, start, end) {
   return new DataView(await file.slice(start, end).arrayBuffer());
@@ -232,8 +233,7 @@ function stillStops(accel, from, to) {
 //   from the camera's shaking instead, and no braking: that is left to the run's own GPS;
 // - brake: losing speed at 2.5 m/s² or more (a quarter of g) over half a second, from the GPS's own
 //   speed, and at least 5 km/h in all; pauses under 0.7 s do not split a braking;
-// - shock: 4 g or more (a landing, a root, a rock), at most one a second;
-// - air: under 0.35 g for 0.2 s or more (the camera falling with the rider: a jump or a drop).
+// - shock and air: 4 g or more, and under 0.35 g for 0.2 s or more (motion.mjs, the phone's same rules).
 // The thresholds come from real GoPro runs: on trails ridden at 20-30 km/h, braking into corners
 // reaches 2.5-5.5 m/s², shocks 4-11 g, and a smooth run never stays under 0.35 g for 0.2 s.
 export function videoMoments(telemetry, from, to, {gps = true} = {}) {
@@ -262,19 +262,6 @@ export function videoMoments(telemetry, from, to, {gps = true} = {}) {
     } else brakes.push({kind: 'brake', t: pts[i - 5].t, until: pts[i].t, fromKmh: v[i - 5] * 3.6, toKmh: v[i] * 3.6, peak: rate});
   }
   out.push(...brakes.filter(b => b.fromKmh - b.toKmh >= 5));
-  const {t, g} = telemetry.accel || {t: [], g: []};
-  let shock = null, air = null;
-  for (let i = 0; i < t.length; i++) {
-    if (t[i] < from || t[i] > to) continue;
-    if (g[i] >= 4) {
-      if (shock && t[i] - shock.t < 1) shock.g = Math.max(shock.g, g[i]);
-      else out.push(shock = {kind: 'shock', t: t[i], g: g[i]});
-    }
-    if (g[i] < 0.35) air ??= t[i];
-    else {
-      if (air !== null && t[i] - air >= 0.2) out.push({kind: 'air', t: air, seconds: t[i] - air});
-      air = null;
-    }
-  }
+  out.push(...shocksAndAir(telemetry.accel || {t: [], g: []}, from, to));
   return out.sort((a, b) => a.t - b.t);
 }

@@ -44,7 +44,7 @@ export function createCloudApi(config) {
   let token;
   try{token=localStorage.getItem(tokenKey)||null}catch{token=null}
 
-  async function request(path,{method='GET',body,form=false,local=false}={}) {
+  async function request(path,{method='GET',body,form=false,local=false,raw=false}={}) {
     const headers={};
     if(local)headers['X-DH-Local']='1';
     if(token)headers.Authorization='Bearer '+token;
@@ -65,6 +65,7 @@ export function createCloudApi(config) {
     }
     if(response.status===204)return null;
     if(path.endsWith('/file'))return response.blob();
+    if(raw)return response.arrayBuffer();
     return response.json();
   }
   function persistToken(next) {
@@ -157,6 +158,8 @@ export function createCloudApi(config) {
     async deleteTrainingRoute(id){return request('/training/routes/'+encodeURIComponent(id),{method:'DELETE'})},
     // The file of one of the rider's routes, as uploaded (a Blob)
     async activityFile(id){return request('/activities/'+encodeURIComponent(id)+'/file')},
+    // The phone's sensors recorded with a route (the app's «DHS1» file, compressed as it came)
+    async routeSensors(id){return request('/training/routes/'+encodeURIComponent(id)+'/sensors',{raw:true})},
     async trainingRuns(circuitId,{friends=false}={}){
       const query=[circuitId?'circuit_id='+encodeURIComponent(circuitId):'',friends?'friends=true':''].filter(Boolean).join('&');
       return request('/training/runs'+(query?'?'+query:''));
