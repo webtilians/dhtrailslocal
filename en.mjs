@@ -924,6 +924,8 @@ export const EN_PATTERNS = [
   [/^(\d+) puerta\(s\) de sector sin datos GPS$/, m => `${m[1]} sector gate(s) without GPS data`],
   [/^entre el km (\S+) y el (\S+) irías a (\d+) km\/h de media sin GPS fiable: ¿atajo o fallo del GPS\?$/,
     m => `between km ${m[1]} and ${m[2]} you'd average ${m[3]} km/h without reliable GPS: a shortcut or a GPS failure?`],
+  [/^entre el km (\S+) y el (\S+) el GPS va por otro sitio, a (\d+) m del circuito: ¿te saliste del trazado\?$/,
+    m => `between km ${m[1]} and ${m[2]} the GPS is somewhere else, ${m[3]} m from the track: did you leave the line?`],
   [/^coincide un (\d+) % con el circuito \(mínimo (\d+) %\)$/, m => `it matches the track ${m[1]} % (minimum ${m[2]} %)`],
   [/^solo sigues el (\d+) % de su trazado \(hace falta el (\d+) %\)$/, m => `you only follow ${m[1]} % of its line (${m[2]} % is needed)`],
   [/^GPS perdido o desviado (\d+) s entre el km (\S+) y el (\S+) a (\d+) km\/h de media, coherente(?: \(y (\d+) tramo\(s\) más\))?$/,

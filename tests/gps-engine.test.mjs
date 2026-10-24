@@ -79,6 +79,26 @@ test('a shortcut while the GPS is lost is flagged by its impossible speed',()=>{
   assert.equal(run.status,'revisar');
   assert.ok(run.issues.some(x=>x.includes('¿atajo o fallo del GPS?')));
 });
+test('leaving the circuit and ending far past the finish is not a run',()=>{
+  // Down to point 60, 150 s riding 300 m to the east, then a few fixes 400 m past the finish, in line with
+  // the circuit's last stretch: the finish is never reached (the line does not go on that far).
+  const r=route(), t=r[60].time;
+  const away=Array.from({length:75},(_,i)=>({...r[60],lon:r[60].lon+eastMetres(300*Math.min(1,(i+1)/10)),time:t+(i+1)*2000}));
+  const dlat=r[87].lat-r[86].lat, dlon=r[87].lon-r[86].lon;
+  const past=Array.from({length:5},(_,k)=>({...r[87],lat:r[87].lat+60*dlat+k*dlat,lon:r[87].lon+60*dlon,time:t+152000+k*2000}));
+  assert.deepEqual(detectAttempts([...r.slice(0,61),...away,...past],create()),[]);
+});
+test('GPS recording elsewhere while the line is lost needs a review',()=>{
+  // From point 50 the rider goes 200 m to the east for a minute and comes back at point 70: a plausible
+  // speed for the stretch, but the GPS was working, somewhere else.
+  const r=route(), t=r[50].time;
+  const away=Array.from({length:29},(_,i)=>{const j=i+1;
+    return {...r[50],lat:r[50].lat-j*0.0000304,lon:r[50].lon+eastMetres(200*Math.min(1,j/5,(30-j)/5)),time:t+j*2000};});
+  const back=r.slice(70).map(p=>({...p,time:p.time+20000}));
+  const [run]=detectAttempts([...r.slice(0,51),...away,...back],create());
+  assert.equal(run.status,'revisar');
+  assert.ok(run.issues.some(x=>/^entre el km 0\.27 y el 0\.41 el GPS va por otro sitio, a \d+ m del circuito: ¿te saliste del trazado\?$/.test(x)),run.issues.join());
+});
 test('reports distance, elevation and time',()=>{
   const stats=summarize(ref);
   assert.equal(stats.points,100);

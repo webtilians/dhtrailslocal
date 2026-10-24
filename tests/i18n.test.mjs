@@ -65,6 +65,7 @@ const SERVER_EXAMPLES = [
   'Ya habías subido esta ruta a entrenamiento: «Bicicleta (3).gpx»',
   'Ya tienes 50 notas: borra alguna antes de añadir otra',
   '2 puerta(s) de sector sin datos GPS',
+  'entre el km 1.60 y el 2.10 el GPS va por otro sitio, a 240 m del circuito: ¿te saliste del trazado?',
   'entre el km 0.45 y el 0.80 irías a 61 km/h de media sin GPS fiable: ¿atajo o fallo del GPS?',
   'coincide un 62 % con el circuito (mínimo 80 %)',
   'solo sigues el 40 % de su trazado (hace falta el 80 %)',
