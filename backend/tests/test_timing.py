@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.integrity import same_track
 from app.timing import Fix, GpsError, best_attempt, detect_attempts, parse_gps
 
 ORIGIN = datetime(2026, 10, 9, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000
@@ -19,12 +20,14 @@ def circuit():
             "sectors": [{"index": 18, "name": "Curvas"}, {"index": 52, "name": "Rock garden"}],
             "weakZones": [{"from": 31, "to": 40, "name": "Sombra GPS"}], "gateRadius": 18}
 
-def gpx(fixes):
+def gpx(fixes, extensions=lambda i: ""):
     points = "".join(
         f'<trkpt lat="{p.lat}" lon="{p.lon}"><ele>{p.ele}</ele>'
-        f'<time>{datetime.fromtimestamp(p.time / 1000, timezone.utc).isoformat().replace("+00:00", "Z")}</time></trkpt>'
-        for p in fixes)
-    return f'<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg>{points}</trkseg></trk></gpx>'.encode()
+        f'<time>{datetime.fromtimestamp(p.time / 1000, timezone.utc).isoformat().replace("+00:00", "Z")}</time>{extensions(i)}</trkpt>'
+        for i, p in enumerate(fixes))
+    return ('<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1" '
+            'xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v2" '
+            f'xmlns:dh="https://github.com/webtilians/dhtrailslocal/gpx/1"><trk><trkseg>{points}</trkseg></trk></gpx>').encode()
 
 def test_finds_the_run_and_ordered_sector_splits():
     attempts = detect_attempts(route(), circuit())
@@ -69,17 +72,34 @@ def test_gpx_round_trip_keeps_times():
     assert len(fixes) == 100 and fixes[0].time == ORIGIN
     assert abs(detect_attempts(fixes, circuit())[0].seconds - 154) < 1.1
 
+def test_the_gps_own_speed_and_accuracy_are_read_and_kept_in_the_run():
+    # As the app writes them: Garmin's speed extension and the app's accuracy; a speed below 0 is ignored.
+    ext = lambda i: (f'<extensions><gpxtpx:TrackPointExtension><gpxtpx:speed>{-3 if i == 5 else 3 + i / 100}</gpxtpx:speed>'
+                     f'</gpxtpx:TrackPointExtension><dh:accuracy>{4 + i % 3}.5</dh:accuracy></extensions>')
+    fixes = parse_gps(gpx(route(), ext), "gpx")
+    assert fixes[0].speed == 3 and fixes[7].speed == 3.07 and fixes[5].speed is None
+    assert fixes[0].accuracy == 4.5 and fixes[2].accuracy == 6.5
+    profile = detect_attempts(fixes, circuit())[0].profile
+    assert all(len(p) == 5 and 3 <= p[4] < 4 for p in profile)
+    # A file without them: the run's profile stays as before.
+    plain = detect_attempts(route(), circuit())[0].profile
+    assert all(len(p) == 4 for p in plain)
+    # The anti-cheat compares runs point by point: the fifth value does not get in the way.
+    assert same_track(profile, plain) and same_track(plain, profile)
+
 def test_tcx_is_read():
     tcx = (b'<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">'
            b'<Activities><Activity><Lap><Track>'
            b'<Trackpoint><Time>2026-10-09T12:00:00Z</Time><Position><LatitudeDegrees>36.74</LatitudeDegrees>'
            b'<LongitudeDegrees>-4.45</LongitudeDegrees></Position><AltitudeMeters>430</AltitudeMeters></Trackpoint>'
            b'<Trackpoint><Time>2026-10-09T12:00:02.500+00:00</Time><Position><LatitudeDegrees>36.7399</LatitudeDegrees>'
-           b'<LongitudeDegrees>-4.4501</LongitudeDegrees></Position></Trackpoint>'
+           b'<LongitudeDegrees>-4.4501</LongitudeDegrees></Position>'
+           b'<Extensions><TPX xmlns="http://www.garmin.com/xmlschemas/ActivityExtension/v2"><Speed>7.25</Speed></TPX></Extensions></Trackpoint>'
            b'</Track></Lap></Activity></Activities></TrainingCenterDatabase>')
     fixes = parse_gps(tcx, "tcx")
     assert [f.ele for f in fixes] == [430, None]
     assert fixes[1].time - fixes[0].time == 2500
+    assert [f.speed for f in fixes] == [None, 7.25]
 
 @pytest.mark.parametrize("data,ext", [
     (b"<gpx><trk>", "gpx"),

@@ -1,14 +1,15 @@
 // DH Trails v0.8 — FIT files (Garmin, Wahoo, Coros, Suunto and most watches and bike computers) read in the
 // browser and turned into a GPX before anything else sees them: the server, the time trial and the circuit
 // editor all keep working with GPX. Only the points of the ride are read (the «record» messages: time,
-// position, altitude). Pure functions, tested in Node.
+// position, altitude, speed). Pure functions, tested in Node.
 import {T} from './i18n.mjs';
+import {trackGpx} from './recorder.mjs';
 
 const FIT_EPOCH = Date.UTC(1989, 11, 31);      // FIT times are seconds since 31/12/1989 00:00 UTC
 const RECORD = 20;                              // global number of the «record» message
 const SEMICIRCLE = 180 / 2 ** 31;
 
-// The points of a FIT file: [{lat, lon, ele, time (ms)}], only those with a position and a time.
+// The points of a FIT file: [{lat, lon, ele, time (ms), speed (m/s)}], only those with a position and a time.
 export function parseFit(buffer) {
   const view = new DataView(buffer instanceof ArrayBuffer ? buffer : buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength));
   const points = [];
@@ -84,6 +85,8 @@ function readData(view, pos, def) {
     else if (f.num === 1) {const v = read(4, true); if (v !== null && v !== 0x7fffffff) row.lon = v * SEMICIRCLE;}
     else if (f.num === 78) {const v = read(4); if (v !== null && v !== 0xffffffff) row.ele = v / 5 - 500;}
     else if (f.num === 2 && row.ele === undefined) {const v = read(2); if (v !== null && v !== 0xffff) row.ele = v / 5 - 500;}
+    else if (f.num === 73) {const v = read(4); if (v !== null && v !== 0xffffffff) row.speed = v / 1000;}
+    else if (f.num === 6 && row.speed === undefined) {const v = read(2); if (v !== null && v !== 0xffff) row.speed = v / 1000;}
   }
   return row;
 }
@@ -92,18 +95,12 @@ function keep(row, time, points) {
   const t = row.time ?? time;
   if (row.lat === undefined || row.lon === undefined || t === null || t === undefined) return;
   if (Math.abs(row.lat) > 90 || Math.abs(row.lon) > 180) return;
-  points.push({lat: row.lat, lon: row.lon, ele: row.ele ?? null, time: FIT_EPOCH + t * 1000});
+  points.push({lat: row.lat, lon: row.lon, ele: row.ele ?? null, time: FIT_EPOCH + t * 1000, speed: row.speed ?? null});
 }
 
 // The points as a GPX file, as they are (a FIT already records whole seconds).
 export function pointsGpx(points, name) {
-  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  return '<?xml version="1.0" encoding="UTF-8"?>\n' +
-    '<gpx version="1.1" creator="DH Trails (FIT)" xmlns="http://www.topografix.com/GPX/1/1">\n' +
-    `<trk><name>${esc(name)}</name><trkseg>\n` +
-    points.map(p => `<trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">` +
-      (Number.isFinite(p.ele) ? `<ele>${p.ele.toFixed(1)}</ele>` : '') + `<time>${new Date(p.time).toISOString().replace('.000Z', 'Z')}</time></trkpt>`).join('\n') +
-    '\n</trkseg></trk>\n</gpx>\n';
+  return trackGpx(points, name, 'DH Trails (FIT)');
 }
 
 // A file chosen or shared, ready for the rest of the app: a FIT becomes a GPX of the same name; a GPX or

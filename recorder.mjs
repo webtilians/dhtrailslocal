@@ -88,13 +88,29 @@ export function rideGpx(fixes, name) {
     if (b.time - a.time > 10000) continue;
     const f = (t - a.time) / (b.time - a.time);
     const mix = (x, y) => x === null || x === undefined || y === null || y === undefined ? x ?? y ?? null : x + (y - x) * f;
-    points.push({lat: mix(a.lat, b.lat), lon: mix(a.lon, b.lon), ele: mix(a.ele, b.ele), time: t});
+    points.push({lat: mix(a.lat, b.lat), lon: mix(a.lon, b.lon), ele: mix(a.ele, b.ele), time: t,
+      speed: mix(a.speed, b.speed), accuracy: mix(a.accuracy, b.accuracy)});
   }
+  return trackGpx(points, name, 'DH Trails (GPS del móvil)');
+}
+
+// Points ({lat, lon, ele, time, speed, accuracy}) as a GPX file. Each point keeps the speed the GPS measures
+// itself (m/s, from the satellites' signal: far finer than positions a second apart), in Garmin's usual
+// extension so other apps read it too, and how precise the phone says the position is (m), when known.
+export function trackGpx(points, name, creator) {
   const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const extensions = p => {
+    const speed = Number.isFinite(p.speed) && p.speed >= 0 ?
+      `<gpxtpx:TrackPointExtension><gpxtpx:speed>${p.speed.toFixed(2)}</gpxtpx:speed></gpxtpx:TrackPointExtension>` : '';
+    const accuracy = Number.isFinite(p.accuracy) && p.accuracy > 0 ? `<dh:accuracy>${p.accuracy.toFixed(1)}</dh:accuracy>` : '';
+    return speed || accuracy ? `<extensions>${speed}${accuracy}</extensions>` : '';
+  };
   return '<?xml version="1.0" encoding="UTF-8"?>\n' +
-    '<gpx version="1.1" creator="DH Trails (GPS del móvil)" xmlns="http://www.topografix.com/GPX/1/1">\n' +
+    `<gpx version="1.1" creator="${esc(creator)}" xmlns="http://www.topografix.com/GPX/1/1" ` +
+    'xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v2" xmlns:dh="https://github.com/webtilians/dhtrailslocal/gpx/1">\n' +
     `<trk><name>${esc(name)}</name><trkseg>\n` +
     points.map(p => `<trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">` +
-      (Number.isFinite(p.ele) ? `<ele>${p.ele.toFixed(1)}</ele>` : '') + `<time>${new Date(p.time).toISOString().replace('.000Z', 'Z')}</time></trkpt>`).join('\n') +
+      (Number.isFinite(p.ele) ? `<ele>${p.ele.toFixed(1)}</ele>` : '') +
+      `<time>${new Date(p.time).toISOString().replace('.000Z', 'Z')}</time>${extensions(p)}</trkpt>`).join('\n') +
     '\n</trkseg></trk>\n</gpx>\n';
 }

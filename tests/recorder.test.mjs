@@ -56,6 +56,24 @@ test('the ride as a GPX: a point every whole second, nothing made up across a ga
   assert.ok(lats.every(l => l <= 36.75 + 3 * M + 1e-7 && l >= 36.75 - 651 * M));
 });
 
+test('the GPX keeps the speed the GPS measures and how precise each point is', () => {
+  // 6 m/s with accuracy 4 m, then 8 m/s with 6 m: a point between two fixes takes values in between.
+  const fixes = ride().map(f => ({...f, accuracy: 4}));
+  const last = fixes.at(-1);
+  fixes.push({...last, time: last.time + 1000, speed: 8, accuracy: 6});
+  const gpx = rideGpx(fixes, 'Bajada');
+  assert.match(gpx, /xmlns:gpxtpx="http:\/\/www\.garmin\.com\/xmlschemas\/TrackPointExtension\/v2"/);
+  const speeds = [...gpx.matchAll(/<gpxtpx:speed>([^<]+)<\/gpxtpx:speed>/g)].map(m => +m[1]);
+  const accuracy = [...gpx.matchAll(/<dh:accuracy>([^<]+)<\/dh:accuracy>/g)].map(m => +m[1]);
+  assert.equal(speeds.length, [...gpx.matchAll(/<trkpt /g)].length);
+  assert.equal(speeds[0], 0);
+  assert.ok(speeds.at(-1) > 6 && speeds.at(-1) < 8, String(speeds.at(-1)));
+  assert.ok(accuracy.at(-1) > 4 && accuracy.at(-1) < 6, String(accuracy.at(-1)));
+  // A phone that does not know: no extension at all, the GPX as before.
+  const plain = rideGpx(ride().map(({speed, ...f}) => f), 'Bajada');
+  assert.doesNotMatch(plain, /<extensions>/);
+});
+
 test('the circuit whose start is nearest, and its gates', () => {
   const other = {points: [[36.8, -4.4], [36.79, -4.4]], sectors: []};
   const found = nearestStart([other, circuit], {lat: 36.7501, lon: -4.39});

@@ -26,10 +26,11 @@ function fitFile() {
   // No position (invalid values)
   u8(0x01); u32(t0 + 3); u32(0x7fffffff); u32(0x7fffffff); u16(0xffff);
   // A definition with a developer field (header bit 0x20) on local type 2, global 20, then its data
-  u8(0x62); u8(0); u8(0); u16(20); u8(3);
-  for (const [num, size, type] of [[253, 4, 0x86], [0, 4, 0x85], [1, 4, 0x85]]) {u8(num); u8(size); u8(type);}
+  // (this one also carries 73, enhanced_speed: 5.123 m/s)
+  u8(0x62); u8(0); u8(0); u16(20); u8(4);
+  for (const [num, size, type] of [[253, 4, 0x86], [0, 4, 0x85], [1, 4, 0x85], [73, 4, 0x86]]) {u8(num); u8(size); u8(type);}
   u8(1); u8(0); u8(2); u8(0);           // one developer field of 2 bytes
-  u8(0x02); u32(t0 + 4); u32(semis(36.7498)); u32(semis(-4.39)); u16(1234);
+  u8(0x02); u32(t0 + 4); u32(semis(36.7498)); u32(semis(-4.39)); u32(5123); u16(1234);
   const data = bytes.splice(0);
   // 14-byte header, the data, a CRC (not checked)
   u8(14); u8(0x20); u16(2132); u32(data.length); for (const c of '.FIT') u8(c.charCodeAt(0)); u16(0);
@@ -45,7 +46,9 @@ test('a FIT file: the points of the ride with their time, position and altitude'
   assert.ok(Math.abs(points[0].lat - 36.75) < 1e-6 && Math.abs(points[0].lon + 4.39) < 1e-6);
   assert.ok(Math.abs(points[1].ele - 279.6) < 0.2);
   assert.equal(points[3].ele, null);
+  assert.deepEqual(points.map(p => p.speed), [null, null, null, 5.123]);
   const gpx = pointsGpx(points, 'Bajada <1>');
+  assert.equal([...gpx.matchAll(/<gpxtpx:speed>5\.12<\/gpxtpx:speed>/g)].length, 1);
   assert.match(gpx, /creator="DH Trails \(FIT\)"/);
   assert.match(gpx, /<name>Bajada &lt;1&gt;<\/name>/);
   assert.equal([...gpx.matchAll(/<trkpt /g)].length, 4);

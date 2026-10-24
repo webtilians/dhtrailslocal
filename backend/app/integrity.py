@@ -76,7 +76,7 @@ def same_track(mine:list,theirs:list)->bool:
     pts=sorted(theirs)
     along=[p[0] for p in pts]
     close=0
-    for s,_,lat,lon in mine:
+    for s,_,lat,lon,*_ in mine:   # a fifth value, the GPS speed, when the file had it
         near=pts[bisect_left(along,s-20):bisect_right(along,s+20)]
         if any(_metres((lat,lon),(q[2],q[3]))<=SAME_POINT_M for q in near):close+=1
     return close>=SAME_SHARE*len(mine)

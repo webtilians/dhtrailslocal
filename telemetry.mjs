@@ -1,6 +1,6 @@
 // DH Trails v0.8 — telemetry from run profiles, pure functions (tested in Node).
-// A profile is [[metres along the circuit, ms since the start, lat, lon], ...] from the start
-// line to the finish line, one entry per reliable GPS fix (see timing.py).
+// A profile is [[metres along the circuit, ms since the start, lat, lon(, GPS speed m/s)], ...] from the
+// start line to the finish line, one entry per reliable GPS fix (see timing.py).
 
 // Locate chart distances on the official circuit, including between GPS vertices.
 export function circuitPosition(points, distances, metres) {
@@ -141,11 +141,20 @@ export function steadyProfile(profile, offsets = null, {offTrailM = 15, paceFact
 // cannot show as a peak, while a real change of pace moves them all. `blind` are the stretches
 // without reliable GPS (fixes left out, or more than `maxGapMs` between fixes): there the speed is
 // only what the fixes around them say.
-export function steadySpeed(profile, offsets = null, {step = 10, halfMs = 3000, maxGapMs = 3000} = {}) {
+// When the fixes carry the GPS's own speed (a fifth value, m/s, measured from the satellites' signal and
+// not from positions, so a jump of the position does not touch it), each point takes the median of the
+// speeds of the fixes within ±`ownMs`: sharper braking and true top speeds. A phone that reports 0 while
+// it moves (some do when they do not know) is caught by comparing those speeds with the run's average.
+export function steadySpeed(profile, offsets = null, {step = 10, halfMs = 3000, maxGapMs = 3000, ownMs = 1000} = {}) {
   const steady = steadyProfile(profile, offsets), fixes = steady.profile;
   const samples = resample(fixes, step);
+  const measured = profile.filter(p => Number.isFinite(p[4]));
+  const average = profile.at(-1)[1] > profile[0][1] ? (profile.at(-1)[0] - profile[0][0]) * 1000 / (profile.at(-1)[1] - profile[0][1]) : 0;
+  const own = measured.length >= profile.length * 0.8 &&
+    measured.reduce((sum, p) => sum + p[4], 0) / measured.length >= 0.7 * average;
   let first = 0;
   const kmh = samples.map(p => {
+    if (own) return median(measured.filter(f => Math.abs(f[1] - p.t) <= ownMs).map(f => f[4] * 3.6));
     while (first < fixes.length && fixes[first][1] < p.t - halfMs) first++;
     const near = [];
     for (let i = first; i < fixes.length && fixes[i][1] <= p.t + halfMs; i++) near.push(fixes[i]);
