@@ -22,6 +22,8 @@ class Fix:
     lon: float
     ele: float | None
     time: float | None  # epoch milliseconds
+    speed: float | None = None     # m/s as the GPS measures it (Doppler), when the file has it
+    accuracy: float | None = None  # metres, how precise the phone says the position is
 
 def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
@@ -42,6 +44,9 @@ def _first_text(el, name):
         if child is not el and _local(child.tag) == name:
             return (child.text or "").strip()
     return None
+
+def _within(value, low, high):
+    return value if value is not None and low <= value <= high else None
 
 def _epoch_ms(value):
     if not value:
@@ -74,14 +79,17 @@ def parse_gps(data: bytes, extension: str) -> list[Fix]:
         if kind == "gpx":
             lat, lon = _number(el.get("lat")), _number(el.get("lon"))
             ele, moment = _number(_first_text(el, "ele")), _first_text(el, "time")
+            # Garmin's extension (gpxtpx:speed), GPX 1.0's <speed>, and this app's accuracy
+            speed, accuracy = _number(_first_text(el, "speed")), _number(_first_text(el, "accuracy"))
         else:
             position = next((c for c in el.iter() if c is not el and _local(c.tag) == "Position"), None)
             lat = _number(_first_text(position, "LatitudeDegrees"))
             lon = _number(_first_text(position, "LongitudeDegrees"))
             ele, moment = _number(_first_text(el, "AltitudeMeters")), _first_text(el, "Time")
+            speed, accuracy = _number(_first_text(el, "Speed")), None   # TCX's ActivityExtension
         if lat is None or lon is None or abs(lat) > 90 or abs(lon) > 180:
             continue
-        fixes.append(Fix(lat, lon, ele, _epoch_ms(moment)))
+        fixes.append(Fix(lat, lon, ele, _epoch_ms(moment), _within(speed, 0, 100), _within(accuracy, 0.01, 10000)))
     if len(fixes) < 2:
         raise GpsError("Necesitamos al menos dos puntos GPS válidos.")
     return fixes
@@ -316,13 +324,15 @@ class DetectedAttempt:
     notes: list[str]    # information that does not affect the status
     status: str  # 'compatible' | 'revisar'
     gate_indices: list[int | None]
-    # [metres along the circuit, ms since the start, lat, lon] of each reliable fix, for telemetry.
+    # [metres along the circuit, ms since the start, lat, lon(, GPS speed m/s)] of each reliable fix, for telemetry.
     profile: list[list[float]] | None = None
 
 def _profile(route, track, started, seconds, length):
-    """Position and time of the run from the start line to the finish line, reliable fixes only."""
+    """Position and time of the run from the start line to the finish line, reliable fixes only; with the
+    GPS's own speed (m/s) as a fifth value when the file has it."""
     def point(s, ms, k):
-        return [round(s, 1), round(ms), round(route[k].lat, 6), round(route[k].lon, 6)]
+        speed = route[k].speed
+        return [round(s, 1), round(ms), round(route[k].lat, 6), round(route[k].lon, 6)] + ([round(speed, 2)] if speed is not None else [])
     inside = [f for f in track if 0 < f[1] < length and _finite(route[f[0]].time)]
     return ([point(0, 0, track[0][0])] + [point(f[1], route[f[0]].time - started, f[0]) for f in inside]
             + [point(length, seconds * 1000, track[-1][0])])

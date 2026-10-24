@@ -3,6 +3,7 @@
   "private": true,
   "description": "DH Trails as an app for Android and iPhone (Capacitor): the web of the server, plus the GPS with the screen off.",
   "scripts": {
+    "postinstall": "node scripts/patch-gps.mjs",
     "sync": "cap sync",
     "apk": "cap sync android && cd android && gradlew.bat assembleRelease",
     "ios": "cap sync ios"

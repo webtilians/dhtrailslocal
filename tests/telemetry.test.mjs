@@ -151,6 +151,19 @@ test('steady speed: a GPS jump does not show as a peak', () => {
   assert.ok(Math.max(...now.kmh) < 40, 'steady speed stays near 28.8 km/h: ' + Math.max(...now.kmh));
   assert.deepEqual(now.blind, [[152, 196]]);
 });
+test('steady speed: the speed the GPS measures itself, when the fixes carry it', () => {
+  // The corner (10 → 4 m/s) with each fix's own speed, and the position 40 m ahead for one second: no
+  // peak, and the low point is the real 4 m/s.
+  const own = ride(corner).map(p => [...p, corner(p[1] / 1000)]);
+  const jump = own.map(([s, t, ...rest]) => [s + (t === 10000 ? 40 : 0), t, ...rest]);
+  const {kmh} = steadySpeed(jump);
+  assert.ok(Math.max(...kmh) <= 36.01, String(Math.max(...kmh)));
+  const low = Math.min(...kmh.filter(v => v !== null));
+  assert.ok(Math.abs(low - 14.4) < 0.01, String(low));
+  // A phone that says 0 while it moves: its speeds are not used.
+  const zero = ride(corner).map(p => [...p, 0]);
+  assert.ok(Math.max(...steadySpeed(zero).kmh) > 30);
+});
 test('steady speed: one fix out of place changes nothing, a long drift off the trail is left out', () => {
   // 12 m ahead for one second is within GPS error: kept, and the median of the slopes ignores it.
   const nudge = ride(() => 8).map(([s, t, ...rest]) => [t === 20000 ? s + 12 : s, t, ...rest]);
