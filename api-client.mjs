@@ -113,6 +113,8 @@ export function createCloudApi(config) {
       return {user:result.user,session:{user:result.user}};
     },
     async signOut(){persistToken(null);},
+    // The session, for the app's native side when it uploads a file itself (the phone's sensors)
+    sessionToken(){return token},
     async me(){return request('/auth/me')},
     async setDisplayName(name){return request('/me/profile',{method:'PUT',body:{display_name:name}})},
     // Circuits: any rider draws them; organizers approve them for tournaments

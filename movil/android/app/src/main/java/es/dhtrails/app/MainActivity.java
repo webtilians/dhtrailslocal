@@ -18,6 +18,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SharedFilePlugin.class);
+        registerPlugin(MotionRecorderPlugin.class);
         super.onCreate(savedInstanceState);
         SharedFilePlugin.receive(getIntent());
         // Back goes back through the pages; on the first one it only sends the app to the background,

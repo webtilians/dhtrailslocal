@@ -71,4 +71,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The sensors keep being read with the screen off while a ride is recorded -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 </manifest>

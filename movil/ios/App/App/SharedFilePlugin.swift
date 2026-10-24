@@ -51,5 +51,6 @@ public class SharedFilePlugin: CAPPlugin, CAPBridgedPlugin {
 class MainViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(SharedFilePlugin())
+        bridge?.registerPluginInstance(MotionRecorderPlugin())
     }
 }

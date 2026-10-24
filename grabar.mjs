@@ -17,6 +17,15 @@ const native = cap?.isNativePlatform?.() && cap.PluginHeaders?.some(p => p.name 
   removeWatcher: options => cap.nativePromise('BackgroundGeolocation', 'removeWatcher', options),
   openSettings: () => cap.nativePromise('BackgroundGeolocation', 'openSettings', {}),
 } : null;
+// The phone's other sensors (accelerometer, gyroscope, barometer), recorded by the app's native side next to
+// the GPS and uploaded by it with the ride; null in a browser.
+const motion = cap?.isNativePlatform?.() && cap.PluginHeaders?.some(p => p.name === 'MotionRecorder') ? {
+  start: options => cap.nativePromise('MotionRecorder', 'start', options),
+  stop: () => cap.nativePromise('MotionRecorder', 'stop', {}),
+  upload: options => cap.nativePromise('MotionRecorder', 'upload', options),
+  discard: () => cap.nativePromise('MotionRecorder', 'discard', {}),
+} : null;
+let sensors = null;   // which ones the phone has, once recording
 const POOR_M = 35;          // fixes less precise than this are not used for the time
 const NEAR_M = 3000;        // «automatic» takes the nearest circuit whose start is this close
 let shell = null, catalog = [], fixes = [], stopWatch = null, wakeLock = null, ticker = 0;
@@ -118,7 +127,9 @@ function show() {
     T('En la salida de {circuit}: arranca cuando quieras.', {circuit: circuit.name});
   const length = fixes.reduce((sum, f, i) => i ? sum + haversine(fixes[i - 1], f) : 0, 0);
   $('gpsInfo').textContent = T('{n} puntos · {distance} · grabando desde las {time}', {n: fixes.length, distance: km(length),
-    time: new Date(fixes[0]?.time || Date.now()).toLocaleTimeString(locale, {hour: '2-digit', minute: '2-digit'})});
+    time: new Date(fixes[0]?.time || Date.now()).toLocaleTimeString(locale, {hour: '2-digit', minute: '2-digit'})}) +
+    (sensors ? ' · ' + T('sensores: {list}', {list: [sensors.accelerometer && T('acelerómetro'), sensors.gyroscope && T('giroscopio'),
+      sensors.barometer && T('barómetro')].filter(Boolean).join(', ')}) : '');
 }
 // The clock runs between fixes, ten times a second.
 function tick() {
@@ -138,6 +149,8 @@ $('startRec').addEventListener('click', async () => {
   status('');
   try {stopWatch = await watch(onFix, onError);}
   catch (err) {return onError(err);}
+  // A recording kept from before goes on in the same sensors' file.
+  sensors = motion ? await motion.start({hz: 100, append: fixes.length > 0}).catch(() => null) : null;
   await keepAwake();
   clearInterval(ticker);
   ticker = setInterval(tick, 100);
@@ -145,6 +158,7 @@ $('startRec').addEventListener('click', async () => {
 });
 $('stopRec').addEventListener('click', async () => {
   if (stopWatch) {await stopWatch(); stopWatch = null;}
+  await motion?.stop().catch(() => {});
   clearInterval(ticker);
   try {await wakeLock?.release();} catch {}
   wakeLock = null;
@@ -156,14 +170,27 @@ $('discard').addEventListener('click', async () => {
   if (!window.confirm(T('¿Descartar la grabación? Se pierde lo grabado.'))) return;
   if (stopWatch) {await stopWatch(); stopWatch = null;}
   clearInterval(ticker);
-  fixes = []; finished = []; timer = null; circuit = null; lastFix = null;
+  fixes = []; finished = []; timer = null; circuit = null; lastFix = null; sensors = null;
   forget();
+  await motion?.discard().catch(() => {});
   $('splits').replaceChildren();
   $('state').textContent = T('Pulsa «Empezar a grabar» cuando estés listo.');
   $('gpsInfo').textContent = '';
   show();
 });
 window.addEventListener('beforeunload', event => {if (stopWatch) {event.preventDefault(); event.returnValue = '';}});
+
+// The sensors go with the ride just saved; if they cannot go, the ride stays saved without them.
+async function uploadSensors(routeId) {
+  if (!motion) return;
+  try {
+    const sent = await motion.upload({url: location.origin + '/api/training/routes/' + encodeURIComponent(routeId) + '/sensors',
+      token: shell.api.sessionToken()});
+    if (sent?.status === 200) await motion.discard();
+    else status(T('La ruta se ha guardado, pero los datos de los sensores no han podido subirse.'), 'warning');
+  } catch {status(T('La ruta se ha guardado, pero los datos de los sensores no han podido subirse.'), 'warning');}
+  sensors = null;
+}
 
 // The ride goes to Entrenamiento like a watch's GPX; its runs can go on to an open time trial.
 async function upload() {
@@ -180,6 +207,7 @@ async function upload() {
     forget();
     fixes = [];
     show();
+    await uploadSensors(result.activity.id);
     const open = (await shell.api.tournaments().catch(() => [])).filter(t => t.state === 'activo');
     const lines = result.runs.map(r => node('p', {className: 'report-line', textContent: r.circuit_name + ': ' + formatMs(r.elapsed_ms)}));
     const send = open.filter(t => result.found.some(f => f.circuit_id === t.circuit_id)).map(t => {
