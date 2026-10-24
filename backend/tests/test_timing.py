@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.integrity import same_track
 from app.timing import Fix, GpsError, best_attempt, detect_attempts, parse_gps
 
 ORIGIN = datetime(2026, 10, 9, 12, 0, 0, tzinfo=timezone.utc).timestamp() * 1000
@@ -81,7 +82,10 @@ def test_the_gps_own_speed_and_accuracy_are_read_and_kept_in_the_run():
     profile = detect_attempts(fixes, circuit())[0].profile
     assert all(len(p) == 5 and 3 <= p[4] < 4 for p in profile)
     # A file without them: the run's profile stays as before.
-    assert all(len(p) == 4 for p in detect_attempts(route(), circuit())[0].profile)
+    plain = detect_attempts(route(), circuit())[0].profile
+    assert all(len(p) == 4 for p in plain)
+    # The anti-cheat compares runs point by point: the fifth value does not get in the way.
+    assert same_track(profile, plain) and same_track(plain, profile)
 
 def test_tcx_is_read():
     tcx = (b'<TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2">'
