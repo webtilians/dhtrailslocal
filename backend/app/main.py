@@ -348,7 +348,7 @@ def delete_activity(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Dep
 # that would expose backend/.env, database passwords, uploads and Git metadata.
 _PUBLIC_FILES={"index.html","entrenamiento.html","circuitos.html","torneos.html","app.css","app-shell.mjs",
                "timetrial.mjs","entrenamiento.mjs","circuitos.mjs","torneos.mjs","telemetry.mjs","charts.mjs",
-               "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs","motion.mjs","circuit-checks.mjs","insights.mjs","gate-sounds.mjs",
+               "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs","motion.mjs","voice.mjs","circuit-checks.mjs","insights.mjs","gate-sounds.mjs",
                "records.html","records.mjs","contrasena.html","contrasena.mjs","youtube.mjs","bumps.mjs","i18n.mjs","en.mjs","grabar.html","grabar.mjs","recorder.mjs","app.html","app.mjs","fit.mjs",
                "editor.html","competicion.html",  # these two only redirect old links
                "manifest.json","sw.js","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"}

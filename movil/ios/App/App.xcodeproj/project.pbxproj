@@ -13,6 +13,7 @@
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		D7A1C0DE00000000000000A1 /* SharedFilePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A1C0DE00000000000000A2 /* SharedFilePlugin.swift */; };
 		D7A1C0DE00000000000000A3 /* MotionRecorderPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A1C0DE00000000000000A4 /* MotionRecorderPlugin.swift */; };
+		D7A1C0DE00000000000000A5 /* SpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A1C0DE00000000000000A6 /* SpeechPlugin.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
@@ -26,6 +27,7 @@
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		D7A1C0DE00000000000000A2 /* SharedFilePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedFilePlugin.swift; sourceTree = "<group>"; };
 		D7A1C0DE00000000000000A4 /* MotionRecorderPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionRecorderPlugin.swift; sourceTree = "<group>"; };
+		D7A1C0DE00000000000000A6 /* SpeechPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechPlugin.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -70,6 +72,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				D7A1C0DE00000000000000A2 /* SharedFilePlugin.swift */,
 				D7A1C0DE00000000000000A4 /* MotionRecorderPlugin.swift */,
+				D7A1C0DE00000000000000A6 /* SpeechPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -164,6 +167,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				D7A1C0DE00000000000000A1 /* SharedFilePlugin.swift in Sources */,
 				D7A1C0DE00000000000000A3 /* MotionRecorderPlugin.swift in Sources */,
+				D7A1C0DE00000000000000A5 /* SpeechPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -311,7 +315,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.10.0;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = es.dhtrails.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -333,7 +337,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.9.0;
+				MARKETING_VERSION = 0.10.0;
 				PRODUCT_BUNDLE_IDENTIFIER = es.dhtrails.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";

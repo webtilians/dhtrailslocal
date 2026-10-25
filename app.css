@@ -263,7 +263,8 @@ main.wide-page{max-width:1900px}
 .sector-kings b{color:#d7a2ff}
 .not-counted{margin-top:14px}
 .check-row{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
-.check-row input{width:18px;height:18px}
+.check-row input{width:18px;height:18px;flex:none}
+.rec-voice{margin:12px 0 4px;color:#cfe6f8;line-height:1.4}
 .report-line a{color:#ffd166}
 #loopStretch[aria-pressed=true]{background:#2a5a82;color:#fff;border-color:#4b86b8}
 .second-video{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
