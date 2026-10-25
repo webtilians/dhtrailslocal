@@ -758,7 +758,7 @@ export const EN = {
   "DH / GRABAR": "DH / RECORD",
   "Graba tu bajada.": "Record your run.",
   "Con el GPS del móvil.": "With your phone's GPS.",
-  "Sin reloj ni Strava: el móvil graba tu ruta, pita al pasar por la salida, los sectores y la meta, y te da el tiempo al momento. Al terminar se guarda en Entrenamiento y, si hay un torneo abierto en ese circuito, puedes enviarla al time trial.": "No watch, no Strava: your phone records your ride, beeps at the start, the sectors and the finish, and gives you the time straight away. When you finish it's saved in Training and, if there's an open tournament on that track, you can send it to the time trial.",
+  "Sin reloj ni Strava: el móvil graba tu ruta, pita al pasar por la salida, los sectores y la meta (y te lo dice en voz alta, con lo que vas frente a tu mejor tiempo), y te da el tiempo al momento. Al terminar se guarda en Entrenamiento y, si hay un torneo abierto en ese circuito, puedes enviarla al time trial.": "No watch, no Strava: your phone records your ride, beeps at the start, the sectors and the finish (and says it out loud, with how you stand against your best time), and gives you the time straight away. When you finish it's saved in Training and, if there's an open tournament on that track, you can send it to the time trial.",
   "GPS —": "GPS —",
   "Automático: el más cercano": "Automatic: the nearest one",
   "● Empezar a grabar": "● Start recording",
