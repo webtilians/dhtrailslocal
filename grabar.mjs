@@ -3,10 +3,10 @@
 // BackgroundGeolocation); in a browser only while the page is on screen, which is then kept awake.
 import {formatMs} from './sector-comparison.mjs';
 import {detectAttempts, haversine} from './gps-engine.mjs';
-import {liveTimer, nearestStart, rideGpx} from './recorder.mjs';
+import {approachWatch, circuitsNear, liveTimer, nearestStart, rideGpx} from './recorder.mjs';
 import {beep, unlockSound} from './gate-sounds.mjs';
 import {bestGates, gatePhrase, speak, unlockVoice} from './voice.mjs';
-import {$, node, say, startShell, km} from './app-shell.mjs';
+import {$, node, say, startShell, km, createMap, pin, drawCircuit} from './app-shell.mjs';
 import {T, locale, tServer} from './i18n.mjs';
 
 const KEY = 'dhtrails:grabacion';
@@ -30,7 +30,7 @@ let sensors = null;   // which ones the phone has, once recording
 const POOR_M = 35;          // fixes less precise than this are not used for the time
 const NEAR_M = 3000;        // «automatic» takes the nearest circuit whose start is this close
 let shell = null, catalog = [], fixes = [], stopWatch = null, wakeLock = null, ticker = 0;
-let circuit = null, timer = null, lastFix = null, finished = [];
+let circuit = null, timer = null, lastFix = null, finished = [], approach = null;
 const status = (message, type = '') => say($('status'), message, type);
 
 // ---- The recording, kept on the device while it goes on (a reload or a crash does not lose it)
@@ -65,7 +65,101 @@ document.addEventListener('visibilitychange', () => {if (stopWatch && document.v
 function pickCircuit(at) {
   const id = $('circuit').value;
   const next = id ? catalog.find(c => c.id === id) : (() => {const n = nearestStart(catalog, at); return n && n.metres <= NEAR_M ? n.circuit : null;})();
-  if (next !== circuit) {circuit = next; timer = circuit ? liveTimer(circuit, {radius: circuit.gateRadius || 18}) : null; if (circuit) bestOf(circuit);}
+  if (next !== circuit) {circuit = next; timer = circuit ? liveTimer(circuit, {radius: circuit.gateRadius || 18}) : null; if (circuit) bestOf(circuit); drawTimed();}
+}
+
+// ---- The map while recording: the way ridden so far, where you are, the circuit being timed and, when
+// asked, the circuits around. It follows you until you move it.
+let view = null, ridden = null, here = null, timedLayer = null, nearLayer = null, following = true;
+const good = f => !(f.accuracy > POOR_M);
+const into = group => ({add: layer => {group.addLayer(layer); return layer;}, fit() {}});
+function openMap() {
+  $('recMapBox').hidden = false;
+  if (!view) {
+    view = createMap('recMap');
+    view.map.on('dragstart', () => {following = false; $('followMe').hidden = false;});
+    timedLayer = view.add(L.layerGroup());
+    nearLayer = view.add(L.layerGroup());
+    // The way ridden in white over a dark edge (seen on the map and on the satellite).
+    ridden = [view.add(L.polyline([], {color: '#06121e', weight: 8, opacity: .85, interactive: false})),
+      view.add(L.polyline([], {color: '#ffffff', weight: 4, opacity: 1, interactive: false}))];
+  }
+  const way = fixes.filter(good).map(f => [f.lat, f.lon]);
+  ridden.forEach(line => line.setLatLngs(way));
+  drawTimed();
+  setTimeout(() => {
+    view.map.invalidateSize();
+    if (way.length) view.map.setView(way.at(-1), Math.max(view.map.getZoom(), 16));
+  }, 60);
+}
+function closeMap() {
+  $('recMapBox').hidden = true;
+  nearLayer?.clearLayers();
+  $('nearList').replaceChildren();
+  if (here) {view.map.removeLayer(here); here = null;}
+}
+function mapFix(fix) {
+  if (!view || !good(fix)) return;
+  ridden.forEach(line => line.addLatLng([fix.lat, fix.lon]));
+  if (here) here.setLatLng([fix.lat, fix.lon]);
+  else here = view.add(L.circleMarker([fix.lat, fix.lon], {radius: 8, color: '#06121e', weight: 3, fillColor: '#ffe066', fillOpacity: 1, interactive: false}));
+  if (following) view.map.setView([fix.lat, fix.lon], Math.max(view.map.getZoom(), 15), {animate: false});
+}
+// The circuit being timed (or about to be): its line, start, sector gates and finish.
+function drawTimed() {
+  if (!timedLayer) return;
+  timedLayer.clearLayers();
+  if (circuit) drawCircuit(into(timedLayer), circuit, {fit: false});
+  onTop();
+}
+// The way ridden and where you are stay over the circuits drawn after them.
+function onTop() {
+  ridden?.forEach(line => line.bringToFront());
+  here?.bringToFront();
+}
+$('followMe').addEventListener('click', () => {
+  following = true;
+  $('followMe').hidden = true;
+  if (lastFix) view.map.setView([lastFix.lat, lastFix.lon], Math.max(view.map.getZoom(), 16));
+});
+// The circuits whose start is within 5 km: on the map with their names, and as a list to pick one.
+$('findCircuits').addEventListener('click', () => {
+  const at = lastFix && good(lastFix) ? lastFix : null;
+  if (!at) return status(T('Espera a tener señal GPS para buscar los circuitos cercanos.'), 'warning');
+  const near = circuitsNear(catalog, at);
+  nearLayer.clearLayers();
+  if (!near.length) return $('nearList').replaceChildren(node('p', {className: 'placeholder', textContent: T('No hay ningún circuito a menos de 5 km.')}));
+  for (const {circuit: c} of near) {
+    const pts = c.points.map(p => [p[0], p[1]]);
+    nearLayer.addLayer(L.polyline(pts, {color: '#8faac4', weight: 5, opacity: .85}));
+    pin(into(nearLayer), pts[0], 'start', T('Salida de {circuit}', {circuit: c.name}));
+    nearLayer.addLayer(L.tooltip({permanent: true, direction: 'right', offset: [14, 0], className: 'near-label'})
+      .setLatLng(pts[0]).setContent(node('span', {textContent: c.name})));
+  }
+  onTop();
+  following = false;
+  $('followMe').hidden = false;
+  view.fit([[at.lat, at.lon], ...near.map(x => x.circuit.points[0].slice(0, 2))], 40);
+  $('nearList').replaceChildren(...near.map(({circuit: c, metres}) => {
+    const choose = node('button', {type: 'button', className: 'btn outline small', textContent: T('Elegir')});
+    choose.addEventListener('click', () => {
+      if (timer?.running) return status(T('Termina esta bajada antes de elegir otro circuito.'), 'warning');
+      $('circuit').value = c.id;
+      $('circuit').dispatchEvent(new Event('change'));
+      status(T('Elegido {circuit}: ve a su salida.', {circuit: c.name}), 'success');
+    });
+    return node('div', {className: 'item'}, [node('span', {}, [node('b', {textContent: c.name}),
+      node('small', {textContent: ' · ' + T('salida a {distance}', {distance: metres >= 1000 ? km(metres) : Math.round(metres) + ' m'})})]), choose]);
+  }));
+});
+// Riding up to a circuit's start (50 m): a beep, the voice if on, and a line on the screen; not mid-run.
+function arriving(fix) {
+  for (const {circuit: c, metres} of approach ? approach.add(fix) : []) {
+    if (timer?.running) continue;
+    beep('sector');
+    status(T('Estás llegando a {circuit}: la salida está a {m} m.', {circuit: c.name, m: Math.round(metres)}), 'success');
+    if (voiceOn()) speak(T('Estás llegando a {circuit}.', {circuit: c.name}));
+  }
 }
 // Spoken gates (voice.mjs): your best run on each circuit, fetched once, to say how far ahead or behind you are.
 const bests = new Map();
@@ -90,6 +184,8 @@ function onFix(fix) {
   if (fixes.length % 5 === 0) save();
   $('gpsTag').textContent = 'GPS ±' + Math.round(fix.accuracy || 0) + ' m';
   if (fix.accuracy > POOR_M) return show();
+  mapFix(fix);
+  arriving(fix);
   if (!timer?.running) pickCircuit(fix);
   for (const e of timer ? timer.add(fix) : []) {
     if (e.kind === 'start') {beep('line'); $('splits').replaceChildren(); sayGate(e);}
@@ -171,6 +267,8 @@ $('startRec').addEventListener('click', async () => {
   if (!fixes.length) await resendSensors();
   try {stopWatch = await watch(onFix, onError);}
   catch (err) {return onError(err);}
+  openMap();
+  $('recMapBox').scrollIntoView({behavior: 'smooth', block: 'start'});
   sensors = motion ? await motion.start({hz: 100, append: fixes.length > 0}).catch(() => null) : null;
   if (motion && !sensors) status(T('El móvil no deja leer sus sensores: esta vez solo se graba el GPS.'), 'warning');
   await keepAwake();
@@ -194,6 +292,7 @@ $('discard').addEventListener('click', async () => {
   clearInterval(ticker);
   fixes = []; finished = []; timer = null; circuit = null; lastFix = null; sensors = null;
   forget();
+  closeMap();
   await motion?.discard().catch(() => {});
   $('splits').replaceChildren();
   $('state').textContent = T('Pulsa «Empezar a grabar» cuando estés listo.');
@@ -245,6 +344,7 @@ async function upload() {
     const result = await shell.api.uploadTrainingRoute(file);
     forget();
     fixes = [];
+    closeMap();
     show();
     await uploadSensors(result.activity.id);
     const open = (await shell.api.tournaments().catch(() => [])).filter(t => t.state === 'activo');
@@ -284,6 +384,7 @@ async function start() {
     T('En el navegador, deja la pantalla encendida y esta página delante: si bloqueas el móvil, el GPS se para. Con la app instalada para Android o iPhone sí graba con la pantalla apagada.');
   if (!native) $('screenNote').append(' ', node('a', {href: './app.html', textContent: T('Instalar la app')}));
   if (shell.api) catalog = await shell.api.circuitCatalog().catch(() => []);
+  approach = approachWatch(catalog);
   $('circuit').append(...catalog.map(c => node('option', {value: c.id, textContent: c.name})));
   $('circuit').addEventListener('change', () => {circuit = null; timer = null; if (lastFix) pickCircuit(lastFix); show();});
   shell.onUser(() => {show(); if (fixes.length && !stopWatch) status(T('Ya puedes guardar la grabación.'), 'success'); else resendSensors();});

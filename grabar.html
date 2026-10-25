@@ -10,6 +10,7 @@
 <title>Grabar | DH Trails Local</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="./app.css">
 </head>
 <body>
@@ -25,6 +26,14 @@
     <div class="panel-title"><h2><span>Circuito</span></h2><span class="caps" id="gpsTag">GPS —</span></div>
     <div class="panel-content">
       <select id="circuit" aria-label="Circuito"><option value="">Automático: el más cercano</option></select>
+      <div id="recMapBox" class="rec-map-box" hidden>
+        <div id="recMap" class="rec-map"></div>
+        <div class="rec-map-actions">
+          <button id="findCircuits" class="btn outline small" type="button">⌕ Buscar circuitos cercanos</button>
+          <button id="followMe" class="btn outline small" type="button" hidden>◎ Seguirme</button>
+        </div>
+        <div id="nearList" class="items near-list"></div>
+      </div>
       <div class="rec-live">
         <p id="state" class="rec-state">Pulsa «Empezar a grabar» cuando estés listo.</p>
         <div id="clock" class="rec-clock" hidden>00:00.0</div>
@@ -45,5 +54,6 @@
 </div>
 <p id="status" class="status" role="status" aria-live="polite"></p>
 </main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script type="module" src="./grabar.mjs"></script>
 </body></html>

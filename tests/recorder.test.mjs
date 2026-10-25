@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {liveTimer, rideGpx, nearestStart, gatePlaces} from '../recorder.mjs';
+import {liveTimer, rideGpx, nearestStart, gatePlaces, circuitsNear, approachWatch} from '../recorder.mjs';
 import {haversine} from '../gps-engine.mjs';
 
 // A circuit straight south, 600 m, a point every 5 m, sector gates at 200 m and 400 m.
@@ -81,4 +81,24 @@ test('the circuit whose start is nearest, and its gates', () => {
   assert.ok(found.metres < 20);
   assert.equal(gatePlaces(circuit).length, 4);
   assert.ok(haversine(gatePlaces(circuit)[1], {lat: 36.75 - 200 * M, lon: -4.39}) < 0.1);
+});
+
+test('the circuits near a place, and riding up to a start', () => {
+  const far = {id: 'far', points: [[36.80, -4.39], [36.79, -4.39]]};   // its start 5.5 km north
+  const c = {...circuit, id: 'c'};
+  const near = circuitsNear([far, c], {lat: 36.75 + 300 * M, lon: -4.39});
+  assert.deepEqual(near.map(x => x.circuit.id), ['c']);
+  assert.ok(Math.abs(near[0].metres - 300) < 1, String(near[0].metres));
+  assert.deepEqual(circuitsNear([far, c], {lat: 36.75, lon: -4.39}, {maxM: 10000}).map(x => x.circuit.id), ['c', 'far']);
+  const watch = approachWatch([c, far]);
+  const at = m => ({lat: 36.75 + m * M, lon: -4.39});
+  assert.deepEqual(watch.add(at(80)), []);
+  const told = watch.add(at(45));
+  assert.deepEqual(told.map(x => x.circuit.id), ['c']);
+  assert.ok(Math.abs(told[0].metres - 45) < 1);
+  assert.deepEqual(watch.add(at(20)), []);       // told once
+  assert.deepEqual(watch.add(at(120)), []);      // not far enough to be told again
+  assert.deepEqual(watch.add(at(40)), []);
+  watch.add(at(200));
+  assert.deepEqual(watch.add(at(30)).map(x => x.circuit.id), ['c']);   // away and back: told again
 });
