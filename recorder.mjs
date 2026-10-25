@@ -12,6 +12,30 @@ export function nearestStart(circuits, at) {
   return best;
 }
 
+// The circuits whose start is within `maxM` of a place, nearest first, at most `max`: [{circuit, metres}].
+export function circuitsNear(circuits, at, {maxM = 5000, max = 8} = {}) {
+  return circuits.map(circuit => ({circuit, metres: haversine(circuit.points[0], at)}))
+    .filter(x => x.metres <= maxM).sort((a, b) => a.metres - b.metres).slice(0, max);
+}
+
+// Riding up to a circuit's start: each fix in, out come the circuits whose start it has just come within
+// `alertM` metres of ([{circuit, metres}]). A circuit is told once, and again only after riding `resetM`
+// away from its start.
+export function approachWatch(circuits, {alertM = 50, resetM = 150} = {}) {
+  const told = new Set();
+  return {
+    add(fix) {
+      const out = [];
+      for (const circuit of circuits) {
+        const metres = haversine(circuit.points[0], fix);
+        if (metres > resetM) told.delete(circuit.id);
+        else if (metres <= alertM && !told.has(circuit.id)) {told.add(circuit.id); out.push({circuit, metres});}
+      }
+      return out;
+    },
+  };
+}
+
 // A circuit's gates as places, in order: the start, each sector gate, the finish.
 export function gatePlaces(circuit) {
   const p = circuit.points;

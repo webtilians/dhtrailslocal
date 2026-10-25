@@ -264,6 +264,7 @@ main.wide-page{max-width:1900px}
 .not-counted{margin-top:14px}
 .check-row{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}
 .check-row input{width:18px;height:18px;flex:none}
+.rec-map-box{margin:12px 0}.rec-map{height:60vh;min-height:320px;max-height:640px;border-radius:8px;overflow:hidden;background:#123047}.rec-map-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.near-list{margin-top:8px}.near-label{font-weight:700;font-size:12px;background:#10293fdd}.here-dot{border-radius:50%}
 .rec-voice{margin:12px 0 4px;color:#cfe6f8;line-height:1.4}
 .report-line a{color:#ffd166}
 #loopStretch[aria-pressed=true]{background:#2a5a82;color:#fff;border-color:#4b86b8}
