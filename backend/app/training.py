@@ -196,21 +196,41 @@ def own_route(db:Session,activity_id:uuid.UUID,p:Pilot)->Activity:
     if not a:raise HTTPException(404,"Ruta no encontrada")
     return a
 
+async def read_sensors(file:UploadFile)->tuple[bytes,dict]:
+    data=await file.read(sensors.MAX_UPLOAD+1)
+    if not data or len(data)>sensors.MAX_UPLOAD:raise HTTPException(413,"Archivo de sensores vacío o demasiado grande")
+    try:return data,sensors.summary(sensors.decode(data))
+    except sensors.SensorError as exc:raise HTTPException(422,"Archivo de sensores no válido") from exc
+
+def keep_sensors(db:Session,p:Pilot,a:Activity,data:bytes,info:dict)->dict:
+    path=(config.GPS_STORAGE_DIR/str(p.id)/a.storage_name).with_suffix(".sensores")
+    path.write_bytes(data)
+    a.sensors_name,a.sensors_bytes,a.sensors_summary=path.name,len(data),info
+    db.commit()
+    return {"sensors":info,"route_id":str(a.id),"filename":a.filename}
+
 @router.post("/routes/{activity_id}/sensors")
 async def upload_sensors(activity_id:uuid.UUID,file:UploadFile=File(...),db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
     """The phone's sensors recorded with a ride saved from Grabar (app/sensors.py): checked, then kept
     next to its GPS file as they came. A second upload replaces the first."""
     sensors_limit.hit(str(p.id))
     a=own_route(db,activity_id,p)
-    data=await file.read(sensors.MAX_UPLOAD+1)
-    if not data or len(data)>sensors.MAX_UPLOAD:raise HTTPException(413,"Archivo de sensores vacío o demasiado grande")
-    try:info=sensors.summary(sensors.decode(data))
-    except sensors.SensorError as exc:raise HTTPException(422,"Archivo de sensores no válido") from exc
-    path=(config.GPS_STORAGE_DIR/str(p.id)/a.storage_name).with_suffix(".sensores")
-    path.write_bytes(data)
-    a.sensors_name,a.sensors_bytes,a.sensors_summary=path.name,len(data),info
-    db.commit()
-    return {"sensors":info}
+    data,info=await read_sensors(file)
+    return keep_sensors(db,p,a,data,info)
+
+SENSORS_MATCH_S=600  # a recording's sensors start with its GPS: within 10 minutes of the route's first fix
+
+@router.post("/sensors")
+async def upload_late_sensors(file:UploadFile=File(...),db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    """Sensors left on the phone when their upload failed, sent again without knowing their route: they go
+    with your route that starts closest to them (the first app that tried did not keep which one it was)."""
+    sensors_limit.hit(str(p.id))
+    data,info=await read_sensors(file)
+    start=datetime.fromtimestamp(info["start_ms"]/1000,timezone.utc)
+    near=[a for a in db.scalars(select(Activity).where(Activity.owner_id==p.id,Activity.recorded_at.is_not(None))).all()
+          if abs((a.recorded_at-start).total_seconds())<=SENSORS_MATCH_S]
+    if not near:raise HTTPException(404,"No hay ninguna ruta tuya de la hora de estos sensores")
+    return keep_sensors(db,p,min(near,key=lambda a:abs((a.recorded_at-start).total_seconds())),data,info)
 
 @router.get("/routes/{activity_id}/sensors")
 def download_sensors(activity_id:uuid.UUID,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):

@@ -14,11 +14,14 @@ import struct
 import zlib
 
 MAX_UPLOAD = 40 * 1024 * 1024   # compressed: about 10 hours at 100 Hz
-MAX_RAW = 250 * 1024 * 1024     # once decompressed (a file that grows past this is refused, not read)
+# Once decompressed (a file that grows past this is refused, not read): 19 hours at 100 Hz. With the upload
+# itself it has to fit well inside the service's 400 MB of memory.
+MAX_RAW = 120 * 1024 * 1024
 MAGIC = b"DHS1"
 _HEAD = struct.Struct("<4sB3xd")
 _MOTION = struct.Struct("<I6h")
 _PRESSURE = struct.Struct("<If")
+_TIME = struct.Struct("<I")
 
 
 class SensorError(ValueError):
@@ -67,10 +70,32 @@ def read(raw: bytes) -> dict:
 
 
 def summary(raw: bytes) -> dict:
-    """What a recording holds, to keep with its ride."""
-    data = read(raw)
-    motion, pressure = data["motion"], data["pressure"]
-    times = [m[0] for m in motion] + [p[0] for p in pressure]
-    seconds = (max(times) - min(times)) / 1000 if times else 0
-    return {"start_ms": data["start_ms"], "seconds": round(seconds, 1), "motion": len(motion), "pressure": len(pressure),
-            "motion_hz": round(len(motion) / seconds, 1) if seconds else 0, "barometer": bool(pressure)}
+    """What a recording holds, to keep with its ride, checked in one pass that keeps none of its readings:
+    a ride of three hours has a million of them, and as Python numbers they took the server past its memory
+    (25/10/2026). The same checks as read()."""
+    if len(raw) < _HEAD.size:
+        raise SensorError("short")
+    magic, version, start = _HEAD.unpack_from(raw, 0)
+    if magic != MAGIC or version != 1:
+        raise SensorError("unknown version")
+    view, pos, end = memoryview(raw), _HEAD.size, len(raw)
+    motion = pressure = 0
+    first = last = None
+    while pos < end:
+        kind = view[pos]
+        pos += 1
+        if kind == 1 and pos + _MOTION.size <= end:
+            motion += 1
+            size = _MOTION.size
+        elif kind == 2 and pos + _PRESSURE.size <= end:
+            pressure += 1
+            size = _PRESSURE.size
+        else:
+            raise SensorError("bad record")
+        t = _TIME.unpack_from(view, pos)[0]
+        first = t if first is None or t < first else first
+        last = t if last is None or t > last else last
+        pos += size
+    seconds = (last - first) / 1000 if first is not None else 0
+    return {"start_ms": start, "seconds": round(seconds, 1), "motion": motion, "pressure": pressure,
+            "motion_hz": round(motion / seconds, 1) if seconds else 0, "barometer": bool(pressure)}

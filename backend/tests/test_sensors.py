@@ -1,6 +1,7 @@
 """The phone's sensors recorded with a ride: the app's «DHS1» file, kept next to the ride's GPS file."""
 import gzip
 import struct
+import tracemalloc
 import zlib
 
 import pytest
@@ -41,6 +42,20 @@ def test_a_broken_or_foreign_file_is_refused():
     for bad in (b"", b"hello", gzip.compress(b"not ours"), dhs()[:-3], dhs().replace(b"DHS1", b"DHS2", 1)):
         with pytest.raises(sensors.SensorError):
             sensors.read(sensors.decode(bad))
+        with pytest.raises(sensors.SensorError):
+            sensors.summary(sensors.decode(bad))
+
+
+def test_a_long_ride_is_summed_up_without_keeping_its_readings():
+    # Half an hour at 100 Hz (180,000 readings). Kept as Python numbers they took tens of MB; a three-hour
+    # ride took the server past its 400 MB on 25/10/2026.
+    raw = dhs(seconds=1800)
+    tracemalloc.start()
+    info = sensors.summary(raw)
+    peak = tracemalloc.get_traced_memory()[1]
+    tracemalloc.stop()
+    assert info["motion"] == 180000 and info["pressure"] == 18000 and abs(info["seconds"] - 1800) < 0.1
+    assert peak < 1024 * 1024, peak
 
 
 def test_the_sensors_go_with_their_ride_and_only_its_owner_sends_or_reads_them(organizer):
@@ -64,3 +79,24 @@ def test_the_sensors_go_with_their_ride_and_only_its_owner_sends_or_reads_them(o
         stored = next((config.GPS_STORAGE_DIR).glob(f"*/{rid}.sensores"))
         assert client.delete(f"/api/training/routes/{rid}", headers=rider).status_code == 204
         assert not stored.exists()
+
+
+def test_sensors_left_on_the_phone_find_their_route_by_time(organizer):
+    # An upload that failed (the server fell over) left the sensors on the phone, without their route: sent
+    # again, they go with the route that starts within 10 minutes of them.
+    with TestClient(app) as client:
+        rider = account(client)
+        t0 = recent(40)
+        route = upload(client, rider, "/api/training/routes", gpx(fixes(t0, 1000)), "larga.gpx")
+        assert route.status_code == 201, route.text
+        rid = route.json()["activity"]["id"]
+        send = lambda data: client.post("/api/training/sensors", headers=rider,
+                                        files={"file": ("sensores.dhs", gzip.compress(data), "application/octet-stream")})
+        assert send(dhs(start=t0 - 3 * 3600 * 1000)).status_code == 404
+        late = send(dhs(start=t0 + 4000))
+        assert late.status_code == 200, late.text
+        assert late.json()["route_id"] == rid and late.json()["filename"] == "larga.gpx"
+        assert client.get(f"/api/training/routes/{rid}/sensors", headers=rider).status_code == 200
+        # Someone else's route is never theirs.
+        assert client.post("/api/training/sensors", headers=account(client),
+                           files={"file": ("s.dhs", gzip.compress(dhs(start=t0 + 4000)), "application/octet-stream")}).status_code == 404
