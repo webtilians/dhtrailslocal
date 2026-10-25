@@ -147,10 +147,13 @@ $('startRec').addEventListener('click', async () => {
   finished = [];
   $('resultPanel').hidden = true;
   status('');
+  // A recording kept from before goes on in the same sensors' file; a new one starts it again, so sensors
+  // left from an earlier ride go to the server first.
+  if (!fixes.length) await resendSensors();
   try {stopWatch = await watch(onFix, onError);}
   catch (err) {return onError(err);}
-  // A recording kept from before goes on in the same sensors' file.
   sensors = motion ? await motion.start({hz: 100, append: fixes.length > 0}).catch(() => null) : null;
+  if (motion && !sensors) status(T('El móvil no deja leer sus sensores: esta vez solo se graba el GPS.'), 'warning');
   await keepAwake();
   clearInterval(ticker);
   ticker = setInterval(tick, 100);
@@ -190,6 +193,23 @@ async function uploadSensors(routeId) {
     else status(T('La ruta se ha guardado, pero los datos de los sensores no han podido subirse.'), 'warning');
   } catch {status(T('La ruta se ha guardado, pero los datos de los sensores no han podido subirse.'), 'warning');}
   sensors = null;
+}
+
+// Sensors left on the phone, with no recording going on, are those of a ride whose upload failed (the
+// server down, no signal): they go now, and the server puts them with your route of their time. Kept for
+// later if the server cannot be reached; dropped if it has no route for them or refuses them.
+let resending = null;
+function resendSensors() {
+  return resending ??= (async () => {
+    if (!motion || stopWatch || kept().length || !shell?.me) return;
+    const left = await motion.stop().catch(() => null);
+    if (!(left?.bytes > 16)) return;
+    try {
+      const sent = await motion.upload({url: location.origin + '/api/training/sensors', token: shell.api.sessionToken()});
+      if ([200, 404, 413, 422].includes(sent?.status)) await motion.discard();
+      if (sent?.status === 200) status(T('Se han subido los sensores que se habían quedado en el móvil.'), 'success');
+    } catch {}
+  })().finally(() => {resending = null;});
 }
 
 // The ride goes to Entrenamiento like a watch's GPX; its runs can go on to an open time trial.
@@ -247,11 +267,12 @@ async function start() {
   if (shell.api) catalog = await shell.api.circuitCatalog().catch(() => []);
   $('circuit').append(...catalog.map(c => node('option', {value: c.id, textContent: c.name})));
   $('circuit').addEventListener('change', () => {circuit = null; timer = null; if (lastFix) pickCircuit(lastFix); show();});
-  shell.onUser(() => {show(); if (fixes.length && !stopWatch) status(T('Ya puedes guardar la grabación.'), 'success');});
+  shell.onUser(() => {show(); if (fixes.length && !stopWatch) status(T('Ya puedes guardar la grabación.'), 'success'); else resendSensors();});
   // A recording not saved (the page was closed or reloaded): it can be saved or recorded on.
   fixes = kept();
   if (fixes.length) status(T('Hay una grabación sin guardar de las {time} ({n} puntos): guárdala, sigue grabando o descártala.',
     {time: new Date(fixes[0].time).toLocaleTimeString(locale, {hour: '2-digit', minute: '2-digit'}), n: fixes.length}));
   show();
+  resendSensors();
 }
 start().catch(err => status('Error: ' + err.message, 'error'));
