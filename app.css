@@ -88,6 +88,7 @@ dialog.auth::backdrop{background:#030a12cc}
 .circuit-note{margin:0;font-size:12px;line-height:1.5;padding:8px 10px;border-radius:6px;border:1px solid}
 .circuit-note.warning{color:#ffc28c;border-color:#6e4a2c;background:#251a12}
 .circuit-note.warning::before{content:'⚠ '}
+.coverage-line{display:block;color:#8faac4;margin-top:2px}
 .circuit-note.info{color:#a9d8ff;border-color:#2c5578;background:#0f2a40}
 .circuit-note.info::before{content:'ℹ '}
 .dialog-title{margin:0;font:800 24px 'Barlow Condensed',sans-serif;letter-spacing:.3px}

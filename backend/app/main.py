@@ -16,7 +16,7 @@ from sqlalchemy import delete, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from . import config
+from . import config, coverage
 from .competition import retime_entries, router as competition_router
 from .training import router as training_router, scan_routes_for_circuit
 from .friends import router as friends_router
@@ -28,7 +28,7 @@ from .database import get_db
 from .models import Activity, Attempt, AttemptSplit, Circuit, Pilot, Sector, WeakZone, utcnow
 from .circuit_rules import repeated
 from .ratelimit import RateLimit, client_key
-from .schemas import AttemptIn, CircuitIn, Credentials, RegisterIn
+from .schemas import AttemptIn, CircuitIn, CoverageIn, Credentials, RegisterIn
 from .security import current_pilot, is_organizer, issue_token, password_hash, pilot_payload, require_organizer, verify_password
 
 app=FastAPI(title="DH Trails Local API",version="0.6.0",description="GPS training and monthly competition API; times are GPS estimates")
@@ -119,7 +119,15 @@ def refresh_session(p:Pilot=Depends(current_pilot)):
     """A new session for a rider who still has a valid one (the app asks once a day)."""
     return {"access_token":issue_token(p),"user":pilot_payload(p)}
 
-def circuit_payload(c:Circuit,p:Pilot|None=None,owner:str|None=None,entries:int=0):
+def stored_runs(db:Session)->coverage.Runs:
+    """Every stored run's fixes and every circuit's line, to tell how well the GPS times a start or a finish."""
+    rows=db.execute(select(Attempt.id,Attempt.activity_id,Attempt.circuit_id,Attempt.started_at,Attempt.profile)
+                    .where(Attempt.profile.is_not(None),Attempt.started_at.is_not(None))).all()
+    lines=dict(db.execute(select(Circuit.id,Circuit.reference_points)).all())
+    return coverage.Runs([(activity or run,circuit,started.timestamp()*1000,profile)
+                          for run,activity,circuit,started,profile in rows],lines)
+
+def circuit_payload(c:Circuit,p:Pilot|None=None,owner:str|None=None,entries:int=0,runs:coverage.Runs|None=None):
     return {
         "id":str(c.id),"cloud_id":str(c.id),"version":2,"name":c.name,
         "points":c.reference_points,"gateRadius":c.gate_radius_m,
@@ -133,7 +141,9 @@ def circuit_payload(c:Circuit,p:Pilot|None=None,owner:str|None=None,entries:int=
         "can_delete":p is not None and (c.owner_id==p.id or is_organizer(p)) and c.published_at is None,
         "entries":entries,  # time trial entries timed on it
         "sectors":[{"index":s.gate_index,"name":s.name} for s in c.sectors],
-        "weakZones":[{"from":z.start_index,"to":z.end_index,"name":z.name} for z in c.weak_zones]
+        "weakZones":[{"from":z.start_index,"to":z.end_index,"name":z.name} for z in c.weak_zones],
+        # How well the GPS times its start and finish, from the runs stored (app/coverage.py)
+        **({"coverage":coverage.circuit_coverage(runs,c.reference_points,c.id)} if runs else {})
     }
 
 def circuit_for_user(db:Session,circuit_id:uuid.UUID,user_id:uuid.UUID)->Circuit:
@@ -176,7 +186,13 @@ def list_circuits(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
         .order_by(Circuit.updated_at.desc()).limit(500)).all()
     entries=dict(db.execute(select(Attempt.circuit_id,func.count()).where(Attempt.tournament_id.is_not(None))
         .group_by(Attempt.circuit_id)).all())
-    return [circuit_payload(c,p,owner,entries.get(c.id,0)) for c,owner in rows]
+    runs=stored_runs(db)
+    return [circuit_payload(c,p,owner,entries.get(c.id,0),runs) for c,owner in rows]
+
+@app.post("/api/circuits/coverage")
+def circuit_coverage(payload:CoverageIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    """While drawing a circuit: how well the GPS would time its start and finish where they are."""
+    return coverage.circuit_coverage(stored_runs(db),payload.points,payload.circuit_id)
 
 @app.post("/api/circuits",status_code=201)
 def create_circuit(payload:CircuitIn,background:BackgroundTasks,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):

@@ -32,6 +32,19 @@ class ZoneIn(BaseModel):
     to: int = Field(ge=1)
     name: str = Field(min_length=1,max_length=70)
 
+class CoverageIn(BaseModel):
+    """A circuit being drawn: its line from start to finish ([lat, lon]), and which saved circuit it is, if any."""
+    points: list[list[float]] = Field(min_length=2,max_length=12000)
+    circuit_id: UUID | None = None
+
+    @field_validator("points")
+    @classmethod
+    def coordinates(cls,value):
+        if any(len(p)<2 or not (-90<=p[0]<=90 and -180<=p[1]<=180) for p in value):
+            raise ValueError("Coordenada GPS fuera de rango")
+        return value
+
+
 class CircuitIn(BaseModel):
     name: str = Field(min_length=1,max_length=100)
     points: list[list[float | None]] = Field(min_length=16,max_length=12000)

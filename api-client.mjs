@@ -129,6 +129,8 @@ export function createCloudApi(config) {
       return result.id;
     },
     async listCircuits(){return request('/circuits')},
+    // How well the GPS would time a circuit's start and finish (its line from start to finish)
+    async circuitCoverage(points,circuitId=null){return request('/circuits/coverage',{method:'POST',body:{points,circuit_id:circuitId}})},
     async deleteCircuit(id){return request('/circuits/'+encodeURIComponent(id),{method:'DELETE'})},
     async approveCircuit(id){return request('/circuits/'+encodeURIComponent(id)+'/approve',{method:'POST'})},
     async circuitCatalog(){return request('/public/circuits')},
