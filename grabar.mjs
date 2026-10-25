@@ -5,6 +5,7 @@ import {formatMs} from './sector-comparison.mjs';
 import {detectAttempts, haversine} from './gps-engine.mjs';
 import {liveTimer, nearestStart, rideGpx} from './recorder.mjs';
 import {beep, unlockSound} from './gate-sounds.mjs';
+import {bestGates, gatePhrase, speak, unlockVoice} from './voice.mjs';
 import {$, node, say, startShell, km} from './app-shell.mjs';
 import {T, locale, tServer} from './i18n.mjs';
 
@@ -64,7 +65,23 @@ document.addEventListener('visibilitychange', () => {if (stopWatch && document.v
 function pickCircuit(at) {
   const id = $('circuit').value;
   const next = id ? catalog.find(c => c.id === id) : (() => {const n = nearestStart(catalog, at); return n && n.metres <= NEAR_M ? n.circuit : null;})();
-  if (next !== circuit) {circuit = next; timer = circuit ? liveTimer(circuit, {radius: circuit.gateRadius || 18}) : null;}
+  if (next !== circuit) {circuit = next; timer = circuit ? liveTimer(circuit, {radius: circuit.gateRadius || 18}) : null; if (circuit) bestOf(circuit);}
+}
+// Spoken gates (voice.mjs): your best run on each circuit, fetched once, to say how far ahead or behind you are.
+const bests = new Map();
+function bestOf(c) {
+  if (!bests.has(c.id)) bests.set(c.id, shell?.me ? shell.api.trainingRuns(c.id).then(runs => bestGates(runs, (c.sectors || []).length))
+    .catch(() => null) : Promise.resolve(null));
+  return bests.get(c.id);
+}
+const voiceOn = () => $('voice').checked;
+const VOICE_KEY = 'dhtrails:voz';
+try {$('voice').checked = localStorage.getItem(VOICE_KEY) !== 'no';} catch {}
+$('voice').addEventListener('change', () => {try {localStorage.setItem(VOICE_KEY, $('voice').checked ? 'si' : 'no');} catch {} if ($('voice').checked) unlockVoice();});
+async function sayGate(e, ms) {
+  if (!voiceOn() || !circuit) return;
+  const name = circuit.name;
+  speak(gatePhrase(e, name, await bestOf(circuit), ms));
 }
 
 function onFix(fix) {
@@ -75,9 +92,9 @@ function onFix(fix) {
   if (fix.accuracy > POOR_M) return show();
   if (!timer?.running) pickCircuit(fix);
   for (const e of timer ? timer.add(fix) : []) {
-    if (e.kind === 'start') {beep('line'); $('splits').replaceChildren();}
-    else if (e.kind === 'sector') {beep('sector'); addSplit('S' + e.gate, e.split, e.elapsed);}
-    else {beep('line'); finish(e);}
+    if (e.kind === 'start') {beep('line'); $('splits').replaceChildren(); sayGate(e);}
+    else if (e.kind === 'sector') {beep('sector'); addSplit('S' + e.gate, e.split, e.elapsed); sayGate(e);}
+    else {beep('line'); sayGate(e, finish(e));}
   }
   show();
 }
@@ -100,6 +117,7 @@ function finish(e) {
   const ms = run?.seconds ? run.seconds * 1000 : e.elapsed;
   finished.push({circuit: circuit.name, ms, ok: !run || run.status === 'compatible'});
   status(T('¡Meta en {circuit}! {time}. El tiempo oficial lo calcula el servidor al guardar.', {circuit: circuit.name, time: formatMs(ms)}), 'success');
+  return ms;
 }
 
 // ---- What the screen says while recording
@@ -142,6 +160,7 @@ function tick() {
 $('startRec').addEventListener('click', async () => {
   if (!shell?.me) return shell?.askLogin(T('Entra con tu cuenta para grabar: tus bajadas se guardan en tu Entrenamiento.'));
   unlockSound();
+  if (voiceOn()) unlockVoice();
   if (!native && !navigator.geolocation) return status(T('Este navegador no da acceso al GPS.'), 'error');
   fixes = kept();
   finished = [];

@@ -52,5 +52,6 @@ class MainViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(SharedFilePlugin())
         bridge?.registerPluginInstance(MotionRecorderPlugin())
+        bridge?.registerPluginInstance(SpeechPlugin())
     }
 }
