@@ -84,9 +84,47 @@ function redraw() {
   }
   const ready = start !== null && finish !== null;
   stats(ready ? source.slice(start, finish + 1) : source, gates.length + 1);
-  renderChecks(ready ? circuitChecks(source, start, finish, gates, others()) : []);
+  const checks = ready ? circuitChecks(source, start, finish, gates, others()) : [];
+  renderChecks(checks);
+  checkCoverage(ready && checks);
   $('mapTag').textContent = ready ? T('LISTA PARA GUARDAR') : T('MARCA SALIDA Y META');
   drawBar();
+}
+
+// How well the GPS times a start or a finish where it is, from the runs stored (backend/app/coverage.py):
+// the start and the finish decide the whole time of a run, a gate in between only the sectors'.
+const levelName = level => ({buena: T('buena'), regular: T('regular'), mala: T('mala')})[level];
+function coverageNote(gate, g) {
+  if (!g) return {level: 'info', text: T('{gate}: aún no hay bajadas guardadas que pasen por aquí.', {gate})};
+  if (!g.level) return {level: 'info', text: T('{gate}: solo {n} bajada(s) pasan por aquí; aún no se sabe qué tal la cubre el GPS.', {gate, n: g.runs})};
+  const lost = g.lost ? ' ' + T('En {n} de ellas el GPS se pierde justo ahí.', {n: g.lost}) : '';
+  if (g.level === 'buena')
+    return {level: 'info', text: T('{gate}: buena cobertura del GPS. En las {n} bajadas que pasan por aquí, el tiempo se desvía unos ±{s} s.',
+      {gate, n: g.runs, s: dec(g.error_s, 1)}) + lost};
+  return {level: 'warning', text: T('{gate}: cobertura {level} del GPS. En las {n} bajadas que pasan por aquí, el tiempo se desvía unos ±{s} s (hasta {worst} s), con los puntos a {m} m de la línea.',
+    {gate, level: levelName(g.level), n: g.runs, s: dec(g.error_s, 1), worst: dec(g.worst_s, 1), m: Math.round(g.off_m)}) + lost +
+    (g.level === 'mala' ? ' ' + T('Si puedes, muévela a un sitio más despejado, o revisa que la línea vaya por donde se baja.') : '')};
+}
+// While drawing: the coverage of the start and the finish where they are, asked once the pins stop moving.
+let coverageVersion = 0, coverageTimer = null;
+function checkCoverage(checks) {
+  clearTimeout(coverageTimer);
+  const version = ++coverageVersion;
+  if (!checks || !shell?.api) return;
+  const line = source.slice(draft.start, draft.finish + 1).map(p => [p.lat, p.lon]);
+  coverageTimer = setTimeout(async () => {
+    const coverage = await shell.api.circuitCoverage(line, editing?.id ?? null).catch(() => null);
+    if (version !== coverageVersion || !coverage) return;
+    renderChecks([{level: 'info', text: T('La salida y la meta deciden el tiempo de cada bajada: ponlas donde el GPS tenga buena cobertura, a cielo abierto. Si falla en el límite de un segmento, solo cambia el reparto entre sectores.')},
+      coverageNote(T('Salida'), coverage.start), coverageNote(T('Meta'), coverage.finish), ...checks]);
+  }, 400);
+}
+// The coverage of a saved circuit, in its row of the list.
+function coverageLine(coverage) {
+  const part = (gate, g) => g?.level ? T('{gate} {level} (±{s} s)', {gate, level: levelName(g.level), s: dec(g.error_s, 1)}) : null;
+  const parts = [part(T('salida'), coverage?.start), part(T('meta'), coverage?.finish)].filter(Boolean);
+  const bad = [coverage?.start, coverage?.finish].some(g => g?.level === 'mala');
+  return (bad ? '⚠ ' : '') + (parts.length ? T('GPS en la {list}', {list: parts.join(T(' y en la '))}) : T('GPS de salida y meta: aún sin bajadas para saberlo'));
 }
 
 // What could make the circuit's timing unreliable, and other circuits on the same trail.
@@ -326,7 +364,8 @@ async function loadSaved() {
       c.approved ? node('span', {className: 'badge ok', textContent: T('Aprobado')}) : node('span', {className: 'badge', textContent: T('Pendiente')});
     const row = node('div', {className: 'item'}, [
       node('span', {}, [node('b', {textContent: c.name}), node('small', {textContent: ' · ' + km(distanceSeries(c.points).at(-1)) + ' · ' +
-        T('{n} segmentos', {n: c.sectors.length + 1}) + ' · ' + (c.mine ? T('tuyo') : T('de {name}', {name: c.owner || T('otro piloto')}))})]),
+        T('{n} segmentos', {n: c.sectors.length + 1}) + ' · ' + (c.mine ? T('tuyo') : T('de {name}', {name: c.owner || T('otro piloto')}))}),
+        node('small', {className: 'coverage-line', textContent: coverageLine(c.coverage)})]),
       node('span', {className: 'row-actions'}, [badge, see])]);
     if (shell.me?.organizer && !c.approved) {
       const approve = node('button', {type: 'button', className: 'btn primary small', textContent: T('Aprobar')});
