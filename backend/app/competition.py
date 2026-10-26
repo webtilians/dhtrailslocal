@@ -241,7 +241,9 @@ def list_tournaments(db:Session=Depends(get_db)):
         .where(Attempt.tournament_id.is_not(None),Attempt.review_status=="approved").group_by(Attempt.tournament_id)).all())
     pending=dict(db.execute(select(Attempt.tournament_id,func.count(Attempt.id))
         .where(Attempt.tournament_id.is_not(None),Attempt.review_status=="pending").group_by(Attempt.tournament_id)).all())
-    tournaments=db.scalars(select(Tournament).options(selectinload(Tournament.circuit)).limit(200)).all()
+    # The 200 that end last: the running and upcoming ones, and the latest finished.
+    tournaments=db.scalars(select(Tournament).options(selectinload(Tournament.circuit))
+        .order_by(Tournament.ends_on.desc(),Tournament.created_at.desc()).limit(200)).all()
     order={"activo":0,"proximo":1,"terminado":2}
     def key(t:Tournament):
         # Running and upcoming by start date, finished ones latest first.

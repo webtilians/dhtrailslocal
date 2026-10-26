@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 
 from app import config, main
 from app.main import app
@@ -30,6 +31,21 @@ def gpx(points):
 
 def recent(minutes):
     return (time.time() - minutes * 60) * 1000
+
+def free_area(low=0.2, high=8.0):
+    """A latitude shift for a test's circuit and routes with no circuit within 2 km. The tests share one
+    database, which keeps the circuits of earlier tests and runs, and some need their routes far from any.
+    Not much further north than the default: the tests move routes aside in degrees of longitude."""
+    from app.database import SessionLocal
+    from app.models import Circuit
+    with SessionLocal() as db:
+        taken = [p[0] for points in db.scalars(select(Circuit.reference_points)) for p in points]
+    for _ in range(1000):
+        shift = round(random.uniform(low, high), 4)
+        # fixes() runs from 36.74 + shift down 0.0061 degrees; 0.018 degrees is 2 km.
+        if not any(36.734 + shift - 0.018 < lat < 36.74 + shift + 0.018 for lat in taken):
+            return shift
+    raise AssertionError("No free area left for the tests' circuits: empty the circuits of the test database")
 
 def account(client, name=None, email=None):
     email = email or f"rider-{uuid.uuid4().hex}@example.com"
@@ -198,7 +214,7 @@ def test_training_lists_my_time_trial_runs_and_takes_their_files(organizer):
 
 def test_a_saved_circuit_is_found_in_routes_uploaded_before(organizer):
     with TestClient(app) as client:
-        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003  # an area where no other test has a circuit
+        shift = free_area()
         org = account(client, email=organizer)
         rider = account(client)
         route = gpx(fixes(recent(90), 2000, shift) + fixes(recent(60), 1700, shift))
@@ -223,7 +239,7 @@ def test_a_saved_circuit_is_found_in_routes_uploaded_before(organizer):
 
 def test_training_counts_only_runs_that_follow_the_circuit(organizer):
     with TestClient(app) as client:
-        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003  # an area where no other test has a circuit
+        shift = free_area()
         org = account(client, email=organizer)
         rider = account(client)
         # Through the circuit's start and finish, but ~70 m to one side for most of the way in between,
@@ -249,7 +265,7 @@ def test_training_counts_only_runs_that_follow_the_circuit(organizer):
 def test_suspicious_entries_wait_for_the_organizer(organizer):
     with TestClient(app) as client:
         tag = uuid.uuid4().hex[:6]
-        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003  # an area where no other test has a circuit
+        shift = free_area()
         org = account(client, "Org " + tag, organizer)
         tid = new_tournament(client, org, new_circuit(client, org, "Trampas " + tag, shift))
         entries = f"/api/tournaments/{tid}/entries"
@@ -297,7 +313,7 @@ def test_a_finished_tournament_has_a_final_result(organizer):
     from app.models import Tournament
     with TestClient(app) as client:
         tag = uuid.uuid4().hex[:6]
-        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003
+        shift = free_area()
         org = account(client, "Org " + tag, organizer)
         tid = new_tournament(client, org, new_circuit(client, org, "Final " + tag, shift))
         entries = f"/api/tournaments/{tid}/entries"
@@ -384,7 +400,7 @@ def test_training_notes_are_the_riders_own(organizer):
 def test_riders_draw_circuits_for_training_and_organizers_approve_them(organizer):
     with TestClient(app) as client:
         # An area of its own, away from the other tests' (circuits within 30 m of each other are repeats).
-        shift = -10 - uuid.uuid4().int % 10000 * 0.003
+        shift = free_area(-30.0, -10.0)
         org = account(client, email=organizer)
         rider, other = account(client), account(client)
         # Another rider rode there before the circuit existed.

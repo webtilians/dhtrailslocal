@@ -5,12 +5,12 @@ from fastapi.testclient import TestClient
 
 from app import config
 from app.main import app
-from test_competition import account, circuit_body, fixes, gpx, organizer, recent, upload  # noqa: F401 (fixture)
+from test_competition import account, circuit_body, fixes, free_area, gpx, organizer, recent, upload  # noqa: F401 (fixture)
 
 
 def test_a_rider_deletes_their_account_and_their_data(organizer):
     with TestClient(app) as client:
-        shift = 0.2 + uuid.uuid4().int % 1000 * 0.003   # an area where no other test has a circuit
+        shift = free_area()
         org = account(client, email=organizer)
         email = f"rider-{uuid.uuid4().hex}@example.com"
         rider, friend = account(client, email=email), account(client)
