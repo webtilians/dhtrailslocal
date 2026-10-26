@@ -33,6 +33,14 @@ cd android && set JAVA_HOME=C:\Users\ENRIQUE\.jdks\jdk-21.0.12.1+1 && gradlew.ba
 
 El APK firmado sale en `android/app/build/outputs/apk/release/`. La clave de firma está fuera del repositorio (`C:\Users\ENRIQUE\DHTrails-claves`, y `android/keystore.properties` apunta a ella): las actualizaciones de la app se tienen que firmar con la misma. La app para iPhone se compila en un Mac de GitHub (`.github/workflows/ios.yml`): cada cambio en `movil/` se compila para comprobarlo, y a mano (Actions → iPhone → Run workflow) se firma y se sube a TestFlight.
 
+## Privacidad y borrar la cuenta
+
+La **política de privacidad** está en `privacidad.html` (abierta, sin cuenta; enlazada al crear una cuenta, en Tu cuenta y en la página de la app): qué datos se guardan (cuenta, rutas, sensores del móvil, circuitos, notas, amigos), que la ubicación solo se usa mientras se graba, que los vídeos no salen del dispositivo, quién ve qué, dónde están (Hetzner, Alemania), los servicios de otros (mapas, letras, YouTube, Gmail), cómo borrar la cuenta y a quién escribir.
+
+**Tu cuenta** (`cuenta.html`, pulsando tu nombre arriba) enseña el correo y el nombre, manda el enlace para una contraseña nueva y **borra la cuenta** con la contraseña (`POST /api/auth/delete-account`): la cuenta, sus rutas y archivos (también los sensores), sus bajadas de entrenamiento y de torneo, notas y amigos. Los circuitos que dibujó y que usan otros pilotos o un torneo pasan a la organización; los demás se borran. La cuenta de la organización no se borra desde ahí. Google Play y Apple piden las dos cosas para publicar.
+
+Para Google Play, la app se genera como AAB (`cd movil/android && gradlew.bat bundleRelease`, firmado con la misma clave de subida que el APK).
+
 ## En el móvil: instalar la app y compartirle un GPX
 
 La web se instala como una app (`manifest.json`, iconos `icon-*.png`): en Android, con Chrome o Edge, el botón **Instalar app** de la barra o «Instalar aplicación» en el menú; en iPhone, Safari → Compartir → «Añadir a pantalla de inicio». Instalada en Android, aparece entre las apps a las que compartir un archivo: desde Strava, la app del reloj o el gestor de archivos, compartes el GPX o TCX con **DH Trails** y se abre Entrenamiento con el archivo listo para pulsar «Buscar circuitos», o para enviarlo al time trial abierto. Lo recibe `sw.js`, que no hace nada más: no guarda la web para usarla sin conexión, porque la app necesita su servidor. iPhone no deja compartir archivos con apps web: allí se guarda el GPX en Archivos y se elige con «Importar GPX / TCX» (en iOS el selector deja elegir cualquier archivo, porque a veces no reconoce los .gpx); el botón **Instalar app** explica cómo añadirla a la pantalla de inicio.

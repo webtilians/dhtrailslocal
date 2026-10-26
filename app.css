@@ -110,6 +110,12 @@ dialog.auth::backdrop{background:#030a12cc}
 .tab-btn{flex:1;border:1px solid #365778;background:#112b40;color:#b3c8dc;border-radius:5px;padding:10px;font-weight:800;font-size:12px}
 .tab-btn.selected{background:#144269;color:#fff;border-color:#24a9ff}
 .invite.off{display:none}
+a.who{color:inherit;text-decoration:underline;text-underline-offset:3px}
+.btn.danger{background:#5a1f2a;color:#ffd7dc;border-color:#8a3443}.btn.danger:hover{background:#74283a}
+.legal h2{font:800 20px 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.5px;margin:22px 0 8px;color:#e6f1fb}
+.legal h2:first-child{margin-top:4px}.legal .panel-content>p{font-size:14px;line-height:1.65;color:#cfe0ee;margin:0 0 10px}
+.legal a{color:#74c7ff}.account-line{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:14px;margin:0 0 8px}.account-line span{color:#98afc8}
+.legal .field{display:block;margin:12px 0}.legal input[type=password]{width:100%;max-width:360px}.legal-links{font-size:13px;margin:18px 0 0}
 .auth-form .btn.full{margin-top:12px}
 .auth-form .text-btn{align-self:center;margin-top:10px}
 .notice{margin-bottom:18px}

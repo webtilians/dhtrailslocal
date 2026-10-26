@@ -1,4 +1,4 @@
-"""Forgotten passwords: a link by mail to choose a new one.
+"""Forgotten passwords: a link by mail to choose a new one; and deleting an account with its data.
 
 The link carries a signed token valid for an hour that only works while the password is the one it was
 issued for: once used it is worthless, and so are the sessions opened with the old password
@@ -6,24 +6,27 @@ issued for: once used it is worthless, and so are the sessions opened with the o
 """
 import html
 import logging
+import shutil
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from sqlalchemy import select
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from sqlalchemy import delete, exists, or_, select
 from sqlalchemy.orm import Session
 
 from . import config
 from . import mail
 from .database import get_db
-from .models import Pilot
+from .models import Attempt, Circuit, Pilot, Tournament
 from .ratelimit import RateLimit, client_key
-from .schemas import ForgotIn, ResetIn
-from .security import RESET_MINUTES, issue_token, password_hash, pilot_for_reset, pilot_payload, reset_token
+from .schemas import DeleteAccountIn, ForgotIn, ResetIn
+from .security import (RESET_MINUTES, current_pilot, is_organizer, issue_token, password_hash, pilot_for_reset, pilot_payload,
+                       reset_token, verify_password)
 
 router=APIRouter(prefix="/api/auth")
 log=logging.getLogger("dhtrails.accounts")
 forgot_limit=RateLimit(10,3600)  # requests from one address
 mail_limit=RateLimit(3,3600)     # mails to one account
 reset_limit=RateLimit(20,3600)
+delete_limit=RateLimit(10,3600)
 SENT="Si hay una cuenta con ese correo, te llegará en unos minutos un enlace para elegir una contraseña nueva. Mira también en spam."
 
 def send_reset(to:str,name:str|None,token:str)->None:
@@ -60,3 +63,27 @@ def reset(payload:ResetIn,request:Request,db:Session=Depends(get_db)):
     p.password_hash=password_hash(payload.password)
     db.commit()
     return {"access_token":issue_token(p),"user":pilot_payload(p)}
+
+@router.post("/delete-account",status_code=204)
+def delete_account(payload:DeleteAccountIn,request:Request,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    """A rider deletes their account, with their password: the account, their routes and their files (GPS and
+    the phone's sensors), their runs and tournament entries, notes and friends. A circuit they drew that other
+    riders have ridden, or a tournament uses, stays for them and passes to the organization; the others go."""
+    delete_limit.hit(client_key(request))
+    if not verify_password(payload.password,p.password_hash):raise HTTPException(403,"La contraseña no es correcta")
+    if is_organizer(p):
+        raise HTTPException(409,"Eres de la organización: esta cuenta no se puede borrar desde aquí")
+    shared=db.scalars(select(Circuit).where(Circuit.owner_id==p.id,or_(
+        exists().where(Attempt.circuit_id==Circuit.id,Attempt.pilot_id!=p.id),
+        exists().where(Tournament.circuit_id==Circuit.id)))).all()
+    if shared:
+        heir=next((o for o in db.scalars(select(Pilot).where(Pilot.email.in_(config.ORGANIZER_EMAILS))).all()),None)
+        if heir is None:raise HTTPException(409,"No se puede borrar ahora: tus circuitos los usan otros pilotos")
+        for c in shared:c.owner_id=heir.id
+        db.flush()
+    # Everything else of the rider goes with the account (the database deletes what hangs from it).
+    db.execute(delete(Circuit).where(Circuit.owner_id==p.id))
+    db.execute(delete(Pilot).where(Pilot.id==p.id))
+    db.commit()
+    shutil.rmtree(config.GPS_STORAGE_DIR/str(p.id),ignore_errors=True)
+    return Response(status_code=204)

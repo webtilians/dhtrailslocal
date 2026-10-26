@@ -102,6 +102,8 @@ export function createCloudApi(config) {
     },
     // A forgotten password: a link by mail, then a new password from that link (which also signs in)
     async forgotPassword(email){return request('/auth/forgot',{method:'POST',body:{email}})},
+    // Deleting the account with all its data, confirmed with the password
+    async deleteAccount(password){return request('/auth/delete-account',{method:'POST',body:{password}})},
     async resetPassword(resetToken,password){
       const result=await request('/auth/reset',{method:'POST',body:{token:resetToken,password}});
       persistToken(result.access_token);
