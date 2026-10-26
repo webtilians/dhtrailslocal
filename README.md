@@ -39,7 +39,7 @@ La **política de privacidad** está en `privacidad.html` (abierta, sin cuenta; 
 
 **Tu cuenta** (`cuenta.html`, pulsando tu nombre arriba) enseña el correo y el nombre, manda el enlace para una contraseña nueva y **borra la cuenta** con la contraseña (`POST /api/auth/delete-account`): la cuenta, sus rutas y archivos (también los sensores), sus bajadas de entrenamiento y de torneo, notas y amigos. Los circuitos que dibujó y que usan otros pilotos o un torneo pasan a la organización; los demás se borran. La cuenta de la organización no se borra desde ahí. Google Play y Apple piden las dos cosas para publicar.
 
-Para Google Play, la app se genera como AAB (`cd movil/android && gradlew.bat bundleRelease`, firmado con la misma clave de subida que el APK).
+Para Google Play, la app se genera como AAB (`cd movil/android && gradlew.bat bundleRelease`, firmado con la misma clave de subida que el APK). La ficha (textos en español e inglés, icono, gráfico y capturas) y las respuestas de los formularios de Play Console están en [movil/play](movil/play/README.md).
 
 ## En el móvil: instalar la app y compartirle un GPX
 
