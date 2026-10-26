@@ -88,7 +88,8 @@ export async function startShell(page) {
     }
     if (!shell.api) return;
     if (shell.me) {
-      account.append(node('span', {className: 'who', textContent: shell.me.local ? T('Este PC') : shell.me.display_name || shell.me.email}));
+      account.append(shell.me.local ? node('span', {className: 'who', textContent: T('Este PC')}) :
+        node('a', {className: 'who', href: './cuenta.html', title: T('Tu cuenta'), textContent: shell.me.display_name || shell.me.email}));
       if (!shell.me.local) {
         const out = node('button', {type: 'button', className: 'text-btn', textContent: T('Salir')});
         out.addEventListener('click', async () => {await shell.api.signOut(); shell.setUser(null);});
@@ -176,6 +177,8 @@ function authDialog(shell) {
   feedback.dataset.base = 'save-feedback';
   const nameField = field(T('Nombre de piloto (sale en la clasificación)'), name);
   const inviteField = node('div', {className: 'invite'}, [field(T('Código de invitación'), invite)]);
+  const legal = node('p', {className: 'help invite'}, [T('Al crear la cuenta aceptas la') + ' ',
+    node('a', {href: './privacidad.html', target: '_blank', textContent: T('política de privacidad')}), '.']);
   let mode = 'login';
   const login = node('button', {type: 'button', className: 'tab-btn selected', textContent: T('Entrar')});
   const signup = node('button', {type: 'button', className: 'tab-btn', textContent: T('Crear cuenta')});
@@ -191,6 +194,7 @@ function authDialog(shell) {
     nameField.hidden = mode !== 'signup';
     passwordField.hidden = mode === 'forgot';
     inviteField.classList.toggle('off', mode !== 'signup');
+    legal.classList.toggle('off', mode !== 'signup');
     forgot.hidden = mode !== 'login' || !shell.health?.password_reset;
     submit.textContent = {login: T('Entrar'), signup: T('Crear cuenta'), forgot: T('Enviar el enlace')}[mode];
     password.autocomplete = mode === 'login' ? 'current-password' : 'new-password';
@@ -201,7 +205,7 @@ function authDialog(shell) {
   signup.addEventListener('click', () => setMode('signup'));
   const form = node('form', {method: 'dialog', className: 'auth-form'}, [
     node('div', {className: 'tab-row'}, [login, signup]), note, nameField, field(T('Correo electrónico'), email),
-    passwordField, forgot, inviteField, feedback, submit, cancel]);
+    passwordField, forgot, inviteField, feedback, submit, legal, cancel]);
   const dialog = node('dialog', {className: 'auth'}, [form]);
   cancel.addEventListener('click', () => dialog.close());
   // Opened again after asking for a link: back to signing in.

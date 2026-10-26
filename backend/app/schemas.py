@@ -12,6 +12,9 @@ class Credentials(BaseModel):
 class ForgotIn(BaseModel):
     email: EmailStr
 
+class DeleteAccountIn(BaseModel):
+    password: str = Field(min_length=1,max_length=128)
+
 class ResetIn(BaseModel):
     token: str = Field(min_length=20,max_length=2000)
     password: str = Field(min_length=8,max_length=128)

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<title>Tu cuenta | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main class="legal">
+<header class="heading">
+  <div><div class="kicker">DH / TU CUENTA</div><h1>Tu cuenta. <span>Y tus datos.</span></h1></div>
+</header>
+<section id="signedOut" class="panel notice" hidden><div class="panel-content">Entra con tu cuenta para verla.</div></section>
+<div id="signedIn" hidden>
+  <section class="panel">
+    <div class="panel-title"><h2>Tus <span>datos</span></h2></div>
+    <div class="panel-content">
+      <p class="account-line"><span>Correo</span> <b id="email"></b></p>
+      <p class="account-line"><span>Nombre en las clasificaciones</span> <b id="name"></b></p>
+      <p class="help">El nombre lo cambias en Time trial, al presentar una bajada.</p>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-title"><h2>Tu <span>contraseña</span></h2></div>
+    <div class="panel-content">
+      <p class="help">Te mandamos a tu correo un enlace para elegir una nueva.</p>
+      <button id="sendLink" class="btn outline" type="button">Enviar el enlace</button>
+    </div>
+  </section>
+  <section class="panel" id="deleteBox">
+    <div class="panel-title"><h2>Borrar <span>la cuenta</span></h2></div>
+    <div class="panel-content">
+      <p class="help">Se borran en ese momento tu cuenta, tus rutas y sus archivos, los sensores, tus bajadas (también las presentadas a torneos), tus notas y tus amigos. Los circuitos que dibujaste y que han usado otros pilotos se quedan para ellos, a cargo de la organización. No se puede deshacer.</p>
+      <label class="field"><span class="field-title">Tu contraseña, para confirmarlo</span><input id="deletePassword" type="password" autocomplete="current-password"></label>
+      <button id="deleteAccount" class="btn danger full" type="button">Borrar mi cuenta y mis datos</button>
+    </div>
+  </section>
+  <section class="panel notice" id="organizerNote" hidden><div class="panel-content">Eres de la organización: esta cuenta no se puede borrar desde aquí.</div></section>
+</div>
+<p class="legal-links"><a href="./privacidad.html">Política de privacidad</a></p>
+<p id="status" class="status" role="status" aria-live="polite"></p>
+</main>
+<script type="module" src="./cuenta.mjs"></script>
+</body></html>
