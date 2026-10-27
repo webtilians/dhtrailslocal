@@ -12,6 +12,8 @@ Las capturas salen del servidor local con datos de prueba (piloto «Organizador�
 
 El paquete es `movil/salida/DHTrails-<versión>.aab` (`cd movil/android && gradlew.bat bundleRelease`), firmado con la clave de subida de `DHTrails-claves`. Google guarda la clave de firma de la app (Play App Signing).
 
+Play rechaza un paquete que no apunte a la última API de Android (desde octubre de 2026, la 36: `targetSdkVersion` y `compileSdkVersion` en `movil/android/variables.gradle`). La «protección automática» de Play (Protegida con Play → comprobación del instalador) está desactivada: exige `minSdkVersion` 24 y la app admite desde Android 6 (23).
+
 ## Ficha de Play Store (español, idioma principal)
 
 **Nombre** (máx. 30): `DH Trails`
