@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app import coverage
 from app.main import app
-from test_competition import account, circuit_body, fixes, gpx, new_circuit, organizer, recent, upload  # noqa: F401 (fixture)
+from test_competition import account, circuit_body, fixes, free_area, gpx, new_circuit, organizer, recent, upload  # noqa: F401 (fixture)
 
 M = 1 / 111195                       # degrees of latitude per metre
 EAST = 1 / (111195 * math.cos(math.radians(36.7)))
@@ -75,10 +75,12 @@ def test_the_circuits_list_and_the_editor_say_how_well_the_gps_covers_start_and_
     with TestClient(app) as client:
         org = account(client, email=organizer)
         rider = account(client)
-        shift = 0.2 + hash(organizer) % 1000 * 0.003
+        shift = free_area()
         cid = new_circuit(client, org, "Cobertura", shift)
         for minutes in (90, 70, 50):
-            assert upload(client, rider, "/api/training/routes", gpx(fixes(recent(minutes), 1000, shift))).status_code == 201
+            # A couple of metres east of the line: a ride closer than 0.3 m is the one the line was drawn from.
+            ride = [(lat, lon + 0.00003, ele, t) for lat, lon, ele, t in fixes(recent(minutes), 1000, shift)]
+            assert upload(client, rider, "/api/training/routes", gpx(ride)).status_code == 201
         listed = next(c for c in client.get("/api/circuits", headers=org).json() if c["id"] == cid)
         assert listed["coverage"]["start"]["runs"] >= 3 and listed["coverage"]["start"]["level"] in ("buena", "regular", "mala")
         line = [p[:2] for p in circuit_body("x", shift)["points"]]
