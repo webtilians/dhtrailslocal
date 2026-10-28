@@ -771,6 +771,59 @@ $('routeFile').addEventListener('change', e => {
 });
 let quickUpload = false;
 $('quickUpload').addEventListener('click', () => {quickUpload = true; $('routeFile').click();});
+let quickVideo = false;
+$('quickVideo').addEventListener('click', () => {quickVideo = true; $('videoFile').click();});
+
+// ---- The charts right under the map, in the order the rider picks with each one's ▲ ▼ (kept on this
+// device). A chart the saved order doesn't know yet goes after the others.
+const CHART_ORDER_KEY = 'dhtrails.chartOrder';
+const chartPanels = $('chartPanels');
+function sortCharts() {
+  const panels = [...chartPanels.children];
+  let saved = [];
+  try {saved = JSON.parse(localStorage.getItem(CHART_ORDER_KEY)) || [];} catch {}
+  if (!Array.isArray(saved)) saved = [];
+  const rank = p => saved.includes(p.dataset.chart) ? saved.indexOf(p.dataset.chart) : saved.length + panels.indexOf(p);
+  panels.sort((a, b) => rank(a) - rank(b)).forEach(p => chartPanels.append(p));
+}
+function markChartEnds() {
+  const panels = [...chartPanels.children];
+  panels.forEach((p, i) => {
+    p.querySelector('[data-move="-1"]').disabled = i === 0;
+    p.querySelector('[data-move="1"]').disabled = i === panels.length - 1;
+  });
+}
+function moveChart(panel, step, button) {
+  const other = step < 0 ? panel.previousElementSibling : panel.nextElementSibling;
+  if (!other) return;
+  chartPanels.insertBefore(step < 0 ? panel : other, step < 0 ? other : panel);
+  try {localStorage.setItem(CHART_ORDER_KEY, JSON.stringify([...chartPanels.children].map(p => p.dataset.chart)));} catch {}
+  markChartEnds();
+  // The chart stays under the finger: the focus on its button, or on the other one at the top or the bottom.
+  (button.disabled ? button.parentElement.querySelector('button:not(:disabled)') : button)?.focus({preventScroll: true});
+  panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+}
+for (const panel of chartPanels.children) {
+  const title = panel.querySelector('.panel-title');
+  let actions = title.querySelector('.title-actions');
+  if (!actions) {
+    actions = node('span', {className: 'title-actions'});
+    const caps = title.querySelector('.caps');
+    if (caps) actions.append(caps);
+    title.append(actions);
+  }
+  const buttons = node('span', {className: 'order-btns'});
+  for (const [step, mark, label] of [[-1, '▲', T('Subir esta gráfica')], [1, '▼', T('Bajar esta gráfica')]]) {
+    const b = node('button', {type: 'button', className: 'order-btn', textContent: mark, title: label});
+    b.dataset.move = step;
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', () => moveChart(panel, step, b));
+    buttons.append(b);
+  }
+  actions.append(buttons);
+}
+sortCharts();
+markChartEnds();
 $('analyze').addEventListener('click', async () => {
   const file = $('routeFile').files[0];
   if (!file) return status(T('Elige primero un archivo GPX o TCX.'), 'error');
@@ -1551,6 +1604,12 @@ async function uploadGoproGps() {
 $('videoFile').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
+  // Chosen from «▶ Vídeo» at the top: the page goes to the video panel while the video is read (and stays
+  // there if it can't be used, to show why); once it is ready, to the map.
+  if (quickVideo) {
+    quickVideo = false;
+    $('videoFile').closest('.panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
   $('videoName').textContent = file.name + ' · ' + dec(file.size / 1e9) + ' GB';
   videoSay(T('Leyendo la telemetría de {file}…', {file: file.name}));
   try {

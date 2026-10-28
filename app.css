@@ -197,6 +197,12 @@ main.wide-page{max-width:1900px}
 .layout.training{grid-template-columns:minmax(0,1fr)}
 .layout.training .side-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));align-items:start;gap:18px}
 .title-actions{display:flex;align-items:center;gap:12px}
+/* Training: the charts under the map, each with its ▲ ▼ to move it; on a phone the title goes over two lines. */
+.layout.training .panel-title{flex-wrap:wrap}.layout.training .title-actions{margin-left:auto;flex-wrap:wrap;justify-content:flex-end;min-width:0}
+.chart-panels .caps{white-space:normal;text-align:right}
+.order-btns{display:flex;gap:4px}
+.order-btn{width:34px;height:34px;padding:0;border:1px solid #365778;border-radius:5px;background:#112b40;color:#cfe6f8;font-size:13px;line-height:1}
+.order-btn:disabled{opacity:.35;cursor:default}
 .pair-gap{margin:0;padding:10px 17px;border-bottom:1px solid var(--line);background:#0b2639;font-size:14px;line-height:1.5;color:#dceaf7}
 .pair-gap b{color:#ffe066}
 .pair-gap .chip{display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 6px 0 2px;vertical-align:0}
@@ -367,3 +373,6 @@ main.wide-page{max-width:1900px}
 a.btn{text-decoration:none;text-align:center}a.btn.full{display:block}
 .saved-routes{margin-top:14px}.saved-routes select{flex:2;min-width:0}
 .recorder .steps a,.recorder .help a{color:#74c7ff}
+/* On a phone or a tablet, fields with text of 16 px: with less, iOS zooms the page in when one is touched
+   and leaves it out of place, moving sideways. */
+@media(pointer:coarse){input:not([type=file]),select,textarea,#cloudActivitySelect{font-size:16px}}
