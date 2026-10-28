@@ -28,7 +28,7 @@
 <div class="layout training" id="workspace" hidden>
   <div class="stack wide">
     <section class="panel map-panel">
-      <div class="panel-title"><h2><span>Compara</span></h2><span class="title-actions"><span class="caps" id="compareTag">—</span><button id="quickUpload" class="btn outline small" type="button" title="Elige un GPX o TCX y buscamos en él tus circuitos">↥ Subir ruta</button></span></div>
+      <div class="panel-title"><h2><span>Compara</span></h2><span class="title-actions"><span class="caps" id="compareTag">—</span><button id="quickUpload" class="btn outline small" type="button" title="Elige un GPX o TCX y buscamos en él tus circuitos">↥ Subir ruta</button><button id="quickVideo" class="btn outline small" type="button" title="Elige el vídeo de la GoPro: lo ves junto al mapa y las gráficas">▶ Vídeo</button></span></div>
       <div class="panel-content compare-controls">
         <select id="circuitSelect" aria-label="Circuito"><option value="">Sin bajadas todavía</option></select>
         <div id="runList" class="run-list"></div>
@@ -58,6 +58,52 @@
       </div>
       <div id="replayBoard" class="replay-board"><p class="placeholder">Pulsa ▶ para ver las bajadas a la vez en el mapa, como si hubieran salido juntas.</p></div>
     </section>
+    <!-- The charts right under the map, in the order each rider picks with their ▲ ▼ (entrenamiento.mjs). -->
+    <div id="chartPanels" class="stack chart-panels">
+      <section class="panel" data-chart="gap">
+        <div class="panel-title"><h2><span>Diferencia de tiempo</span></h2><span class="caps">FRENTE A LA MÁS RÁPIDA · ARRIBA PIERDES</span></div>
+        <div class="panel-content"><div id="gapChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa. Debajo, una barra por bajada: en rojo los tramos donde pierde tiempo frente a la referencia, en turquesa donde gana.</p>
+          <div id="lossList" class="loss-list"></div></div>
+      </section>
+      <section class="panel" data-chart="segments">
+        <div class="panel-title"><h2><span>Por segmentos</span></h2></div>
+        <div class="panel-content"><div id="segments" class="standings-wrap"><p class="placeholder">Elige bajadas para compararlas.</p></div></div>
+      </section>
+      <section class="panel" data-chart="speed">
+        <div class="panel-title"><h2><span>Velocidad</span></h2><span class="caps">KM/H A LO LARGO DEL CIRCUITO</span></div>
+        <div class="panel-content"><div id="legend" class="chart-legend"></div><div id="speedChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa. La velocidad no hace caso de los saltos del GPS: los puntos que se salen del sendero o a los que no se puede llegar a tu ritmo se quitan, y en ese tramo se ve en discontinua la velocidad media entre los puntos buenos.</p></div>
+      </section>
+      <section class="panel" data-chart="braking">
+        <div class="panel-title"><h2><span>Frenadas</span></h2><span class="caps">DÓNDE PIERDES VELOCIDAD</span></div>
+        <div class="panel-content">
+          <p class="help braking-intro">Marca una o dos de las bajadas que comparas para solapar sus frenadas.</p>
+          <div id="brakingRuns" class="run-list braking-runs" role="group" aria-label="Bajadas cuyas frenadas se pintan"></div>
+          <div id="brakingList" class="zone-list"><p class="placeholder">Elige una bajada para ver dónde frena.</p></div>
+          <p class="help">Cada bajada en su color: en el mapa, con dos, la primera por fuera y la segunda por dentro; bajo la gráfica de velocidad, una barra por bajada (en gris, donde su GPS no es fiable). Pulsa una frenada para verla de cerca. Salen del GPS, que da un punto por segundo: dicen dónde y cuánto bajas la velocidad, no la fuerza exacta de la frenada. Donde el GPS pierde la señal no se calculan.</p>
+        </div>
+      </section>
+      <section class="panel" data-chart="motion">
+        <div class="panel-title"><h2><span>Saltos y golpes</span></h2><span class="caps">SENSORES DEL MÓVIL</span></div>
+        <div class="panel-content">
+          <div id="motionList" class="moments"><p class="placeholder">Elige una bajada para ver sus saltos y golpes.</p></div>
+          <h3 id="roughTitle" class="mini-title" hidden>Cuánto se sacude el móvil, cada 25 m</h3>
+          <div id="roughChart" class="chart" hidden></div>
+          <p class="help">Salen del acelerómetro del móvil, que la app de DH Trails graba con la ruta (en el navegador no se graba). Un salto es pasar 0,2 s o más casi sin peso, en el aire con la bici; un golpe, 4 g o más, al aterrizar o al pasar una piedra o una raíz. La gráfica dice cuánto se sacude el móvil en cada tramo de 25 m, lo rota que está la bajada: entre dos bajadas solo se compara si llevabas el móvil igual (en un bolsillo se nota menos que en el manillar).</p>
+        </div>
+      </section>
+      <section class="panel" data-chart="evolution">
+        <div class="panel-title"><h2><span>Tu evolución</span></h2><span class="caps" id="evolutionTag">TUS BAJADAS EN ESTE CIRCUITO</span></div>
+        <div class="panel-content">
+          <div id="lastReport" class="report"></div>
+          <h3 class="mini-title">Tu bajada ideal</h3>
+          <div id="idealRun" class="standings-wrap"><p class="placeholder">Sube unas cuantas bajadas de este circuito.</p></div>
+          <h3 class="mini-title">Tu progreso</h3>
+          <div id="progressChart" class="chart"></div>
+          <div id="progressSectors" class="chart"></div>
+          <p class="help">Arriba, el tiempo de cada bajada y tu récord de cada momento. Abajo, cuánto le falta a cada sector para tu mejor tiempo en él: cuanto más cerca de 0, mejor. Solo cuentan tus bajadas.</p>
+        </div>
+      </section>
+    </div>
     <section class="panel">
       <div class="panel-title"><h2><span>Vídeo</span></h2><span class="caps" id="videoTag">GOPRO</span></div>
       <div class="panel-content">
@@ -90,49 +136,6 @@
         <div class="note-form"><input id="noteText" maxlength="200" autocomplete="off" placeholder="Qué quieres recordar aquí (p. ej. aquí freno tarde)" aria-label="Texto de la nota"><button id="addNote" class="btn primary small" type="button">Añadir</button></div>
         <p id="noteWhere" class="help">La nota se guarda en un punto del circuito: donde va el vídeo, el punto que pulses en una gráfica o donde esté la repetición. La verás en ese sitio en todas tus bajadas.</p>
         <div id="notesList" class="items"><p class="placeholder">Todavía no tienes notas en este circuito.</p></div>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="panel-title"><h2><span>Frenadas</span></h2><span class="caps">DÓNDE PIERDES VELOCIDAD</span></div>
-      <div class="panel-content">
-        <p class="help braking-intro">Marca una o dos de las bajadas que comparas para solapar sus frenadas.</p>
-        <div id="brakingRuns" class="run-list braking-runs" role="group" aria-label="Bajadas cuyas frenadas se pintan"></div>
-        <div id="brakingList" class="zone-list"><p class="placeholder">Elige una bajada para ver dónde frena.</p></div>
-        <p class="help">Cada bajada en su color: en el mapa, con dos, la primera por fuera y la segunda por dentro; bajo la gráfica de velocidad, una barra por bajada (en gris, donde su GPS no es fiable). Pulsa una frenada para verla de cerca. Salen del GPS, que da un punto por segundo: dicen dónde y cuánto bajas la velocidad, no la fuerza exacta de la frenada. Donde el GPS pierde la señal no se calculan.</p>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="panel-title"><h2><span>Saltos y golpes</span></h2><span class="caps">SENSORES DEL MÓVIL</span></div>
-      <div class="panel-content">
-        <div id="motionList" class="moments"><p class="placeholder">Elige una bajada para ver sus saltos y golpes.</p></div>
-        <h3 id="roughTitle" class="mini-title" hidden>Cuánto se sacude el móvil, cada 25 m</h3>
-        <div id="roughChart" class="chart" hidden></div>
-        <p class="help">Salen del acelerómetro del móvil, que la app de DH Trails graba con la ruta (en el navegador no se graba). Un salto es pasar 0,2 s o más casi sin peso, en el aire con la bici; un golpe, 4 g o más, al aterrizar o al pasar una piedra o una raíz. La gráfica dice cuánto se sacude el móvil en cada tramo de 25 m, lo rota que está la bajada: entre dos bajadas solo se compara si llevabas el móvil igual (en un bolsillo se nota menos que en el manillar).</p>
-      </div>
-    </section>
-    <section class="panel">
-      <div class="panel-title"><h2><span>Velocidad</span></h2><span class="caps">KM/H A LO LARGO DEL CIRCUITO</span></div>
-      <div class="panel-content"><div id="legend" class="chart-legend"></div><div id="speedChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa. La velocidad no hace caso de los saltos del GPS: los puntos que se salen del sendero o a los que no se puede llegar a tu ritmo se quitan, y en ese tramo se ve en discontinua la velocidad media entre los puntos buenos.</p></div>
-    </section>
-    <section class="panel">
-      <div class="panel-title"><h2><span>Diferencia de tiempo</span></h2><span class="caps">FRENTE A LA MÁS RÁPIDA · ARRIBA PIERDES</span></div>
-      <div class="panel-content"><div id="gapChart" class="chart"></div><p class="help">Pulsa la gráfica para ver ese punto en el mapa. Debajo, una barra por bajada: en rojo los tramos donde pierde tiempo frente a la referencia, en turquesa donde gana.</p>
-        <div id="lossList" class="loss-list"></div></div>
-    </section>
-    <section class="panel">
-      <div class="panel-title"><h2><span>Por segmentos</span></h2></div>
-      <div class="panel-content"><div id="segments" class="standings-wrap"><p class="placeholder">Elige bajadas para compararlas.</p></div></div>
-    </section>
-    <section class="panel">
-      <div class="panel-title"><h2><span>Tu evolución</span></h2><span class="caps" id="evolutionTag">TUS BAJADAS EN ESTE CIRCUITO</span></div>
-      <div class="panel-content">
-        <div id="lastReport" class="report"></div>
-        <h3 class="mini-title">Tu bajada ideal</h3>
-        <div id="idealRun" class="standings-wrap"><p class="placeholder">Sube unas cuantas bajadas de este circuito.</p></div>
-        <h3 class="mini-title">Tu progreso</h3>
-        <div id="progressChart" class="chart"></div>
-        <div id="progressSectors" class="chart"></div>
-        <p class="help">Arriba, el tiempo de cada bajada y tu récord de cada momento. Abajo, cuánto le falta a cada sector para tu mejor tiempo en él: cuanto más cerca de 0, mejor. Solo cuentan tus bajadas.</p>
       </div>
     </section>
   </div>
