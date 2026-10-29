@@ -3,7 +3,7 @@
   "appName": "DH Trails",
   "webDir": "www",
   "server": {
-    "url": "https://dh.178-105-103-4.sslip.io/grabar.html",
+    "url": "https://dh.178-105-103-4.sslip.io/tablon.html",
     "allowNavigation": [
       "dh.178-105-103-4.sslip.io"
     ]

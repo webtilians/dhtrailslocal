@@ -4,7 +4,7 @@
   "description": "Time trial y entrenamiento de descenso en los circuitos de tu zona.",
   "lang": "es",
   "id": "./index.html",
-  "start_url": "./index.html",
+  "start_url": "./tablon.html",
   "scope": "./",
   "display": "standalone",
   "background_color": "#071423",

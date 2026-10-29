@@ -13,7 +13,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import Friendship, Pilot
+from .models import Friendship, Pilot, PilotBlock
 from .ratelimit import RateLimit
 from .security import current_pilot
 
@@ -26,6 +26,11 @@ class FriendIn(BaseModel):
 def between(a:uuid.UUID,b:uuid.UUID):
     return or_(and_(Friendship.requester_id==a,Friendship.addressee_id==b),
                and_(Friendship.requester_id==b,Friendship.addressee_id==a))
+
+def blocked(db:Session,a:uuid.UUID,b:uuid.UUID)->bool:
+    """Whether either rider has blocked the other on the board (app.feed)."""
+    return db.scalar(select(PilotBlock.id).where(or_(and_(PilotBlock.blocker_id==a,PilotBlock.blocked_id==b),
+                                                      and_(PilotBlock.blocker_id==b,PilotBlock.blocked_id==a))).limit(1)) is not None
 
 def friend_ids(db:Session,pilot_id:uuid.UUID)->list[uuid.UUID]:
     """Riders whose friendship with pilot_id has been accepted."""
@@ -51,7 +56,8 @@ def ask(payload:FriendIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilo
     if not p.display_name:raise HTTPException(409,"Elige primero tu nombre de piloto: es como te verá tu amigo")
     name=" ".join(payload.display_name.split())
     other=db.scalar(select(Pilot).where(func.lower(Pilot.display_name)==name.lower()))
-    if not other:raise HTTPException(404,"No hay ningún piloto con ese nombre")
+    # A rider blocked on the board, either way, can't be asked: as if there were nobody by that name.
+    if not other or blocked(db,p.id,other.id):raise HTTPException(404,"No hay ningún piloto con ese nombre")
     if other.id==p.id:raise HTTPException(422,"Ese nombre es el tuyo")
     existing=db.scalar(select(Friendship).where(between(p.id,other.id)))
     if existing and existing.accepted_at:raise HTTPException(409,f"Ya sois amigos con {other.display_name}")

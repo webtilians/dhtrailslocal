@@ -19,9 +19,10 @@ const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform 
 const INSTALLED = !!window.Capacitor?.isNativePlatform?.() || window.matchMedia?.('(display-mode: standalone)').matches ||
   navigator.standalone === true;
 
-// Time trial, training, recording and circuits are for everyone (riders draw the circuits of their area too);
-// tournaments only for the organization.
+// The board, time trial, training, recording and circuits are for everyone (riders draw the circuits of their
+// area too); tournaments only for the organization.
 const TABS = [
+  {href: './tablon.html', label: T('Tablón'), page: 'tablon'},
   {href: './index.html', label: T('Time trial'), page: 'timetrial'},
   {href: './entrenamiento.html', label: T('Entrenamiento'), page: 'entrenamiento'},
   {href: './grabar.html', label: T('Grabar'), page: 'grabar'},
@@ -65,7 +66,7 @@ export async function startShell(page) {
     return button;
   }));
   nav.className = 'nav';
-  nav.append(node('a', {className: 'logo', href: './index.html'}, [
+  nav.append(node('a', {className: 'logo', href: './tablon.html'}, [
     node('div', {className: 'flag', textContent: '▦', ariaHidden: 'true'}),
     node('div', {}, [node('strong', {innerHTML: 'DH<span>TRAILS</span> LOCAL'}), node('small', {textContent: 'DOWNHILL PERFORMANCE LAB'})])]),
     tabs, account);
@@ -178,7 +179,7 @@ function authDialog(shell) {
   const nameField = field(T('Nombre de piloto (sale en la clasificación)'), name);
   const inviteField = node('div', {className: 'invite'}, [field(T('Código de invitación'), invite)]);
   const legal = node('p', {className: 'help invite'}, [T('Al crear la cuenta aceptas la') + ' ',
-    node('a', {href: './privacidad.html', target: '_blank', textContent: T('política de privacidad')}), '.']);
+    node('a', {href: './privacidad.html', target: '_blank', textContent: T('política de privacidad y las normas del tablón')}), '.']);
   let mode = 'login';
   const login = node('button', {type: 'button', className: 'tab-btn selected', textContent: T('Entrar')});
   const signup = node('button', {type: 'button', className: 'tab-btn', textContent: T('Crear cuenta')});

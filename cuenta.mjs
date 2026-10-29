@@ -1,6 +1,6 @@
-// DH Trails — your account: your details, a link by mail to choose a new password, and deleting the account
-// with all its data (backend: POST /api/auth/delete-account, app/accounts.py).
-import {$, say, startShell} from './app-shell.mjs';
+// DH Trails — your account: your details, a link by mail to choose a new password, the riders you blocked on
+// the board, and deleting the account with all its data (backend: POST /api/auth/delete-account, app/accounts.py).
+import {$, node, say, startShell} from './app-shell.mjs';
 import {T} from './i18n.mjs';
 
 let shell = null;
@@ -17,6 +17,19 @@ function show() {
   const kept = !!me.organizer || !!me.local;
   $('deleteBox').hidden = kept;
   $('organizerNote').hidden = !kept;
+  if (!me.local) loadBlocked().catch(err => status(err.message, 'error'));
+}
+
+async function loadBlocked() {
+  const blocked = await shell.api.blocks();
+  $('blocked').replaceChildren(...(blocked.length ? blocked.map(b => {
+    const undo = node('button', {type: 'button', textContent: T('Desbloquear')});
+    undo.addEventListener('click', async () => {
+      try {await shell.api.unblock(b.id); await loadBlocked(); status(T('Has desbloqueado a {name}.', {name: b.name}), 'success');}
+      catch (err) {status(err.message, 'error');}
+    });
+    return node('div', {className: 'item'}, [node('span', {textContent: b.name}), undo]);
+  }) : [node('p', {className: 'placeholder', textContent: T('No has bloqueado a nadie.')})]));
 }
 
 $('sendLink').addEventListener('click', async () => {

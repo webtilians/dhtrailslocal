@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<title>Tablón | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main class="board-page">
+<header class="heading">
+  <div><div class="kicker">DH / TABLÓN</div><h1>¿Qué se ha bajado? <span>Tus amigos y los time trials.</span></h1>
+  <p>Las bajadas de entrenamiento tuyas y de tus amigos, y de todos los pilotos los time trials, los hot seats y los circuitos nuevos. Deja un 🔥 o un comentario.</p></div>
+</header>
+<section id="signedOut" class="panel notice" hidden><div class="panel-content">
+  <p>Entra con tu cuenta para ver el tablón.</p>
+  <a class="btn outline small" href="./index.html">Ver el time trial</a>
+</div></section>
+<section id="unsaved" class="panel notice" hidden><div class="panel-content">
+  <p>Tienes en este móvil una grabación sin guardar.</p>
+  <a class="btn primary small" href="./grabar.html">Ir a Grabar</a>
+</div></section>
+<div id="workspace" hidden>
+  <section id="reportsPanel" class="panel" hidden>
+    <div class="panel-title"><h2><span>Denuncias</span></h2><span class="caps" id="reportsCount"></span></div>
+    <div class="panel-content">
+      <p class="help">Con 3 denuncias un comentario deja de verse hasta que lo decides. «Mantener» quita sus denuncias y vuelve a verse.</p>
+      <div id="reports" class="items"></div>
+    </div>
+  </section>
+  <div id="posts" class="posts"><p class="placeholder">Cargando…</p></div>
+  <button id="more" class="btn outline full" type="button" hidden>Ver más</button>
+  <p class="help board-rules">Los comentarios son de quien los escribe. Si uno te molesta, denúncialo y deja de verse para ti; la organización decide si se borra. Si alguien te molesta, bloquéalo: dejaréis de veros aquí.</p>
+  <p class="help board-rules"><a href="./privacidad.html#normas">Normas del tablón</a> · <a href="./cuenta.html">Pilotos bloqueados</a></p>
+</div>
+<p id="status" class="status" role="status" aria-live="polite" hidden></p>
+</main>
+<script type="module" src="./tablon.mjs"></script>
+</body></html>

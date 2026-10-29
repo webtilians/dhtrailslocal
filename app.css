@@ -373,6 +373,35 @@ main.wide-page{max-width:1900px}
 a.btn{text-decoration:none;text-align:center}a.btn.full{display:block}
 .saved-routes{margin-top:14px}.saved-routes select{flex:2;min-width:0}
 .recorder .steps a,.recorder .help a{color:#74c7ff}
+/* The board (tablón): one column of posts, each with its 🔥 and comments */
+.board-page{max-width:780px}
+.posts{display:flex;flex-direction:column;gap:14px;margin-bottom:16px}
+.post{padding:14px 16px;overflow:visible}
+.post-head{display:flex;align-items:center;gap:10px}
+.avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;flex:none;font:800 19px 'Barlow Condensed',sans-serif;color:#fff}
+.post-head .who{flex:1;min-width:0}.post-head .who b{display:block;font-size:14px;overflow-wrap:anywhere}.post-head .who small{color:#8fa9c2;font-size:11px}
+.post-more{position:relative}.post-more summary{list-style:none;cursor:pointer;color:#9eb2c7;font-size:22px;line-height:1;padding:4px 8px}
+.post-more summary::-webkit-details-marker{display:none}
+.post-more .text-btn{position:absolute;right:0;top:32px;z-index:5;white-space:nowrap;background:#112b40;border:1px solid #365778;border-radius:5px;padding:10px 12px;font-size:12px;text-decoration:none;color:#ff929e}
+.post-what{margin:12px 0 8px;font-size:14px;line-height:1.5;color:#dbe9f6;overflow-wrap:anywhere}
+.post-time{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:0 0 10px}
+.post-time small{flex-basis:100%;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:#87a6c0;font-weight:800}
+.post-time strong{font:800 34px/1 'Barlow Condensed',sans-serif;font-variant-numeric:tabular-nums}
+.kind-seat .post-time strong{color:#ffd166}.kind-seat{border-color:#5a3a26}
+.post-link{font-size:12px;color:#74c7ff;font-weight:700;text-decoration:none}
+.post-actions{display:flex;align-items:center;gap:10px;border-top:1px solid var(--line);margin-top:12px;padding-top:10px}
+.fire,.talk{flex:none;border:1px solid #365778;background:#112b40;color:#e1edf8;border-radius:18px;padding:5px 13px;min-height:34px;min-width:52px;font-size:14px}
+.fire[aria-pressed=true]{border-color:#ff8a3d;background:#3a1f0f;color:#ffd7b8}
+.post-actions small{margin-left:auto;text-align:right;color:#9eb2c7;font-size:11px;min-width:0;overflow-wrap:anywhere}
+.comments{display:flex;flex-direction:column;gap:8px;margin-top:10px}.comments:empty{display:none}
+.comment{background:#112b40;border-radius:8px;padding:8px 11px}
+.comment p{margin:0;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.comment small{display:block;margin-top:4px;font-size:11px;color:#8fa9c2}
+.comment .text-btn{font-size:11px;color:#8fc4ea;padding:4px 0}
+.comment-form{display:flex;gap:7px;margin-top:10px}.comment-form input{flex:1;min-width:0;padding:9px 11px}
+.feed-empty{display:flex;flex-direction:column;gap:12px;align-items:flex-start}.feed-empty p{margin:0;font-size:14px;line-height:1.55;color:#cfe0ee}
+#reportsPanel{margin-bottom:16px}.reported{align-items:flex-start}.reported>span:first-child{overflow-wrap:anywhere;line-height:1.5;min-width:0}
+.reported .decide{display:flex;gap:6px;flex:none}.board-rules a{color:#74c7ff}
 /* On a phone or a tablet, fields with text of 16 px: with less, iOS zooms the page in when one is touched
    and leaves it out of place, moving sideways. */
 @media(pointer:coarse){input:not([type=file]),select,textarea,#cloudActivitySelect{font-size:16px}}

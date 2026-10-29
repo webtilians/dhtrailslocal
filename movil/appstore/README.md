@@ -31,9 +31,9 @@ Las capturas salen del servidor local con datos de prueba (piloto «Organizador�
 | Datos de contacto → Correo electrónico | La cuenta |
 | Salud y forma física → Forma física | Bajadas, tiempos y los sensores del móvil |
 | Ubicación → Ubicación exacta | Las rutas grabadas o subidas |
-| Contenido del usuario → Otro contenido | Circuitos, notas, amigos y los GPX subidos |
+| Contenido del usuario → Otro contenido | Circuitos, notas, amigos, los GPX subidos, y los 🔥 y comentarios del tablón |
 | Identificadores → ID de usuario | El identificador de la cuenta |
 
 ## Información de la app
 
-Categoría Deportes, clasificación 4+ (todas las preguntas en «No» / «Ninguno»), derechos de contenido: usa contenido de terceros (los mapas). Precio: gratis.
+Categoría Deportes, derechos de contenido: usa contenido de terceros (los mapas). Precio: gratis. Clasificación por edad: todas las preguntas en «No» / «Ninguno» salvo, desde el tablón (0.10.2), **contenido generado por usuarios: Sí** (comentarios entre pilotos); la 1.0 salió 4+. Lo que pide Apple para ese contenido (guía 1.2) está en la app: filtro de insultos, denunciar un comentario, bloquear a un piloto, normas en la política de privacidad (`privacidad.html#normas`, que se aceptan al crear la cuenta) y un correo de contacto; la organización revisa las denuncias desde el tablón.
