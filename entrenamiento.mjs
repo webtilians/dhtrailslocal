@@ -19,6 +19,8 @@ import {inflateMotion, readMotion, runMoments, roughness} from './motion.mjs';
 const COLORS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
 const view = createMap('map');
 let shell = null, catalog = [], runs = [], picked = [];
+// A run opened from the board (entrenamiento.html?bajada=<id>): shown once, beside your best on its circuit.
+let wantedRun = new URLSearchParams(location.search).get('bajada');
 const profiles = new Map();
 const status = (message, type = '') => say($('status'), message, type);
 // Day and hour tell apart several runs of the same outing.
@@ -102,7 +104,7 @@ async function loadRuns(keepCircuit) {
     counts.set(r.circuit_id, c);
   }
   const select = $('circuitSelect');
-  const previous = keepCircuit || select.value;
+  const previous = keepCircuit || runs.find(r => r.id === wantedRun)?.circuit_id || select.value;
   select.replaceChildren(...(counts.size ? [...counts].map(([id, n]) => node('option', {value: id,
     textContent: (circuitOf(id)?.name || runs.find(r => r.circuit_id === id).circuit_name) + ' · ' + T('{n} tuya(s)', {n: n.mine}) +
       (n.friends ? ' · ' + T('{n} de amigos', {n: n.friends}) : '')})) :
@@ -111,12 +113,16 @@ async function loadRuns(keepCircuit) {
   pickDefault();
 }
 
-// By default compare your best run with your friends' best, or else with your latest one.
+// By default compare your best run with your friends' best, or else with your latest one. A run from the
+// board goes with your best other one.
 function pickDefault() {
   const here = runs.filter(r => r.circuit_id === $('circuitSelect').value);
   const mine = here.filter(r => r.mine !== false), theirs = here.filter(r => r.mine === false);
   const fastest = list => [...list].sort((a, b) => a.elapsed_ms - b.elapsed_ms)[0];
-  picked = [...new Set([fastest(mine), fastest(theirs), ...mine, ...theirs].filter(Boolean).map(r => r.id))].slice(0, 2);
+  const shown = here.find(r => r.id === wantedRun);
+  wantedRun = null;
+  picked = [...new Set([shown, fastest(mine.filter(r => r !== shown)), fastest(theirs), ...mine, ...theirs]
+    .filter(Boolean).map(r => r.id))].slice(0, 2);
   renderRunList();
   compare().catch(err => status(err.message, 'error'));
 }

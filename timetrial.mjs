@@ -216,6 +216,7 @@ async function start() {
   $('tournamentSelect').replaceChildren(...(tournaments.length ? tournaments.map(t => node('option', {value: t.id,
     textContent: t.name + ' · ' + t.circuit_name + (t.state === 'activo' ? ' · ' + T('en curso') : t.state === 'proximo' ? ' · ' + T('próximo') : '')})) :
     [node('option', {value: '', textContent: T('No hay torneos todavía')})]));
+  if (tournaments.some(t => t.id === location.hash.slice(1))) $('tournamentSelect').value = location.hash.slice(1);
   await loadBoard();
   reflectUser();
   view.map.invalidateSize();

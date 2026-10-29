@@ -180,6 +180,17 @@ export function createCloudApi(config) {
     // Circuit records: every rider's best time on each circuit, and who holds its hot seat
     async records({friends=false}={}){return request('/records'+(friends?'?friends=true':''))},
     async circuitRecords(id,{friends=false}={}){return request('/records/'+encodeURIComponent(id)+(friends?'?friends=true':''))},
-    async showInRecords(visible){return request('/records/me',{method:'PUT',body:{visible}})}
+    async showInRecords(visible){return request('/records/me',{method:'PUT',body:{visible}})},
+    // The board: friends' training, everyone's time trials and hot seats, with 🔥 and comments
+    async feed(before){return request('/feed'+(before?'?before='+encodeURIComponent(before):''))},
+    async react(post){return request('/feed/reactions',{method:'POST',body:{post}})},
+    async addComment(post,text){return request('/feed/comments',{method:'POST',body:{post,text}})},
+    async deleteComment(id){return request('/feed/comments/'+encodeURIComponent(id),{method:'DELETE'})},
+    async reportComment(id){return request('/feed/comments/'+encodeURIComponent(id)+'/report',{method:'POST'})},
+    async reportedComments(){return request('/feed/reports')},
+    async keepComment(id){return request('/feed/comments/'+encodeURIComponent(id)+'/keep',{method:'POST'})},
+    async blocks(){return request('/feed/blocks')},
+    async block(pilotId){return request('/feed/blocks',{method:'POST',body:{pilot_id:pilotId}})},
+    async unblock(pilotId){return request('/feed/blocks/'+encodeURIComponent(pilotId),{method:'DELETE'})}
   };
 }

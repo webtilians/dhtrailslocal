@@ -315,7 +315,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.10.1;
+				MARKETING_VERSION = 0.10.2;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = es.dhtrails.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -337,7 +337,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.10.1;
+				MARKETING_VERSION = 0.10.2;
 				PRODUCT_BUNDLE_IDENTIFIER = es.dhtrails.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";

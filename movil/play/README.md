@@ -85,7 +85,7 @@ Play rechaza un paquete que no apunte a la última API de Android (desde octubre
 - **Política de privacidad:** https://dh.178-105-103-4.sslip.io/privacidad.html
 - **Anuncios:** no tiene anuncios.
 - **Acceso a la aplicación:** casi todo pide cuenta. Hay que dar a Google una cuenta de prueba (correo y contraseña) creada en la web, con alguna ruta subida para que vea Entrenamiento. Instrucciones para el revisor: «Inicia sesión con esta cuenta. En Entrenamiento hay bajadas de ejemplo para comparar; Grabar necesita estar en un circuito, así que con la ubicación de la prueba no cronometra».
-- **Clasificación de contenido:** categoría «Todas las demás apps». No hay violencia, sexo, lenguaje malsonante, drogas ni apuestas. Los usuarios no hablan entre sí (no hay chat); se ven nombres y tiempos en las clasificaciones. No comparte la ubicación del usuario con otros. No vende productos digitales. Saldrá PEGI 3 / Para todos.
+- **Clasificación de contenido:** categoría «Todas las demás apps». No hay violencia, sexo, lenguaje malsonante, drogas ni apuestas. Desde el tablón (0.10.2) **los usuarios interactúan**: dejan 🔥 y comentarios en las publicaciones de otros (a esa pregunta, «Sí»). Los comentarios con insultos no se publican, cualquiera puede denunciar un comentario y bloquear a un piloto, y la organización revisa las denuncias. No comparte la ubicación del usuario con otros. No vende productos digitales. Salía PEGI 3 / Para todos; con la interacción puede añadir el aviso «Los usuarios interactúan».
 - **Público objetivo:** 16-17 y 18 o más (la política dice que no es para menores de 14, y así no entra en el programa de familias).
 - **Aplicaciones de salud:** solo «Actividad física y forma física» (cronometra salidas en bici; no usa Health Connect).
 - **Funciones financieras, gobierno, noticias:** ninguna.
@@ -105,7 +105,7 @@ Play rechaza un paquete que no apunte a la última API de Android (desde octubre
 | Información personal → Nombre | El nombre de las clasificaciones | Opcional | Funciones de la app |
 | Salud y actividad física → Actividad física | Bajadas, tiempos y los sensores del móvil | Opcional | Funciones de la app |
 | Archivos y documentos | Los GPX subidos | Opcional | Funciones de la app |
-| Actividad en apps → Otro contenido generado por el usuario | Circuitos, notas y amigos | Opcional | Funciones de la app |
+| Actividad en apps → Otro contenido generado por el usuario | Circuitos, notas, amigos, y los 🔥 y comentarios del tablón | Opcional | Funciones de la app |
 
 Ningún dato se usa para publicidad ni para analítica, y nada se trata «solo de forma efímera».
 

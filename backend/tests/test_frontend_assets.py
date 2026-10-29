@@ -11,7 +11,7 @@ _HTML_REF=re.compile(r'(?:src|href)="\./([^"/?#]+)"')
 _MODULE_REF=re.compile(r"""from\s+['"]\./([^'"/]+)['"]""")
 
 def local_assets():
-    found,pending=set(),["index.html","entrenamiento.html","circuitos.html","torneos.html","editor.html","competicion.html",
+    found,pending=set(),["tablon.html","index.html","entrenamiento.html","circuitos.html","torneos.html","editor.html","competicion.html",
            "records.html","contrasena.html","grabar.html","app.html"]
     while pending:
         name=pending.pop()
@@ -27,6 +27,8 @@ def test_every_local_asset_is_served():
     client=TestClient(app)
     missing=[name for name in sorted(assets) if client.get("/"+name).status_code!=200]
     assert missing==[],"Añade a _PUBLIC_FILES: "+", ".join(missing)
+    # The home page is the board.
+    assert "tablon.mjs" in client.get("/").text
 
 def test_the_app_can_be_installed_and_receive_a_shared_route():
     client=TestClient(app)

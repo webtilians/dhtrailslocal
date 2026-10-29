@@ -165,6 +165,45 @@ class TrainingNote(Base):
         Index("ix_training_notes_pilot_circuit", "pilot_id", "circuit_id"),
     )
 
+class FeedReaction(Base):
+    """A rider's 🔥 on a post of the board (app.feed). A post is named by its key, as the board makes it."""
+    __tablename__ = "feed_reactions"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    pilot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__=(UniqueConstraint("post_key", "pilot_id"),)
+
+class FeedComment(Base):
+    """A comment on a post of the board: seen by whoever sees the post."""
+    __tablename__ = "feed_comments"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    post_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    pilot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False, index=True)
+    text: Mapped[str] = mapped_column(String(300), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+class FeedReport(Base):
+    """A rider reports a comment to the organization; they stop seeing it at once."""
+    __tablename__ = "feed_reports"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    comment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("feed_comments.id", ondelete="CASCADE"), nullable=False, index=True)
+    reporter_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__=(UniqueConstraint("comment_id", "reporter_id"),)
+
+class PilotBlock(Base):
+    """A rider blocks another: neither sees the other's posts or comments on the board any more."""
+    __tablename__ = "pilot_blocks"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    blocker_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False, index=True)
+    blocked_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__=(
+        UniqueConstraint("blocker_id", "blocked_id"),
+        CheckConstraint("blocker_id <> blocked_id", name="block_not_self"),
+    )
+
 class AttemptSplit(Base):
     __tablename__ = "attempt_splits"
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
