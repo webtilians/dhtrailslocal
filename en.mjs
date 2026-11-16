@@ -661,6 +661,8 @@ export const EN = {
   "Compara": "Compare",
   "↥ Subir ruta": "↥ Upload ride",
   "▶ Vídeo": "▶ Video",
+  "☰ Tus rutas": "☰ Your rides",
+  "Las rutas que has grabado con la app o subido": "The rides you recorded with the app or uploaded",
   "Elige el vídeo de la GoPro: lo ves junto al mapa y las gráficas": "Choose the GoPro video: you see it next to the map and the charts",
   "Subir esta gráfica": "Move this chart up",
   "Bajar esta gráfica": "Move this chart down",

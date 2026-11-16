@@ -28,7 +28,7 @@
 <div class="layout training" id="workspace" hidden>
   <div class="stack wide">
     <section class="panel map-panel">
-      <div class="panel-title"><h2><span>Compara</span></h2><span class="title-actions"><span class="caps" id="compareTag">—</span><button id="quickUpload" class="btn outline small" type="button" title="Elige un GPX o TCX y buscamos en él tus circuitos">↥ Subir ruta</button><button id="quickVideo" class="btn outline small" type="button" title="Elige el vídeo de la GoPro: lo ves junto al mapa y las gráficas">▶ Vídeo</button></span></div>
+      <div class="panel-title"><h2><span>Compara</span></h2><span class="title-actions"><span class="caps" id="compareTag">—</span><button id="quickRoutes" class="btn outline small" type="button" title="Las rutas que has grabado con la app o subido">☰ Tus rutas</button><button id="quickUpload" class="btn outline small" type="button" title="Elige un GPX o TCX y buscamos en él tus circuitos">↥ Subir ruta</button><button id="quickVideo" class="btn outline small" type="button" title="Elige el vídeo de la GoPro: lo ves junto al mapa y las gráficas">▶ Vídeo</button></span></div>
       <div class="panel-content compare-controls">
         <select id="circuitSelect" aria-label="Circuito"><option value="">Sin bajadas todavía</option></select>
         <div id="runList" class="run-list"></div>
@@ -158,7 +158,7 @@
         <div id="friendsList" class="items"></div>
       </div>
     </section>
-    <section class="panel">
+    <section class="panel" id="routesPanel">
       <div class="panel-title"><h2><span>Tus rutas</span></h2><span class="caps" id="routesCount"></span></div>
       <div class="panel-content"><div id="routes" class="items"><p class="placeholder">Cargando…</p></div></div>
     </section>
