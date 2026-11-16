@@ -777,6 +777,8 @@ $('routeFile').addEventListener('change', e => {
 });
 let quickUpload = false;
 $('quickUpload').addEventListener('click', () => {quickUpload = true; $('routeFile').click();});
+// «Tus rutas» lives at the end of the side column, under every chart on a phone: this goes straight there.
+$('quickRoutes').addEventListener('click', () => $('routesPanel').scrollIntoView({behavior: 'smooth', block: 'start'}));
 let quickVideo = false;
 $('quickVideo').addEventListener('click', () => {quickVideo = true; $('videoFile').click();});
 
@@ -1724,6 +1726,8 @@ async function start() {
   };
   shell.onUser(() => show().catch(err => status(err.message, 'error')));
   await show();
+  // From Grabar, after saving a ride with no complete run: the list where that ride now is.
+  if (location.hash === '#rutas' && shell.me) $('routesPanel').scrollIntoView({block: 'start'});
   await receiveShared();
 }
 // A route shared from another app on the phone: ready to upload with one tap, here or to an open
