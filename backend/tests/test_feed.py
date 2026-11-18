@@ -101,6 +101,41 @@ def test_the_board_shows_friends_training_and_everyones_hot_seats(organizer):
         mine = next(p for p in posts(client, ana, cid) if p["key"] == today["key"])
         assert mine["comments"] == [] and mine["reactions"]["count"] == 0
 
+def test_runs_found_again_when_a_circuit_changes_keep_the_day_their_route_was_uploaded(organizer):
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import update
+
+    from app.database import SessionLocal
+    from app.models import Activity, Pilot
+    from test_competition import circuit_body
+    with TestClient(app) as client:
+        tag, shift = uuid.uuid4().hex[:6], free_area()
+        org = account(client, "Org " + tag, organizer)
+        cid = new_circuit(client, org, "Recorte " + tag, shift)
+        ana = account(client, "Ana " + tag)
+        ride(client, ana, 5 * 24 * 60, 2000, shift)
+        uploaded = datetime.now(timezone.utc) - timedelta(days=5)
+        with SessionLocal() as db:
+            pilot = db.query(Pilot).filter(Pilot.display_name == "Ana " + tag).one()
+            db.execute(update(Activity).where(Activity.owner_id == pilot.id).values(created_at=uploaded))
+            db.commit()
+        # Saving the circuit again finds Ana's run anew, in a route she uploaded five days ago.
+        r = client.put(f"/api/circuits/{cid}", headers=org, json=circuit_body("Recorte " + tag, shift))
+        assert r.status_code == 200, r.text
+        # Five days back they sit below the newer posts: on a later page of the board.
+        board, before = [], None
+        while True:
+            page = client.get("/api/feed", headers=ana, params={"before": before} if before else None).json()
+            board += page["posts"]
+            if not page["next"]:
+                break
+            before = page["next"]
+        mine = {p["kind"]: p for p in board if p["circuit_id"] == cid and p["pilot"] == "Ana " + tag}
+        assert set(mine) == {"train", "seat"}
+        for post in mine.values():
+            assert datetime.fromisoformat(post["at"]) == uploaded
+
 def test_time_trial_entries_go_on_everyones_board_with_their_place(organizer):
     with TestClient(app) as client:
         tag, shift = uuid.uuid4().hex[:6], free_area()
