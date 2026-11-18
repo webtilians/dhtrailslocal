@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session, defer
 from . import config
 from .database import get_db
 from .friends import between, friend_ids
-from .models import Attempt, Circuit, FeedComment, FeedReaction, FeedReport, Friendship, Pilot, PilotBlock, Tournament
+from .models import Activity, Attempt, Circuit, FeedComment, FeedReaction, FeedReport, Friendship, Pilot, PilotBlock, Tournament
 from .ratelimit import RateLimit
 from .records import checked, counted
 from .security import current_pilot, is_organizer
@@ -56,13 +56,18 @@ def training_runs():
     return ((Attempt.tournament_id.is_(None))&(Attempt.review_status.is_(None))&(Attempt.timed_by=="server")
             &(Attempt.elapsed_ms.is_not(None))&(Attempt.started_at.is_not(None))&clean())
 
+def posted():
+    """When a run reached the board: when its route was uploaded. Editing or saving a circuit finds its runs
+    again in routes uploaded long before (as new rows); they keep that day and do not come back as news."""
+    return func.coalesce(Activity.created_at,Attempt.created_at)
+
 # ---- The posts
 
 def training_posts(db:Session,riders:list,since:datetime)->list[dict]:
     """A rider's runs on a circuit on a day, as one post: how many, the best, and whether it beats what the
     rider had done there before (or is their first time there). A ride also sent to a time trial is its entry."""
     rows=db.execute(select(Attempt.id,Attempt.pilot_id,Attempt.circuit_id,Attempt.started_at,Attempt.elapsed_ms,
-                           Attempt.created_at,day(Attempt.started_at))
+                           posted(),day(Attempt.started_at)).outerjoin(Activity,Activity.id==Attempt.activity_id)
         .where(Attempt.pilot_id.in_(riders),training_runs()).order_by(Attempt.started_at)).all()
     entered={(a,c,round(s.timestamp())) for a,c,s in db.execute(select(Attempt.pilot_id,Attempt.circuit_id,Attempt.started_at)
         .where(Attempt.pilot_id.in_(riders),Attempt.tournament_id.is_not(None),Attempt.started_at.is_not(None))).all()}
@@ -107,18 +112,19 @@ def entry_posts(db:Session,since:datetime,hidden:set)->list[dict]:
 def seat_posts(db:Session,since:datetime,hidden:set)->list[dict]:
     """Each time a rider takes a circuit's hot seat (or lowers their own time in it), from every run that
     counts for the records, in the order they were ridden."""
-    rows=checked(db,select(Attempt,Pilot.display_name).join(Pilot,Pilot.id==Attempt.pilot_id).where(counted())
+    rows=checked(db,select(Attempt,Pilot.display_name,posted()).join(Pilot,Pilot.id==Attempt.pilot_id)
+                 .outerjoin(Activity,Activity.id==Attempt.activity_id).where(counted())
                  .options(defer(Attempt.profile)).order_by(Attempt.started_at,Attempt.created_at))
     holders,posts={},[]
-    for a,name in rows:
+    for a,name,at in rows:
         held=holders.get(a.circuit_id)
         if held and a.elapsed_ms>=held[0]:continue
         holders[a.circuit_id]=(a.elapsed_ms,a.pilot_id,name)
-        if a.created_at<since or a.pilot_id in hidden:continue
+        if at<since or a.pilot_id in hidden:continue
         # Whom it was taken from, but not by name if this rider and they have blocked each other.
         previous=None if not held else {"pilot":(held[2] if held[1] not in hidden else None) or "Piloto",
                                         "elapsed_ms":held[0],"same":held[1]==a.pilot_id}
-        posts.append({"key":f"seat:{a.id}","kind":"seat","at":a.created_at,"pilot_id":a.pilot_id,"circuit_id":a.circuit_id,
+        posts.append({"key":f"seat:{a.id}","kind":"seat","at":at,"pilot_id":a.pilot_id,"circuit_id":a.circuit_id,
                       "elapsed_ms":a.elapsed_ms,"run_id":str(a.id),"tournament":a.tournament_id is not None,"previous":previous})
     return posts
 
