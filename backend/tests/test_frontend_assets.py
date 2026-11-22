@@ -12,7 +12,7 @@ _MODULE_REF=re.compile(r"""from\s+['"]\./([^'"/]+)['"]""")
 
 def local_assets():
     found,pending=set(),["tablon.html","index.html","entrenamiento.html","circuitos.html","torneos.html","editor.html","competicion.html",
-           "records.html","contrasena.html","grabar.html","app.html","grupos.html"]
+           "records.html","contrasena.html","grabar.html","app.html","social.html","grupos.html"]
     while pending:
         name=pending.pop()
         if name in found:continue

@@ -1,7 +1,8 @@
-// DH Trails — Grupos: riders out together (a guide's clients, a club, friends) see each other on a map, with
-// who guides, who drives the van up (the shuttle) and the group's meeting points; touching a rider says how
-// far they are and which way. Each rider shares their location group by group; in the app for Android and
-// iPhone it goes on with the phone locked while this page is open (backend: app/groups.py).
+// DH Trails — Social: your friends (requests, the list, adding one by their rider name; backend: app/friends.py)
+// and your groups. In a group, riders out together (a guide's clients, a club, friends) see each other on a
+// map, with who guides, who drives the van up (the shuttle) and the group's meeting points; touching a rider
+// says how far they are and which way. Each rider shares their location group by group; in the app for
+// Android and iPhone it goes on with the phone locked while this page is open (backend: app/groups.py).
 import {ageText, locationSender, whereFrom} from './group-share.mjs';
 import {haversine} from './gps-engine.mjs';
 import {$, node, say, startShell, createMap} from './app-shell.mjs';
@@ -17,7 +18,7 @@ const avatarColor = id => AVATAR_COLORS[[...id].reduce((sum, c) => sum + c.charC
 const initial = name => (name.trim()[0] || '?').toUpperCase();
 const status = (message, type = '') => {$('status').hidden = !message; say($('status'), message, type);};
 
-let shell = null, sender = null, groups = [], invitations = [], friends = null;
+let shell = null, sender = null, groups = [], invitations = [], friends = [], friendRequests = [], sentRequests = [];
 let openId = null, current = null, fetchedAt = 0, pollTimer = 0;
 let myFix = null, stopGps = null, gpsMode = null, gpsQueue = Promise.resolve(), wakeLock = null;
 let view = null, ridersLayer = null, pointsLayer = null, meMarker = null, fitted = false, pointsKey = '';
@@ -88,19 +89,39 @@ function onGpsError(error) {
 }
 
 // ---- Your groups and your invitations
+// Your groups, your friends and what waits for you (friend requests, invitations to groups). The menu's
+// count of what waits is drawn again too.
 async function loadGroups() {
-  const data = await shell.api.groups();
+  const [data, mates] = await Promise.all([shell.api.groups(), shell.api.friends()]);
   groups = data.groups;
   invitations = data.invitations;
+  friends = mates.friends;
+  friendRequests = mates.incoming;
+  sentRequests = mates.outgoing;
   drawInvitations();
+  drawFriends();
   drawList();
   syncGps();
+  shell.refreshPending?.();
 }
 
 function drawInvitations() {
-  $('invitations').hidden = !invitations.length;
-  $('invitationsCount').textContent = String(invitations.length);
-  $('invitationList').replaceChildren(...invitations.map(g => {
+  const waiting = friendRequests.length + invitations.length;
+  $('invitations').hidden = !waiting;
+  $('invitationsCount').textContent = String(waiting);
+  $('invitationList').replaceChildren(...friendRequests.map(f => {
+    const yes = node('button', {type: 'button', className: 'btn primary small', textContent: T('Aceptar')});
+    const no = node('button', {type: 'button', className: 'btn outline small', textContent: T('Rechazar')});
+    yes.addEventListener('click', () => act(yes, async () => {
+      await shell.api.acceptFriend(f.id);
+      await loadGroups();
+      status(T('Ahora {name} y tú veis vuestras bajadas.', {name: f.name}), 'success');
+    }));
+    no.addEventListener('click', () => act(no, async () => {await shell.api.removeFriend(f.id); await loadGroups();}));
+    return node('div', {className: 'item'}, [
+      node('span', {}, [node('b', {textContent: f.name}), node('small', {textContent: ' · ' + T('quiere ser tu amigo')})]),
+      node('span', {className: 'decide'}, [yes, no])]);
+  }), ...invitations.map(g => {
     const yes = node('button', {type: 'button', className: 'btn primary small', textContent: T('Aceptar')});
     const no = node('button', {type: 'button', className: 'btn outline small', textContent: T('Rechazar')});
     yes.addEventListener('click', () => act(yes, async () => {
@@ -119,6 +140,41 @@ function drawInvitations() {
   }));
 }
 const riderCount = n => n === 1 ? T('1 piloto') : T('{n} pilotos', {n});
+
+// ---- Friends: they compare their training runs and see them on the board
+function drawFriends() {
+  $('friendsCount').textContent = friends.length ? String(friends.length) : '';
+  const row = (f, note, label, action) => {
+    const button = node('button', {type: 'button', textContent: label});
+    button.addEventListener('click', () => action(button));
+    const avatar = node('span', {className: 'avatar', textContent: initial(f.name), ariaHidden: 'true'});
+    avatar.style.background = avatarColor(f.id);
+    return node('div', {className: 'item member'}, [
+      node('div', {className: 'member-main'}, [avatar, node('div', {className: 'member-text'}, [
+        node('b', {textContent: f.name}), ...(note ? [node('small', {className: 'member-status', textContent: note})] : [])])]),
+      node('div', {className: 'member-tools'}, [button])]);
+  };
+  $('friendList').replaceChildren(...(friends.length || sentRequests.length ? [
+    ...friends.map(f => row(f, '', T('Quitar'), button => {
+      if (!window.confirm(T('¿Dejar de ser amigos con {name}? Dejaréis de ver vuestras bajadas.', {name: f.name}))) return;
+      act(button, async () => {await shell.api.removeFriend(f.id); await loadGroups();});
+    })),
+    ...sentRequests.map(f => row(f, T('Solicitud enviada: aún no la ha aceptado'), T('Cancelar'), button =>
+      act(button, async () => {await shell.api.removeFriend(f.id); await loadGroups();}))),
+  ] : [node('p', {className: 'placeholder', textContent: T('Todavía no tienes amigos en la app. Añade a alguien por su nombre de piloto.')})]));
+}
+$('friendForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const name = $('friendName').value.trim();
+  if (!name) return $('friendName').focus();
+  act(event.submitter || $('friendForm').querySelector('button'), async () => {
+    const result = await shell.api.addFriend(name);
+    $('friendName').value = '';
+    await loadGroups();
+    status(result.status === 'accepted' ? T('Ya sois amigos con {name}.', {name: result.name}) :
+      T('Solicitud enviada a {name}: la verá en su pestaña Social.', {name: result.name}), 'success');
+  });
+});
 
 function drawList() {
   $('groupsCount').textContent = String(groups.length);
@@ -416,7 +472,6 @@ function drawMembers() {
 async function drawInvite() {
   $('inviteBox').hidden = !current.mine;
   if (!current.mine) return;
-  friends ??= (await shell.api.friends().catch(() => null))?.friends || [];
   const inside = new Set(current.members.map(m => m.id));
   $('friendChips').replaceChildren(...friends.filter(f => !inside.has(f.id)).map(f => {
     const chip = node('button', {type: 'button', className: 'friend-chip', textContent: '+ ' + f.name, title: T('Invitar a {name}', {name: f.name})});
@@ -428,7 +483,7 @@ async function invite(name, button) {
   if (await act(button, async () => {
     const sent = await shell.api.inviteToGroup(current.id, name);
     await loadGroup();
-    status(T('Invitación enviada a {name}: la verá en su pestaña Grupos.', {name: sent.name}), 'success');
+    status(T('Invitación enviada a {name}: la verá en su pestaña Social.', {name: sent.name}), 'success');
   })) $('inviteName').value = '';
 }
 $('inviteForm').addEventListener('submit', event => {
@@ -536,14 +591,14 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', () => {if (stopGps) stopGps();});
 
 async function start() {
-  shell = await startShell('grupos');
+  shell = await startShell('social');
   if (shell.api) sender = locationSender(shell.api, {onStopped: () => loadGroups().catch(() => {})});
   const show = async () => {
     $('workspace').hidden = !shell.me;
     $('signedOut').hidden = !!shell.me;
     if (!shell.me) {
       groups = []; openId = null; clearInterval(pollTimer); await syncGps();
-      if (shell.api) shell.askLogin(T('Entra con tu cuenta para ver tus grupos.'));
+      if (shell.api) shell.askLogin(T('Entra con tu cuenta para ver a tus amigos y tus grupos.'));
       return;
     }
     await loadGroups();

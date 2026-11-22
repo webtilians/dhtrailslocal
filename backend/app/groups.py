@@ -1,4 +1,5 @@
-"""Groups: riders out together (a guide's clients, a club, friends) see each other on a map.
+"""Groups: riders out together (a guide's clients, a club, friends) see each other on a map. With friends, they
+make the app's Social tab, whose pending requests and invitations the menu counts (/api/social/pending).
 
 A rider creates a group and invites riders by their name; nothing is seen until they accept. Whoever
 created it marks who guides and who drives the van up (the shuttle), and anyone in it can put the group's
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from .database import get_db
 from .friends import blocked
-from .models import GroupMember, MeetingPoint, Pilot, PilotLocation, RideGroup
+from .models import Friendship, GroupMember, MeetingPoint, Pilot, PilotLocation, RideGroup
 from .ratelimit import RateLimit
 from .security import current_pilot
 
@@ -109,6 +110,13 @@ def my_groups(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
         "invitations":[{"id":str(g.id),"name":g.name,"owner":o.display_name or "Piloto","members":counts.get(g.id,0),
                         "invited_by":inviters.get(m.invited_by) or o.display_name or "Piloto"} for m,g,o in rows if not m.accepted_at],
     }
+
+@router.get("/social/pending")
+def pending(db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):
+    """What waits for the rider in the Social tab: friend requests to them and invitations to groups."""
+    friends=db.scalar(select(func.count()).select_from(Friendship).where(Friendship.addressee_id==p.id,Friendship.accepted_at.is_(None)))
+    groups=db.scalar(select(func.count()).select_from(GroupMember).where(GroupMember.pilot_id==p.id,GroupMember.accepted_at.is_(None)))
+    return {"friends":friends,"groups":groups}
 
 @router.post("/groups",status_code=201)
 def create_group(payload:GroupIn,db:Session=Depends(get_db),p:Pilot=Depends(current_pilot)):

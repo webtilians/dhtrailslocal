@@ -19,21 +19,22 @@ const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform 
 const INSTALLED = !!window.Capacitor?.isNativePlatform?.() || window.matchMedia?.('(display-mode: standalone)').matches ||
   navigator.standalone === true;
 
-// The board, time trial, training, recording, groups and circuits are for everyone (riders draw the circuits of their
+// The board, time trial, training, recording, social (friends and groups) and circuits are for everyone (riders draw the circuits of their
 // area too); tournaments only for the organization.
 const TABS = [
   {href: './tablon.html', label: T('Tablón'), page: 'tablon'},
   {href: './index.html', label: T('Time trial'), page: 'timetrial'},
   {href: './entrenamiento.html', label: T('Entrenamiento'), page: 'entrenamiento'},
   {href: './grabar.html', label: T('Grabar'), page: 'grabar'},
-  {href: './grupos.html', label: T('Grupos'), page: 'grupos'},
+  {href: './social.html', label: T('Social'), page: 'social'},
   {href: './records.html', label: T('Récords'), page: 'records'},
   {href: './circuitos.html', label: T('Circuitos'), page: 'circuitos'},
   {href: './torneos.html', label: T('Torneos'), page: 'torneos', admin: true},
 ];
 
 export async function startShell(page) {
-  const shell = {api: null, me: null, health: null, listeners: []};
+  // pending: friend requests and group invitations waiting in Social, counted on the menu.
+  const shell = {api: null, me: null, health: null, listeners: [], pending: 0};
   translatePage();
   // In the app for Android, a route shared to it goes to the training page, which takes it; a page that
   // would take it itself (the time trial) is left before it does.
@@ -75,8 +76,14 @@ export async function startShell(page) {
   document.body.append(dialog);
 
   const draw = () => {
-    tabs.replaceChildren(...TABS.filter(t => !t.admin || shell.me?.organizer).map(t =>
-      node('a', {href: t.href, textContent: t.label, className: t.page === page ? 'selected' : ''})));
+    tabs.replaceChildren(...TABS.filter(t => !t.admin || shell.me?.organizer).map(t => {
+      const link = node('a', {href: t.href, textContent: t.label, className: t.page === page ? 'selected' : ''});
+      if (t.page === 'social' && shell.pending) {
+        link.append(node('em', {className: 'nav-badge', textContent: String(shell.pending)}));
+        link.title = T('Tienes solicitudes o invitaciones pendientes');
+      }
+      return link;
+    }));
     account.replaceChildren(languages);
     if (installPrompt) {
       const install = node('button', {type: 'button', className: 'btn outline', textContent: T('Instalar app'),
@@ -103,7 +110,16 @@ export async function startShell(page) {
       account.append(enter);
     }
   };
-  shell.setUser = user => {shell.me = user; draw(); shell.listeners.forEach(fn => fn(user));};
+  shell.setUser = user => {shell.me = user; draw(); shell.listeners.forEach(fn => fn(user)); shell.refreshPending();};
+  // What waits in Social, for the menu; it never holds the page up.
+  shell.refreshPending = async () => {
+    const before = shell.pending;
+    try {
+      const p = shell.api && shell.me && !shell.me.local ? await shell.api.socialPending() : null;
+      shell.pending = p ? p.friends + p.groups : 0;
+    } catch {shell.pending = 0;}
+    if (shell.pending !== before) draw();
+  };
   shell.onUser = fn => shell.listeners.push(fn);
   shell.askLogin = (message = '') => {dialog.querySelector('.auth-note').textContent = message; dialog.showModal();};
   draw();
@@ -116,6 +132,7 @@ export async function startShell(page) {
   dialog.querySelector('.invite').hidden = !shell.health.invite_required;
   dialog.querySelector('.forgot').hidden = !shell.health.password_reset;
   draw();
+  shell.refreshPending();
   return shell;
 }
 

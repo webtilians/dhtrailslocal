@@ -671,46 +671,14 @@ function moveMarks() {
   now.style.left = (Math.max(0, Math.min(1, ms / endOf(clip, d))) * 100).toFixed(2) + '%';
 }
 
+// Friends are added and managed in Social (social.mjs); here, who they are and whether a request waits.
 async function loadFriends() {
-  const {friends, incoming, outgoing} = await shell.api.friends();
+  const {friends, incoming} = await shell.api.friends();
   $('friendsCount').textContent = friends.length ? T('{n} AMIGO(S)', {n: friends.length}) : '';
-  const button = (text, className, action) => {
-    const b = node('button', {type: 'button', className, textContent: text});
-    b.addEventListener('click', () => action().catch(err => say($('friendFeedback'), err.message, 'error')));
-    return b;
-  };
-  const row = (name, note, actions) => node('div', {className: 'item'}, [
-    node('span', {}, [node('b', {textContent: name}), ...(note ? [node('small', {textContent: ' · ' + note})] : [])]),
-    node('span', {className: 'row-actions'}, actions)]);
-  const refresh = async message => {
-    await Promise.all([loadFriends(), loadRuns()]);
-    if (message) say($('friendFeedback'), message, 'success');
-  };
-  const items = [
-    ...incoming.map(f => row(f.name, T('quiere ser tu amigo'), [
-      button(T('Aceptar'), 'btn outline small', async () => {await shell.api.acceptFriend(f.id); await refresh(T('Ahora {name} y tú veis vuestras bajadas.', {name: f.name}));}),
-      button(T('Rechazar'), 'text-btn danger', async () => {await shell.api.removeFriend(f.id); await refresh();})])),
-    ...friends.map(f => row(f.name, '', [button(T('Quitar'), 'text-btn danger', async () => {
-      if (!window.confirm(T('¿Dejar de compartir bajadas con {name}?', {name: f.name}))) return;
-      await shell.api.removeFriend(f.id); await refresh(T('Ya no compartís bajadas.'));})])),
-    ...outgoing.map(f => row(f.name, T('solicitud enviada'), [
-      button(T('Cancelar'), 'text-btn danger', async () => {await shell.api.removeFriend(f.id); await refresh();})])),
-  ];
-  $('friendsList').replaceChildren(...(items.length ? items : [node('p', {className: 'placeholder', textContent: T('Todavía no tienes amigos en la app.')})]));
+  $('friendsNote').textContent = incoming.length ?
+    (incoming.length === 1 ? T('Tienes 1 solicitud de amistad esperando en Social.') : T('Tienes {n} solicitudes de amistad esperando en Social.', {n: incoming.length})) :
+    friends.length ? friends.map(f => f.name).join(', ') : T('Todavía no tienes amigos en la app.');
 }
-async function inviteFriend() {
-  const name = $('friendName').value.trim();
-  if (!name) return say($('friendFeedback'), T('Escribe el nombre de piloto de tu amigo.'), 'error');
-  try {
-    const result = await shell.api.addFriend(name);
-    $('friendName').value = '';
-    say($('friendFeedback'), result.status === 'accepted' ? T('Ya sois amigos con {name}.', {name: result.name}) :
-      T('Solicitud enviada a {name}. Cuando la acepte, veréis vuestras bajadas.', {name: result.name}), 'success');
-    await Promise.all([loadFriends(), loadRuns()]);
-  } catch (err) {say($('friendFeedback'), err.message, 'error');}
-}
-$('addFriend').addEventListener('click', inviteFriend);
-$('friendName').addEventListener('keydown', e => {if (e.key === 'Enter') {e.preventDefault(); inviteFriend();}});
 
 $('clearMapSelection').addEventListener('click', () => {
   mapSelection = null;
