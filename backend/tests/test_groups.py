@@ -39,6 +39,11 @@ def test_a_group_sees_where_its_riders_are_only_once_they_accept_and_share():
         assert client.post(f"/api/groups/{gid}/members", headers=guia, json={"display_name": GUIA}).status_code == 422
         assert client.post(f"/api/groups/{gid}/members", headers=guia, json={"display_name": "Nadie " + tag}).status_code == 404
         assert client.post(f"/api/groups/{gid}/members", headers=guia, json={"display_name": LEO}).status_code == 201
+        # The menu counts what waits in the Social tab: this invitation, and a friend request.
+        assert client.get("/api/social/pending", headers=ana).json() == {"friends": 0, "groups": 1}
+        assert client.post("/api/friends", headers=eva, json={"display_name": ANA}).status_code == 201
+        assert client.get("/api/social/pending", headers=ana).json() == {"friends": 1, "groups": 1}
+        assert client.get("/api/social/pending", headers=eva).json() == {"friends": 0, "groups": 0}
         invited = client.get("/api/groups", headers=ana).json()
         assert invited["groups"] == [] and [(i["name"], i["invited_by"]) for i in invited["invitations"]] == [("Ruta del sábado", GUIA)]
         assert client.get(f"/api/groups/{gid}", headers=ana).status_code == 404
@@ -46,6 +51,7 @@ def test_a_group_sees_where_its_riders_are_only_once_they_accept_and_share():
         assert client.post("/api/location", headers=ana, json=HERE).status_code == 409
 
         assert client.post(f"/api/groups/{gid}/accept", headers=ana).status_code == 200
+        assert client.get("/api/social/pending", headers=ana).json() == {"friends": 1, "groups": 0}
         assert client.post(f"/api/groups/{gid}/accept", headers=ana).status_code == 404
         assert client.post(f"/api/groups/{gid}/accept", headers=eva).status_code == 404
         # Only whoever created it invites, marks roles, takes riders out or deletes it.

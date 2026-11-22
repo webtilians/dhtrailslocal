@@ -406,7 +406,7 @@ a.btn{text-decoration:none;text-align:center}a.btn.full{display:block}
    and leaves it out of place, moving sideways. */
 @media(pointer:coarse){input:not([type=file]),select,textarea,#cloudActivitySelect{font-size:16px}}
 /* Groups: riders out together on one map, with the guide, the van and the meeting points */
-.groups-page{max-width:900px}
+.groups-page{max-width:1100px}
 .groups-page.in-group .heading,.groups-page.in-group #invitations{display:none}
 .groups-page #listView .panel,.groups-page #groupView .panel,.group-invitations{margin-bottom:18px}
 .group-invitations{border-color:#24a9ff}
@@ -449,3 +449,9 @@ a.btn{text-decoration:none;text-align:center}a.btn.full{display:block}
 .group-leave{display:block;margin:6px auto 18px;font-size:13px}
 .group-privacy{margin-top:6px}.group-privacy a{color:#74c7ff}
 @media(max-width:560px){.item.member{flex-wrap:wrap}.member-tools{margin-left:42px}.group-bar h2{font-size:23px}}
+.navlinks a .nav-badge{display:inline-grid;place-items:center;min-width:17px;height:17px;margin-left:5px;padding:0 4px;border-radius:9px;background:#f35567;color:#fff;font:800 10px/1 Inter,sans-serif;vertical-align:1px}
+/* Social: friends and groups side by side on a wide screen */
+.social-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.social-grid .panel{margin-bottom:0!important}.groups-page #listView .social-grid{margin-bottom:18px}
+#friendsPanel .help{margin:10px 0 12px}
+@media(max-width:820px){.social-grid{grid-template-columns:1fr}}

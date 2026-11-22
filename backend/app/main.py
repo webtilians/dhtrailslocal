@@ -354,7 +354,7 @@ _PUBLIC_FILES={"index.html","tablon.html","tablon.mjs","entrenamiento.html","cir
                "timetrial.mjs","entrenamiento.mjs","circuitos.mjs","torneos.mjs","telemetry.mjs","charts.mjs",
                "gps-engine.mjs","api-client.mjs","sector-comparison.mjs","competition-core.mjs","podium-image.mjs","gopro.mjs","motion.mjs","voice.mjs","circuit-checks.mjs","insights.mjs","gate-sounds.mjs",
                "records.html","records.mjs","contrasena.html","contrasena.mjs","youtube.mjs","bumps.mjs","i18n.mjs","en.mjs","grabar.html","grabar.mjs","recorder.mjs","app.html","app.mjs","fit.mjs","cuenta.html","cuenta.mjs","privacidad.html","privacidad.mjs",
-               "grupos.html","grupos.mjs","group-share.mjs",
+               "social.html","social.mjs","grupos.html","group-share.mjs",  # grupos.html only redirects old links
                "editor.html","competicion.html",  # these two only redirect old links
                "manifest.json","sw.js","icon-192.png","icon-512.png","icon-maskable-512.png","apple-touch-icon.png"}
 # Pages and modules change together on every update: browsers must check before reusing a copy.

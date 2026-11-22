@@ -195,6 +195,8 @@ export function createCloudApi(config) {
     async block(pilotId){return request('/feed/blocks',{method:'POST',body:{pilot_id:pilotId}})},
     async unblock(pilotId){return request('/feed/blocks/'+encodeURIComponent(pilotId),{method:'DELETE'})},
     // Groups: riders out together see each other on a map, with their guides, the van and meeting points
+    // Friend requests and group invitations waiting in Social: {friends, groups}
+    async socialPending(){return request('/social/pending')},
     async groups(){return request('/groups')},
     async createGroup(name){return request('/groups',{method:'POST',body:{name}})},
     async group(id){return request('/groups/'+encodeURIComponent(id))},
