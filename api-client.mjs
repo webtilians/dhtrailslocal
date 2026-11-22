@@ -55,13 +55,15 @@ export function createCloudApi(config) {
     })}catch(e){throw new Error(T('No se puede acceder a FastAPI en {url}. ¿Está arrancado python run.py?',{url}))}
     if(!response.ok){
       let info;try{info=await response.json()}catch{}
-      if(response.status===401&&!path.startsWith('/auth/'))throw new Error(T('Sesión caducada. Vuelve a iniciar sesión.'));
+      // The error says its HTTP status too (409, 429...), for the code that tells them apart.
+      const fail=message=>Object.assign(new Error(message),{status:response.status});
+      if(response.status===401&&!path.startsWith('/auth/'))throw fail(T('Sesión caducada. Vuelve a iniciar sesión.'));
       // The server writes in Spanish: its messages in the page's language.
       const detail=info?.detail;
       // A form the server refused (FastAPI's 422): what is wrong in each field.
       if(Array.isArray(detail)&&detail.length&&detail.every(d=>typeof d?.msg==='string'))
-        throw new Error(detail.map(d=>tServer(d.msg.replace(/^Value error, /,''))).join('; '));
-      throw new Error(typeof detail==='string'?tServer(detail):JSON.stringify(detail||response.statusText));
+        throw fail(detail.map(d=>tServer(d.msg.replace(/^Value error, /,''))).join('; '));
+      throw fail(typeof detail==='string'?tServer(detail):JSON.stringify(detail||response.statusText));
     }
     if(response.status===204)return null;
     if(path.endsWith('/file'))return response.blob();
@@ -191,6 +193,20 @@ export function createCloudApi(config) {
     async keepComment(id){return request('/feed/comments/'+encodeURIComponent(id)+'/keep',{method:'POST'})},
     async blocks(){return request('/feed/blocks')},
     async block(pilotId){return request('/feed/blocks',{method:'POST',body:{pilot_id:pilotId}})},
-    async unblock(pilotId){return request('/feed/blocks/'+encodeURIComponent(pilotId),{method:'DELETE'})}
+    async unblock(pilotId){return request('/feed/blocks/'+encodeURIComponent(pilotId),{method:'DELETE'})},
+    // Groups: riders out together see each other on a map, with their guides, the van and meeting points
+    async groups(){return request('/groups')},
+    async createGroup(name){return request('/groups',{method:'POST',body:{name}})},
+    async group(id){return request('/groups/'+encodeURIComponent(id))},
+    async deleteGroup(id){return request('/groups/'+encodeURIComponent(id),{method:'DELETE'})},
+    async inviteToGroup(id,name){return request('/groups/'+encodeURIComponent(id)+'/members',{method:'POST',body:{display_name:name}})},
+    async acceptGroup(id){return request('/groups/'+encodeURIComponent(id)+'/accept',{method:'POST'})},
+    // Leave a group or turn its invitation down (your own id), or take a rider out of yours
+    async removeFromGroup(id,pilotId){return request('/groups/'+encodeURIComponent(id)+'/members/'+encodeURIComponent(pilotId),{method:'DELETE'})},
+    async setGroupRole(id,pilotId,role){return request('/groups/'+encodeURIComponent(id)+'/members/'+encodeURIComponent(pilotId)+'/role',{method:'PUT',body:{role}})},
+    async shareWithGroup(id,sharing){return request('/groups/'+encodeURIComponent(id)+'/sharing',{method:'PUT',body:{sharing}})},
+    async sendLocation(fix){return request('/location',{method:'POST',body:fix})},
+    async addMeetingPoint(id,point){return request('/groups/'+encodeURIComponent(id)+'/points',{method:'POST',body:point})},
+    async deleteMeetingPoint(id,pointId){return request('/groups/'+encodeURIComponent(id)+'/points/'+encodeURIComponent(pointId),{method:'DELETE'})}
   };
 }

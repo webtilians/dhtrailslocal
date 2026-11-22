@@ -19,13 +19,14 @@ const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform 
 const INSTALLED = !!window.Capacitor?.isNativePlatform?.() || window.matchMedia?.('(display-mode: standalone)').matches ||
   navigator.standalone === true;
 
-// The board, time trial, training, recording and circuits are for everyone (riders draw the circuits of their
+// The board, time trial, training, recording, groups and circuits are for everyone (riders draw the circuits of their
 // area too); tournaments only for the organization.
 const TABS = [
   {href: './tablon.html', label: T('Tablón'), page: 'tablon'},
   {href: './index.html', label: T('Time trial'), page: 'timetrial'},
   {href: './entrenamiento.html', label: T('Entrenamiento'), page: 'entrenamiento'},
   {href: './grabar.html', label: T('Grabar'), page: 'grabar'},
+  {href: './grupos.html', label: T('Grupos'), page: 'grupos'},
   {href: './records.html', label: T('Récords'), page: 'records'},
   {href: './circuitos.html', label: T('Circuitos'), page: 'circuitos'},
   {href: './torneos.html', label: T('Torneos'), page: 'torneos', admin: true},

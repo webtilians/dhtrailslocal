@@ -1,11 +1,12 @@
 import pytest
 
-from app import accounts, competition, feed, friends, main, training
+from app import accounts, competition, feed, friends, groups, main, training
 
 @pytest.fixture(autouse=True)
 def fresh_rate_limits():
     # Every TestClient request comes from the same address; start each test with clean counters.
     for limiter in (main.login_limit, main.register_limit, main.circuit_limit, competition.entry_limit, training.route_limit,
-                    training.note_limit, friends.request_limit, accounts.forgot_limit, accounts.mail_limit, accounts.reset_limit, feed.comment_limit):
+                    training.note_limit, friends.request_limit, accounts.forgot_limit, accounts.mail_limit, accounts.reset_limit, feed.comment_limit,
+                    groups.group_limit, groups.invite_limit, groups.point_limit, groups.location_limit):
         limiter.reset()
     yield

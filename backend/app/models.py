@@ -211,3 +211,51 @@ class AttemptSplit(Base):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
     elapsed_ms: Mapped[int | None] = mapped_column(Integer)
     __table_args__=(UniqueConstraint("attempt_id","sort_order"),)
+
+class RideGroup(Base):
+    """Riders out together (a guide's clients, a club, friends): they see each other on a map (app.groups)."""
+    __tablename__ = "ride_groups"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    owner_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+class GroupMember(Base):
+    """A rider in a group, or invited to it until they accept; whether they share their location with it."""
+    __tablename__ = "group_members"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    group_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ride_groups.id", ondelete="CASCADE"), nullable=False)
+    pilot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), nullable=False, index=True)
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pilots.id", ondelete="SET NULL"))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # NULL while invited
+    sharing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    # What they do in the group, marked by whoever created it: 'guide', 'shuttle' (drives the van up), or none.
+    role: Mapped[str | None] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    __table_args__=(
+        UniqueConstraint("group_id", "pilot_id"),
+        CheckConstraint("role IN ('guide','shuttle') OR role IS NULL", name="group_member_role"),
+    )
+
+class PilotLocation(Base):
+    """Where a rider who shares it was last: one place per rider, no history, forgotten after a few hours."""
+    __tablename__ = "pilot_locations"
+    pilot_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pilots.id", ondelete="CASCADE"), primary_key=True)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    ele: Mapped[float | None] = mapped_column(Float)
+    accuracy_m: Mapped[float | None] = mapped_column(Float)
+    speed: Mapped[float | None] = mapped_column(Float)  # m/s
+    # The server's clock, not the phone's (some are seconds off): how long ago it was sent.
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+class MeetingPoint(Base):
+    """A place a group meets at ("Remonte", "Bar", "Salida a las 12:30"), seen by all its riders."""
+    __tablename__ = "group_points"
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    group_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ride_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("pilots.id", ondelete="SET NULL"))
+    name: Mapped[str] = mapped_column(String(60), nullable=False)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
