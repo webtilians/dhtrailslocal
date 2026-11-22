@@ -50,9 +50,9 @@
 	<key>NSMotionUsageDescription</key>
 	<string>DH Trails graba los baches, saltos y la altura del barómetro de tus bajadas. / DH Trails records the bumps, jumps and barometer height of your runs.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>DH Trails usa el GPS para grabar tus bajadas y darte el tiempo en cada circuito. / DH Trails uses the GPS to record your runs and time them on each track.</string>
+	<string>DH Trails usa el GPS para grabar tus bajadas, darte el tiempo en cada circuito y, en Grupos, decirte a qué distancia están los demás y que tu grupo vea dónde estás si lo compartes. / DH Trails uses the GPS to record your runs, time them on each track and, in Groups, tell you how far the others are and let your group see where you are if you share it.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Para seguir grabando la bajada con el móvil bloqueado. / To keep recording your run with the phone locked.</string>
+	<string>Para seguir grabando la bajada, o compartiendo tu ubicación con tu grupo, con el móvil bloqueado. / To keep recording your run, or sharing your location with your group, with the phone locked.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

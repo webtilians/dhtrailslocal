@@ -6,6 +6,7 @@ import {detectAttempts, haversine} from './gps-engine.mjs';
 import {approachWatch, circuitsNear, liveTimer, nearestStart, rideGpx} from './recorder.mjs';
 import {beep, unlockSound} from './gate-sounds.mjs';
 import {bestGates, gatePhrase, speak, unlockVoice} from './voice.mjs';
+import {sharingSender} from './group-share.mjs';
 import {$, node, say, startShell, km, createMap, pin, drawCircuit} from './app-shell.mjs';
 import {T, locale, tServer} from './i18n.mjs';
 
@@ -31,6 +32,8 @@ const POOR_M = 35;          // fixes less precise than this are not used for the
 const NEAR_M = 3000;        // «automatic» takes the nearest circuit whose start is this close
 let shell = null, catalog = [], fixes = [], stopWatch = null, wakeLock = null, ticker = 0;
 let circuit = null, timer = null, lastFix = null, finished = [], approach = null;
+// While recording, your location goes on to the groups you share it with (grupos.mjs), if any.
+let groupShare = null;
 const status = (message, type = '') => say($('status'), message, type);
 
 // ---- The recording, kept on the device while it goes on (a reload or a crash does not lose it)
@@ -181,6 +184,7 @@ async function sayGate(e, ms) {
 function onFix(fix) {
   lastFix = fix;
   fixes.push(fix);
+  groupShare?.sender.add(fix);
   if (fixes.length % 5 === 0) save();
   $('gpsTag').textContent = 'GPS ±' + Math.round(fix.accuracy || 0) + ' m';
   if (fix.accuracy > POOR_M) return show();
@@ -265,6 +269,9 @@ $('startRec').addEventListener('click', async () => {
   // A recording kept from before goes on in the same sensors' file; a new one starts it again, so sensors
   // left from an earlier ride go to the server first.
   if (!fixes.length) await resendSensors();
+  groupShare = await sharingSender(shell.api, {onStopped: () => {groupShare = null; $('groupNote').hidden = true;}});
+  $('groupNote').hidden = !groupShare;
+  if (groupShare) $('groupNote').textContent = '📍 ' + T('Mientras grabas compartes tu ubicación con: {names}.', {names: groupShare.groups.join(', ')});
   try {stopWatch = await watch(onFix, onError);}
   catch (err) {return onError(err);}
   openMap();
@@ -276,8 +283,10 @@ $('startRec').addEventListener('click', async () => {
   ticker = setInterval(tick, 100);
   show();
 });
+const stopSharing = () => {groupShare = null; $('groupNote').hidden = true;};
 $('stopRec').addEventListener('click', async () => {
   if (stopWatch) {await stopWatch(); stopWatch = null;}
+  stopSharing();
   await motion?.stop().catch(() => {});
   clearInterval(ticker);
   try {await wakeLock?.release();} catch {}
@@ -289,6 +298,7 @@ $('stopRec').addEventListener('click', async () => {
 $('discard').addEventListener('click', async () => {
   if (!window.confirm(T('¿Descartar la grabación? Se pierde lo grabado.'))) return;
   if (stopWatch) {await stopWatch(); stopWatch = null;}
+  stopSharing();
   clearInterval(ticker);
   fixes = []; finished = []; timer = null; circuit = null; lastFix = null; sensors = null;
   forget();

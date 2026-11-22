@@ -405,3 +405,47 @@ a.btn{text-decoration:none;text-align:center}a.btn.full{display:block}
 /* On a phone or a tablet, fields with text of 16 px: with less, iOS zooms the page in when one is touched
    and leaves it out of place, moving sideways. */
 @media(pointer:coarse){input:not([type=file]),select,textarea,#cloudActivitySelect{font-size:16px}}
+/* Groups: riders out together on one map, with the guide, the van and the meeting points */
+.groups-page{max-width:900px}
+.groups-page.in-group .heading,.groups-page.in-group #invitations{display:none}
+.groups-page #listView .panel,.groups-page #groupView .panel,.group-invitations{margin-bottom:18px}
+.group-invitations{border-color:#24a9ff}
+.group-invitations .item{align-items:flex-start}.group-invitations .item>span:first-child{min-width:0;overflow-wrap:anywhere;line-height:1.5}
+.decide{display:flex;gap:6px;flex:none}
+.share-banner{padding:12px 15px;border:1px solid #35785c;border-radius:6px;background:#0b2639;margin:0 0 18px;font-size:13px;color:#84e6bc;line-height:1.5}
+.share-note{color:#84e6bc}
+.group-item{text-decoration:none;color:inherit;cursor:pointer;padding:12px}.group-item:hover{border-color:#24a9ff}
+.group-item>span:first-child{min-width:0;overflow-wrap:anywhere;line-height:1.5}
+.group-badges{display:flex;align-items:center;gap:6px;flex:none}.group-badges .go{color:#74c7ff;font-size:16px;font-weight:800}
+.group-bar{display:flex;align-items:center;gap:14px;margin:0 0 12px;min-width:0}
+.group-bar h2{font:800 28px/1.1 'Barlow Condensed',sans-serif;text-transform:uppercase;margin:0;overflow-wrap:anywhere;min-width:0}
+.group-bar .text-btn{font-size:13px;white-space:nowrap;text-decoration:none}
+.group-map{height:62vh;min-height:320px;max-height:680px;border-radius:8px;overflow:hidden;background:#123047;margin-top:10px}
+.key-people{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}.key-people:empty{display:none}
+.key-chip{border:1px solid #365778;background:#112b40;color:#e1edf8;border-radius:18px;padding:8px 13px;font-size:13px;text-align:left;line-height:1.35}
+.key-chip b{color:#fff}.key-chip.off{opacity:.7}
+.rider-pin{position:relative;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;color:#fff;font:800 18px/1 'Barlow Condensed',sans-serif;border:3px solid #fff;box-shadow:0 2px 7px #000a}
+.rider-pin.role-guide{border-color:#ffd166}.rider-pin.role-shuttle{border-color:#7df0be}.rider-pin.stale{opacity:.55}
+.role-badge{position:absolute;right:-10px;top:-10px;font-size:15px;line-height:1;background:#0b1d2e;border-radius:50%;padding:3px}
+.leaflet-tooltip.rider-label,.leaflet-tooltip.point-label{font-weight:700;font-size:11px;padding:2px 6px;background:#0b1d2ee6;white-space:nowrap}
+.leaflet-tooltip.point-label{color:#ffd0b0;border-color:#a8572a}
+.meet-pin{width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:#ff8b4a;border:2px solid #fff;display:grid;place-items:center;box-shadow:0 2px 7px #000a}
+.meet-pin span{transform:rotate(45deg);font-size:14px;color:#3a1600}
+.rider-popup{font-size:13px;line-height:1.5;min-width:170px;color:#10293f}.rider-popup b{font-size:14px}.rider-popup small{color:#4a6278}
+.popup-where{font-weight:700;margin:3px 0}
+.item.member{align-items:center}
+.member-main{display:flex;align-items:center;gap:10px;min-width:0;flex:1}.member-main.can-focus{cursor:pointer}
+.member-main .avatar{width:32px;height:32px;font-size:16px}.avatar.invited{opacity:.5}
+.member-text{min-width:0;overflow-wrap:anywhere;line-height:1.45}.member-text b{font-size:13px}
+.member-status{display:block;color:#98afc8;font-size:11px;margin-top:2px}
+.meet-dot{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;flex:none;background:#3a1f0f;color:#ff8b4a;font-size:15px}
+.member-tools{display:flex;gap:8px;align-items:center;flex:none}
+.member-tools select{width:auto;padding:6px 8px;font-size:12px}
+.friend-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.friend-chips:empty{display:none}
+.friend-chip{border:1px dashed #4477a1;background:#102b42;color:#cfebff;border-radius:16px;padding:7px 12px;font-size:12px}
+.friend-chip:hover{border-color:#46b3ff}
+.point-form{margin-top:10px}.point-form .help{margin:6px 0 8px}
+.point-form-actions{display:flex;gap:18px;margin-top:10px}.point-form-actions .text-btn{font-size:12px}
+.group-leave{display:block;margin:6px auto 18px;font-size:13px}
+.group-privacy{margin-top:6px}.group-privacy a{color:#74c7ff}
+@media(max-width:560px){.item.member{flex-wrap:wrap}.member-tools{margin-left:42px}.group-bar h2{font-size:23px}}

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071423">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<title>Grupos | DH Trails Local</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+<div class="checkered"></div>
+<nav id="appNav"></nav>
+<main class="groups-page">
+<header class="heading">
+  <div><div class="kicker">DH / GRUPOS</div><h1>Rodad juntos. <span>Que nadie se pierda.</span></h1>
+  <p>Crea un grupo, invita a tus amigos y veréis en el mapa dónde está cada uno, el guía y la furgoneta del remonte. Pon puntos de encuentro y toca a cualquiera para saber a qué distancia está.</p></div>
+</header>
+<section id="signedOut" class="panel notice" hidden><div class="panel-content">
+  <p>Entra con tu cuenta para ver tus grupos.</p>
+</div></section>
+<div id="workspace" hidden>
+  <section id="invitations" class="panel group-invitations" hidden>
+    <div class="panel-title"><h2><span>Invitaciones</span></h2><span class="caps" id="invitationsCount"></span></div>
+    <div class="panel-content"><div id="invitationList" class="items"></div></div>
+  </section>
+
+  <div id="listView">
+    <p id="sharingBanner" class="share-banner" hidden></p>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Tus grupos</span></h2><span class="caps" id="groupsCount"></span></div>
+      <div class="panel-content">
+        <div id="groupList" class="items"><p class="placeholder">Cargando…</p></div>
+        <form id="createForm" class="action-row">
+          <input id="groupName" maxlength="60" placeholder="Nombre del grupo (ej. Bikepark sábado)" autocomplete="off" aria-label="Nombre del grupo">
+          <button class="btn primary" type="submit">Crear grupo</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div id="groupView" hidden>
+    <div class="group-bar">
+      <a id="back" class="text-btn" href="#">← Tus grupos</a>
+      <h2 id="groupTitle"></h2>
+    </div>
+    <section class="panel">
+      <div class="panel-content">
+        <button id="shareBtn" class="btn primary full rec-button" type="button">📍 Compartir mi ubicación</button>
+        <p id="shareNote" class="help"></p>
+        <div id="keyPeople" class="key-people"></div>
+        <div id="groupMap" class="group-map"></div>
+        <div class="rec-map-actions">
+          <button id="fitAll" class="btn outline small" type="button">⤢ Ver a todos</button>
+          <button id="centerMe" class="btn outline small" type="button">◎ Dónde estoy</button>
+          <button id="addPoint" class="btn outline small" type="button">⚑ Punto de encuentro</button>
+        </div>
+        <form id="pointForm" class="point-form" hidden>
+          <p class="help">Toca el mapa donde quieras el punto de encuentro, o ponlo donde estás.</p>
+          <div class="action-row">
+            <input id="pointName" maxlength="60" placeholder="Nombre (ej. Remonte 12:30)" autocomplete="off" aria-label="Nombre del punto de encuentro">
+            <button id="savePoint" class="btn primary" type="submit">Guardar</button>
+          </div>
+          <div class="point-form-actions">
+            <button id="pointHere" class="text-btn" type="button">Ponerlo donde estoy</button>
+            <button id="cancelPoint" class="text-btn" type="button">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Pilotos</span></h2><span class="caps" id="membersCount"></span></div>
+      <div class="panel-content">
+        <div id="memberList" class="items"></div>
+        <div id="inviteBox" hidden>
+          <p class="field-title">Invitar al grupo</p>
+          <div id="friendChips" class="friend-chips"></div>
+          <form id="inviteForm" class="action-row">
+            <input id="inviteName" maxlength="30" placeholder="Nombre de piloto" autocomplete="off" aria-label="Nombre de piloto">
+            <button class="btn outline" type="submit">Invitar</button>
+          </form>
+          <p class="help">Les llega la invitación en su pestaña Grupos y no ven nada hasta que la aceptan. Marca quién es el guía y quién lleva la furgoneta del remonte.</p>
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-title"><h2><span>Puntos de encuentro</span></h2><span class="caps" id="pointsCount"></span></div>
+      <div class="panel-content"><div id="pointList" class="items"></div></div>
+    </section>
+    <button id="leave" class="text-btn danger group-leave" type="button"></button>
+  </div>
+  <p class="help group-privacy">Tu ubicación solo la ven los grupos con los que la compartes, mientras la compartes. Solo se guarda el último sitio, sin historial, y se borra al dejar de compartir. <a href="./privacidad.html">Privacidad</a></p>
+</div>
+<p id="status" class="status" role="status" aria-live="polite" hidden></p>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="./grupos.mjs"></script>
+</body></html>
